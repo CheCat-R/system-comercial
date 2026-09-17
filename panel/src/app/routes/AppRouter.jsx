@@ -133,8 +133,6 @@ const IntegracionesTrafico = lazy(() => import("../../modules/integraciones/Traf
 const IntegracionesWebhooks = lazy(() => import("../../modules/integraciones/Webhooks"));
 const IntegracionDetalle = lazy(() => import("../../modules/integraciones/ConexionDetalle"));
 
-/* auth */
-const Register = lazy(() => import("../../modules/auth/Register"));
 
 
 
@@ -152,13 +150,17 @@ import Login from "../../modules/auth/Login";
 
 // Componente para proteger las rutas privadas
 const PrivateRoute = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, cargando } = useAuth();
+  // Mientras el servidor revalida el token guardado, no se decide nada: un
+  // redirect al login con la sesión viva sería un parpadeo que asusta.
+  if (cargando) return <div className="route-loading" aria-busy="true" />;
   return isAuthenticated ? <MainLayout /> : <Navigate to="/login" replace />;
 };
 
 // Componente para rutas públicas
 const PublicRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, cargando } = useAuth();
+  if (cargando) return <div className="route-loading" aria-busy="true" />;
   return isAuthenticated ? <Navigate to="/" replace /> : children;
 };
 
@@ -174,7 +176,8 @@ const AppRouter = () => {
         <Routes>
         {/* Rutas Públicas */}
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-        <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+        {/* Sin auto-registro: el alta es por invitación desde Seguridad. */}
+        <Route path="/register" element={<Navigate to="/login" replace />} />
 
         {/* Rutas Privadas Protegidas con Layout */}
         <Route path="/" element={<PrivateRoute />}>

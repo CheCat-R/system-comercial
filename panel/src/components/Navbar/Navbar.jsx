@@ -20,7 +20,10 @@ import MenuIcon from "@mui/icons-material/Menu";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
-import PersonOutlineIcon from "@mui/icons-material/PersonOutlineOutlined";
+import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
+import { useQuery } from "@tanstack/react-query";
+import { httpClient } from "../../app/api/httpClient";
+import { QK } from "../../app/api/queryClient";
 
 import { useThemeMode } from "../../theme/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
@@ -31,7 +34,13 @@ import "./Navbar.css";
 const Navbar = ({ onMenuOpen }) => {
   const navigate = useNavigate();
   const { mode, toggleTheme } = useThemeMode();
-  const { user, logout } = useAuth();
+  const { user, logout, esJefe, cambiarSucursal } = useAuth();
+  const sucursales = useQuery({
+    queryKey: QK.sucursales,
+    queryFn: () => httpClient.get("/sucursales"),
+    enabled: Boolean(user) && esJefe,
+    select: (r) => r?.data ?? r,
+  });
   const { showToast } = useToast();
   const { toggleCommandPalette, openNotifications } = useUI();
 
@@ -41,11 +50,22 @@ const Navbar = ({ onMenuOpen }) => {
   const handleOpenUserMenu = (event) => setAnchorEl(event.currentTarget);
   const handleCloseUserMenu = () => setAnchorEl(null);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     handleCloseUserMenu();
-    logout();
+    await logout();
     showToast("Sesión cerrada", "info");
     navigate("/login");
+  };
+
+  /** El jefe cambia la sucursal del turno; queda en la sesión del servidor. */
+  const handleSucursal = async (id) => {
+    handleCloseUserMenu();
+    try {
+      const s = await cambiarSucursal(id);
+      showToast(`Ahora operás en ${s.nombre}.`, "success");
+    } catch (err) {
+      showToast(err?.message || "No se pudo cambiar la sucursal.", "error");
+    }
   };
 
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : "U";
@@ -121,10 +141,10 @@ const Navbar = ({ onMenuOpen }) => {
                 {user?.name || "Usuario"}
               </Typography>
               <Typography variant="caption" color="text.secondary" display="block">
-                {user?.email || "usuario@checat.dev"}
+                {user?.sucursalNombre ? `Sucursal: ${user.sucursalNombre}` : "—"}{user?.terminal ? ` · ${user.terminal.nombre}` : ""}
               </Typography>
               <Chip
-                label={user?.role || "Administrador"}
+                label={user?.role || "—"}
                 size="small"
                 variant="outlined"
                 sx={{ mt: 1, height: 20, fontSize: "0.68rem" }}
@@ -133,12 +153,15 @@ const Navbar = ({ onMenuOpen }) => {
 
             <Divider />
 
-            <MenuItem onClick={handleCloseUserMenu}>
-              <ListItemIcon>
-                <PersonOutlineIcon fontSize="small" />
-              </ListItemIcon>
-              Mi Perfil
-            </MenuItem>
+            {esJefe && (sucursales.data || []).filter((s) => s.id !== user?.sucursalId).map((s) => (
+              <MenuItem key={s.id} onClick={() => handleSucursal(s.id)}>
+                <ListItemIcon>
+                  <StorefrontOutlinedIcon fontSize="small" />
+                </ListItemIcon>
+                Operar en {s.nombre}
+              </MenuItem>
+            ))}
+            {esJefe && (sucursales.data || []).length > 1 && <Divider />}
 
             <MenuItem onClick={handleLogout} sx={{ color: "error.main" }}>
               <ListItemIcon>

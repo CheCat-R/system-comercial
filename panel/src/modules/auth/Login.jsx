@@ -1,50 +1,79 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import InputAdornment from "@mui/material/InputAdornment";
 import IconButton from "@mui/material/IconButton";
-import EmailIcon from "@mui/icons-material/Email";
+import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
+import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
 import LockIcon from "@mui/icons-material/Lock";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 
 import InputField from "../../components/Form/InputField/InputField";
+import SelectField from "../../components/Form/SelectField/SelectField";
 import Button from "../../components/Button/Button";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../components/Toast/ToastContext";
+import { httpClient } from "../../app/api/httpClient";
+import { QK } from "../../app/api/queryClient";
+import { leerTokenTerminal } from "../../app/api/sesion";
 
 import "./Login.css";
 
+/**
+ * Entrar: usuario + contraseña + sucursal. Los tres salen de la API:
+ * `/auth/opciones` trae quiénes pueden entrar y qué locales hay. Si este
+ * equipo está registrado como terminal, la sucursal ya viene dada y no se
+ * pregunta — la cajera deja de elegir mal porque deja de elegir.
+ */
 const Login = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, expiredReason } = useAuth();
   const { showToast } = useToast();
 
-  // ⭐ Venían precargados con `admin@checat.dev` / `admin123`: una credencial
-  // de administrador escrita en el código y ya tipeada en el formulario. Era el
-  // tercer agujero del mismo flujo, junto al usuario por defecto del contexto y
-  // al registro público que creaba administradores. (Y `admin123` ni siquiera
-  // cumple la política de contraseñas del panel.)
-  const [email, setEmail] = useState("");
+  const [usuarioId, setUsuarioId] = useState("");
+  const [sucursalId, setSucursalId] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const opciones = useQuery({
+    queryKey: QK.opciones,
+    queryFn: () => httpClient.get("/auth/opciones"),
+    staleTime: 60 * 1000,
+  });
+
+  const terminal = useQuery({
+    queryKey: ["terminal", "actual"],
+    queryFn: () => httpClient.post("/terminales/actual", { token: leerTokenTerminal() }),
+    enabled: Boolean(leerTokenTerminal()),
+    staleTime: 5 * 60 * 1000,
+  });
+  const equipo = terminal.data?.terminal || null;
+
+  useEffect(() => {
+    if (expiredReason) showToast(expiredReason, "warning");
+  }, [expiredReason, showToast]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!usuarioId) { showToast("Elegí tu usuario.", "warning"); return; }
     setLoading(true);
-
     try {
-      await login(email, password);
-      showToast("¡Bienvenido al Panel de CheCAT!", "success");
+      const u = await login({ usuarioId, password, sucursalId: equipo ? undefined : sucursalId });
+      showToast(`¡Hola, ${u.nombre}! Operás en ${u.sucursalNombre}.`, "success");
       navigate("/");
     } catch (err) {
-      showToast(err.message || "Error al iniciar sesión", "error");
+      showToast(err?.message || "No se pudo iniciar sesión.", "error");
     } finally {
       setLoading(false);
     }
   };
+
+  const usuarios = opciones.data?.usuarios || [];
+  const sucursales = opciones.data?.sucursales || [];
 
   return (
     <Box className="auth-page-wrapper">
@@ -55,23 +84,27 @@ const Login = () => {
             Iniciar Sesión
           </Typography>
           <Typography variant="body2" className="auth-subtitle">
-            Ingresa tus credenciales para acceder a CheCAT Panel.
+            {equipo
+              ? `Este equipo es ${equipo.nombre} · ${equipo.sucursal?.nombre}.`
+              : "Elegí tu usuario y la sucursal con la que vas a operar."}
           </Typography>
         </Box>
 
         <form onSubmit={handleSubmit} className="auth-form">
-          <InputField
-            label="Correo Electrónico"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="ej. usuario@checat.dev"
+          <SelectField
+            label="Usuario"
+            value={usuarioId}
+            onChange={(e) => setUsuarioId(e.target.value)}
+            options={usuarios.map((u) => ({ value: u.id, label: u.nombre }))}
             required
+            disabled={opciones.isLoading}
+            helperText={opciones.isError ? "No se pudo cargar la lista de usuarios: ¿está la API levantada?" : undefined}
+            error={opciones.isError}
             slotProps={{
               input: {
                 startAdornment: (
                   <InputAdornment position="start">
-                    <EmailIcon fontSize="small" color="action" />
+                    <PersonOutlineOutlinedIcon fontSize="small" color="action" />
                   </InputAdornment>
                 ),
               },
@@ -85,6 +118,7 @@ const Login = () => {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             required
+            autoComplete="current-password"
             slotProps={{
               input: {
                 startAdornment: (
@@ -94,11 +128,7 @@ const Login = () => {
                 ),
                 endAdornment: (
                   <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      onClick={() => setShowPassword(!showPassword)}
-                      edge="end"
-                    >
+                    <IconButton size="small" onClick={() => setShowPassword(!showPassword)} edge="end">
                       {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
                     </IconButton>
                   </InputAdornment>
@@ -107,29 +137,33 @@ const Login = () => {
             }}
           />
 
-          <p className="auth-note">
-            <strong>Sin backend no hay verificación de credenciales.</strong> Este panel valida el
-            padrón, el estado de la cuenta y la <em>política de contraseña</em> — no la contraseña.
-            Lo que sí es real: el error no dice si el email existe, y a los {5} intentos fallidos la
-            cuenta se bloquea.
-          </p>
+          {!equipo && (
+            <SelectField
+              label="Sucursal"
+              value={sucursalId}
+              onChange={(e) => setSucursalId(e.target.value)}
+              options={sucursales.map((s) => ({ value: s.id, label: s.nombre }))}
+              disabled={opciones.isLoading}
+              helperText="El superadmin puede dejarla vacía: entra en la central."
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <StorefrontOutlinedIcon fontSize="small" color="action" />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+          )}
 
-          <Button
-            type="submit"
-            variant="primary"
-            loading={loading}
-            fullWidth
-            sx={{ mt: 1 }}
-          >
+          <Button type="submit" variant="primary" loading={loading} fullWidth sx={{ mt: 1 }}>
             {loading ? "Ingresando…" : "Ingresar al panel"}
           </Button>
         </form>
 
         <Box className="auth-footer-links">
-          ¿No tienes una cuenta?{" "}
-          <Link to="/register" className="auth-link">
-            Regístrate aquí
-          </Link>
+          El alta de usuarios es por invitación de un administrador.
         </Box>
       </Box>
     </Box>
