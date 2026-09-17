@@ -1,263 +1,149 @@
-import { useState } from "react";
+/** La ficha de un proveedor: datos comerciales, los productos que trae y el rastro de cambios. */
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Box from "@mui/material/Box";
-import Grid from "@mui/material/Grid";
+import Card from "@mui/material/Card";
 import Typography from "@mui/material/Typography";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
-import TextField from "@mui/material/TextField";
-import Select from "@mui/material/Select";
-import MenuItem from "@mui/material/MenuItem";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import Checkbox from "@mui/material/Checkbox";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
 
-import AddIcon from "@mui/icons-material/Add";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import StarIcon from "@mui/icons-material/Star";
-import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
-import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
-import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
-import EventOutlinedIcon from "@mui/icons-material/EventOutlined";
-
-import Button from "../../components/Button/Button";
 import EntityHeader from "../../components/EntityHeader/EntityHeader";
-import StatCard from "../../components/Cards/StatCard/StatCard";
+import Button from "../../components/Button/Button";
 import DataTable from "../../components/DataTable/DataTable";
-import Modal from "../../components/Modal/Modal";
 import StatusBadge from "../../components/StatusBadge/StatusBadge";
 import { useToast } from "../../components/Toast/ToastContext";
-import SupplierHeader from "./components/SupplierHeader";
-import {
-  getSupplier, getSupplierAnalytics, getSupplierCatalog, listSkus,
-  createSupplierSku, updateSupplierSku, deleteSupplierSku,
-  listPurchaseOrders, listPurchases, updateSupplier,
-} from "./api/supplyApi";
-import { PO_STATUS } from "./lib/purchaseOrders";
-import { money, formatDate, formatDateTime, relativeFromToday } from "./lib/time";
+import { useAuth } from "../../context/AuthContext";
+import { useEntityLabel } from "../../components/Breadcrumbs/EntityLabelContext";
+import { QK } from "../../app/api/queryClient";
+import { proveedoresApi, CONDICION_IVA, CONDICION_COMPRA, PROVEEDOR_VACIO } from "./api/proveedoresApi";
+import ProveedorForm, { aPayload } from "./components/ProveedorForm";
+import { productosApi, money, num } from "../productos/api/productosApi";
 import "./ProveedorDetalle.css";
 
-const TABS = ["Resumen", "Catálogo", "Órdenes de compra", "Compras"];
-
-const emptyCatalogRow = (supplierId) => ({ supplierId, skuId: "", supplierSku: "", cost: "", minOrderQty: 1, isPreferred: false });
+const stamp = (iso) => (iso ? new Date(iso).toLocaleString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
 
 const ProveedorDetalle = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { check, can } = useAuth();
+  const qc = useQueryClient();
+  const puede = check("compras.proveedores").allowed;
+  const veCostos = can("precios", "compras.productos", "compras.proveedores");
   const [tab, setTab] = useState(0);
-  const [, setTick] = useState(0);
+  const [form, setForm] = useState(PROVEEDOR_VACIO);
 
-  const [editModal, setEditModal] = useState(null);
-  const [catalogModal, setCatalogModal] = useState(null);
-  const [anchor, setAnchor] = useState(null);
-  const [activeRow, setActiveRow] = useState(null);
+  const proveedor = useQuery({ queryKey: QK.proveedor(id), queryFn: () => proveedoresApi.get(id) });
+  const productos = useQuery({ queryKey: QK.productos, queryFn: productosApi.listar });
+  const auditoria = useQuery({ queryKey: QK.auditoria("proveedor", id), queryFn: () => proveedoresApi.auditoria(id), enabled: tab === 2 });
+  const costos = useQuery({ queryKey: QK.precios.historial({ proveedorId: Number(id) }), queryFn: () => proveedoresApi.historialCostos(id), enabled: tab === 2 && veCostos });
 
-  const supplier = getSupplier(id);
+  const p = proveedor.data;
+  const { setLabel } = useEntityLabel();
+  useEffect(() => { if (p?.nombre) setLabel(id, p.nombre); }, [id, p?.nombre, setLabel]);
+  useEffect(() => { if (p) setForm({ ...PROVEEDOR_VACIO, ...p, diasPago: p.diasPago ?? "", medioHabitual: p.medioHabitual ?? "", letraGasto: p.letraGasto ?? "" }); }, [p]);
 
-  if (!supplier) {
-    return (
-      <Box className="page fade-in">
-        <Typography>No se encontró el proveedor {id}.</Typography>
-        <Button variant="ghost" onClick={() => navigate("/abastecimiento/proveedores")}>Volver</Button>
-      </Box>
-    );
-  }
+  const guardar = useMutation({
+    mutationFn: (body) => proveedoresApi.editar(id, aPayload(body)),
+    onSuccess: () => { showToast("Ficha guardada.", "success"); qc.invalidateQueries({ queryKey: QK.proveedor(id) }); qc.invalidateQueries({ queryKey: QK.proveedores }); qc.invalidateQueries({ queryKey: QK.auditoria("proveedor", id) }); },
+    onError: (err) => showToast(err?.message || "No se pudo guardar.", "error"),
+  });
+  const borrar = useMutation({
+    mutationFn: () => proveedoresApi.borrar(id),
+    onSuccess: () => { showToast("Proveedor borrado.", "info"); qc.invalidateQueries({ queryKey: QK.proveedores }); navigate("/abastecimiento/proveedores"); },
+    onError: (err) => showToast(err?.message || "No se pudo borrar.", "error"),
+  });
 
-  const analytics = getSupplierAnalytics(id);
-  const catalog = getSupplierCatalog(id);
-  const orders = listPurchaseOrders({ supplierId: id });
-  const purchases = listPurchases({ supplierId: id });
+  /** Los productos que este proveedor trae, con el formato de compra que le corresponde. */
+  const catalogo = useMemo(() => (productos.data || []).flatMap((prod) => (prod.formatosCompra || [])
+    .filter((f) => f.proveedorId === Number(id))
+    .map((f) => ({ id: f.id, producto: prod, formato: f }))), [productos.data, id]);
 
-  const saveSupplier = () => {
-    updateSupplier(id, editModal);
-    setEditModal(null);
-    setTick((t) => t + 1);
-    showToast("Proveedor actualizado", "success");
-  };
-
-  const saveCatalogRow = () => {
-    if (!catalogModal.skuId || !catalogModal.cost) return showToast("Elegí el SKU y cargá el costo", "warning");
-    if (catalogModal.id) updateSupplierSku(catalogModal.id, catalogModal);
-    else createSupplierSku(catalogModal);
-    setCatalogModal(null);
-    setTick((t) => t + 1);
-    showToast(catalogModal.id ? "Costo actualizado" : "SKU agregado al catálogo", "success");
-  };
-
-  const catalogColumns = [
-    {
-      field: "name", headerName: "Producto", width: "26%",
-      renderCell: (row) => (
-        <Box className="sup-catalog-cell">
-          {row.isPreferred && <StarIcon className="sup-preferred-star" />}
-          <Box>
-            <Typography variant="body2">{row.name}</Typography>
-            <Typography variant="caption" className="mono text-tertiary">{row.sku}</Typography>
-          </Box>
-        </Box>
-      ),
-    },
-    { field: "supplierSku", headerName: "SKU del proveedor", renderCell: (row) => <span className="mono text-secondary">{row.supplierSku}</span> },
-    { field: "cost", headerName: "Costo", align: "right", renderCell: (row) => money(row.cost) },
-    { field: "minOrderQty", headerName: "Cant. mínima", align: "right" },
-    {
-      field: "actions", headerName: "", align: "right", width: 56,
-      renderCell: (row) => (
-        <IconButton size="small" onClick={(e) => { setAnchor(e.currentTarget); setActiveRow(row); }} aria-label="acciones">
-          <MoreVertIcon fontSize="small" />
-        </IconButton>
-      ),
-    },
-  ];
-
-  const orderColumns = [
-    { field: "id", headerName: "OC", renderCell: (row) => <span className="mono">{row.id}</span> },
-    { field: "warehouseName", headerName: "Depósito destino" },
-    { field: "expectedDate", headerName: "Fecha esperada", renderCell: (row) => formatDate(row.expectedDate) },
-    { field: "total", headerName: "Monto", align: "right", renderCell: (row) => money(row.total) },
-    { field: "pct", headerName: "% recibido", align: "right", renderCell: (row) => `${row.pct}%` },
-    { field: "status", headerName: "Estado", align: "center", renderCell: (row) => <StatusBadge {...PO_STATUS[row.status]} /> },
-  ];
-
-  const purchaseColumns = [
-    { field: "at", headerName: "Fecha", renderCell: (row) => <span className="text-tertiary nowrap">{formatDateTime(row.at)}</span> },
-    { field: "orderId", headerName: "OC de origen", renderCell: (row) => <span className="mono">{row.orderId}</span> },
-    { field: "warehouseName", headerName: "Depósito" },
-    { field: "units", headerName: "Unidades", align: "right" },
-    { field: "amount", headerName: "Monto", align: "right", renderCell: (row) => money(row.amount) },
-  ];
+  if (proveedor.isLoading) return <div className="route-loading" aria-busy="true" />;
+  if (!p) return <Box className="page"><Typography>Proveedor inexistente.</Typography></Box>;
 
   return (
     <Box className="page fade-in">
       <EntityHeader
-        title={supplier.name}
+        eyebrow={`${CONDICION_IVA[p.condicionIva] || ""}${p.cuit ? ` · CUIT ${p.cuit}` : ""}`}
+        title={p.nombre}
+        subtitle={[p.direccion, p.telefono, p.email].filter(Boolean).join(" · ") || "Sin datos de contacto"}
+        badges={<><StatusBadge tone={p.condicionCompra === "factura" ? "success" : "warning"} label={CONDICION_COMPRA[p.condicionCompra]} showDot={false} />{p.proveeMercaderia && <StatusBadge tone="info" label="Mercadería" showDot={false} />}{p.proveeGastos && <StatusBadge tone="neutral" label="Gastos" showDot={false} />}</>}
         onBack={() => navigate("/abastecimiento/proveedores")}
-        backLabel="Volver a proveedores"
+        actions={puede && <Button size="small" variant="danger" disabled={catalogo.length > 0} onClick={() => { if (window.confirm("¿Borrar el proveedor?")) borrar.mutate(); }}>Borrar</Button>}
       />
 
-      <SupplierHeader
-        supplier={supplier}
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => setEditModal(supplier)}>Editar</Button>
-            <Button variant="primary" onClick={() => navigate("/abastecimiento/ordenes-compra/nueva", { state: { supplierId: id } })}>Nueva Orden de Compra</Button>
-          </>
-        }
-      />
-
-      <Grid container spacing={2.5} sx={{ mt: 0.5 }}>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><StatCard title="Monto comprado" value={money(analytics.purchasedTotal)} icon={<PaymentsOutlinedIcon />} /></Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><StatCard title="OC abiertas" value={String(analytics.openOrders)} icon={<ReceiptLongOutlinedIcon />} /></Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><StatCard title="OC totales" value={String(analytics.ordersCount)} icon={<GroupsOutlinedIcon />} /></Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}><StatCard title="Última compra" value={analytics.lastPurchaseAt ? relativeFromToday(analytics.lastPurchaseAt) : "Nunca"} icon={<EventOutlinedIcon />} /></Grid>
-      </Grid>
-
-      <Box className="sup-tabs" sx={{ mt: 4 }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-          {TABS.map((t) => <Tab key={t} label={t} />)}
-        </Tabs>
-      </Box>
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} className="sup-tabs" sx={{ mb: 2 }}>
+        <Tab label="Ficha" />
+        <Tab label={`Productos que trae (${catalogo.length})`} />
+        <Tab label="Historial" />
+      </Tabs>
 
       {tab === 0 && (
-        <Typography variant="body2" color="text.secondary">
-          {supplier.name} provee {catalog.length} SKU{catalog.length === 1 ? "" : "s"} del catálogo,
-          con {orders.filter((o) => ["enviada", "parcial"].includes(o.status)).length} orden(es) de compra
-          abierta(s) por un total comprometido pendiente de recibir.
-        </Typography>
+        <Card className="entity-card">
+          <ProveedorForm value={form} onChange={setForm} disabled={!puede} />
+          {puede && <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 2 }}><Button variant="primary" loading={guardar.isPending} onClick={() => guardar.mutate(form)}>Guardar ficha</Button></Box>}
+        </Card>
       )}
 
       {tab === 1 && (
-        <Box>
-          <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
-            <Button variant="primary" size="small" startIcon={<AddIcon />} onClick={() => setCatalogModal(emptyCatalogRow(id))}>
-              Agregar SKU
-            </Button>
-          </Box>
-          <DataTable columns={catalogColumns} data={catalog} emptyMessage="Este proveedor todavía no tiene SKUs cargados." />
-        </Box>
-      )}
-
-      {tab === 2 && (
         <DataTable
-          columns={orderColumns}
-          data={orders}
-          onRowClick={(row) => navigate(`/abastecimiento/ordenes-compra/${row.id}`)}
-          emptyMessage="Todavía no hay Órdenes de Compra a este proveedor."
+          columns={[
+            { field: "producto", headerName: "Producto", renderCell: (r) => <Box className="sup-catalog-cell"><strong>{r.producto.nombre}</strong><Typography variant="caption" color="text.secondary" display="block">{r.producto.codigoPropio}{r.formato.codigoProveedor ? ` · cód. prov. ${r.formato.codigoProveedor}` : ""}</Typography></Box> },
+            { field: "activo", headerName: "Fija el precio", renderCell: (r) => (r.formato.usarParaPrecio ? <span className="sup-preferred-star">★ activo</span> : <span className="text-tertiary">—</span>) },
+            { field: "bulto", headerName: "Bulto", align: "right", renderCell: (r) => `×${num(r.formato.cantidad)}` },
+            ...(veCostos ? [
+              { field: "costo", headerName: "Costo bulto", align: "right", renderCell: (r) => money(r.formato.costo) },
+              { field: "neto", headerName: "Neto unitario", align: "right", renderCell: (r) => <strong>{money(r.formato.costoNetoUnitario)}</strong> },
+            ] : []),
+            { field: "precio", headerName: "Mostrador", align: "right", renderCell: (r) => money(r.producto.precioFinal) },
+          ]}
+          data={catalogo}
+          loading={productos.isLoading}
+          emptyMessage="Todavía no le compramos nada: los formatos de compra se cargan en la ficha de cada producto."
+          onRowClick={(r) => navigate(`/productos/${r.producto.id}`)}
         />
       )}
 
-      {tab === 3 && (
-        <DataTable columns={purchaseColumns} data={purchases} emptyMessage="Todavía no se recibió ninguna compra de este proveedor." />
-      )}
-
-      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
-        <MenuItem onClick={() => { setCatalogModal(activeRow); setAnchor(null); }}>Editar</MenuItem>
-        {!activeRow?.isPreferred && (
-          <MenuItem onClick={() => { updateSupplierSku(activeRow.id, { isPreferred: true }); setTick((t) => t + 1); setAnchor(null); showToast("Marcado como proveedor preferido", "success"); }}>
-            Marcar preferido
-          </MenuItem>
-        )}
-        <MenuItem
-          sx={{ color: "error.main" }}
-          onClick={() => { deleteSupplierSku(activeRow.id); setTick((t) => t + 1); setAnchor(null); showToast("SKU quitado del catálogo", "info"); }}
-        >
-          Quitar del catálogo
-        </MenuItem>
-      </Menu>
-
-      <Modal
-        open={Boolean(editModal)}
-        onClose={() => setEditModal(null)}
-        title="Editar proveedor"
-        maxWidth="sm"
-        actions={<><Button variant="ghost" onClick={() => setEditModal(null)}>Cancelar</Button><Button variant="primary" onClick={saveSupplier}>Guardar</Button></>}
-      >
-        {editModal && (
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-            <TextField label="Nombre" size="small" fullWidth value={editModal.name} onChange={(e) => setEditModal({ ...editModal, name: e.target.value })} />
-            <Box sx={{ display: "flex", gap: 2 }}>
-              <TextField label="Contacto" size="small" fullWidth value={editModal.contactName} onChange={(e) => setEditModal({ ...editModal, contactName: e.target.value })} />
-              <TextField label="Lead time (días)" type="number" size="small" fullWidth value={editModal.leadTimeDays} onChange={(e) => setEditModal({ ...editModal, leadTimeDays: e.target.value })} />
-            </Box>
-            <TextField label="Email" size="small" fullWidth value={editModal.email} onChange={(e) => setEditModal({ ...editModal, email: e.target.value })} />
-            <TextField label="Teléfono" size="small" fullWidth value={editModal.phone} onChange={(e) => setEditModal({ ...editModal, phone: e.target.value })} />
-            <TextField label="Condiciones de pago" size="small" fullWidth value={editModal.paymentTerms} onChange={(e) => setEditModal({ ...editModal, paymentTerms: e.target.value })} />
-          </Box>
-        )}
-      </Modal>
-
-      <Modal
-        open={Boolean(catalogModal)}
-        onClose={() => setCatalogModal(null)}
-        title={catalogModal?.id ? "Editar costo" : "Agregar SKU al catálogo"}
-        maxWidth="sm"
-        actions={<><Button variant="ghost" onClick={() => setCatalogModal(null)}>Cancelar</Button><Button variant="primary" onClick={saveCatalogRow}>Guardar</Button></>}
-      >
-        {catalogModal && (
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-            <Select
-              size="small" fullWidth displayEmpty
-              value={catalogModal.skuId}
-              disabled={Boolean(catalogModal.id)}
-              onChange={(e) => setCatalogModal({ ...catalogModal, skuId: e.target.value })}
-            >
-              <MenuItem value="" disabled>SKU…</MenuItem>
-              {listSkus().map((s) => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
-            </Select>
-            <Box sx={{ display: "flex", gap: 2 }}>
-              <TextField label="SKU del proveedor" size="small" fullWidth value={catalogModal.supplierSku} onChange={(e) => setCatalogModal({ ...catalogModal, supplierSku: e.target.value })} />
-              <TextField label="Costo" type="number" size="small" fullWidth value={catalogModal.cost} onChange={(e) => setCatalogModal({ ...catalogModal, cost: e.target.value })} />
-            </Box>
-            <TextField label="Cantidad mínima de compra" type="number" size="small" fullWidth value={catalogModal.minOrderQty} onChange={(e) => setCatalogModal({ ...catalogModal, minOrderQty: e.target.value })} />
-            <FormControlLabel
-              control={<Checkbox checked={catalogModal.isPreferred} onChange={(e) => setCatalogModal({ ...catalogModal, isPreferred: e.target.checked })} />}
-              label="Proveedor preferido para este SKU"
+      {tab === 2 && (
+        <Box sx={{ display: "grid", gap: 2 }}>
+          <Card className="entity-card">
+            <Typography className="card-title" sx={{ mb: 1 }}>Cambios en la ficha y los formatos</Typography>
+            <DataTable
+              columns={[
+                { field: "fecha", headerName: "Fecha", renderCell: (a) => <span className="nowrap">{stamp(a.fecha)}</span> },
+                { field: "ambito", headerName: "Dónde", renderCell: (a) => <span>{a.ambito}{a.detalle ? <span className="text-tertiary"> · {a.detalle}</span> : ""}</span> },
+                { field: "campo", headerName: "Campo" },
+                { field: "antes", headerName: "Antes", renderCell: (a) => <span className="text-tertiary">{a.antes || "—"}</span> },
+                { field: "despues", headerName: "Después", renderCell: (a) => <strong>{a.despues || "—"}</strong> },
+                { field: "usuario", headerName: "Quién", renderCell: (a) => <span className="text-tertiary">{a.usuario || "—"}</span> },
+              ]}
+              data={auditoria.data || []}
+              loading={auditoria.isLoading}
+              emptyMessage="Sin cambios registrados."
             />
-          </Box>
-        )}
-      </Modal>
+          </Card>
+          {veCostos && (
+            <Card className="entity-card">
+              <Typography className="card-title" sx={{ mb: 1 }}>Cambios de costo</Typography>
+              <DataTable
+                columns={[
+                  { field: "fecha", headerName: "Fecha", renderCell: (h) => <span className="nowrap">{stamp(h.fecha)}</span> },
+                  { field: "producto", headerName: "Producto" },
+                  { field: "costoAnterior", headerName: "Antes", align: "right", renderCell: (h) => money(h.costoAnterior) },
+                  { field: "costo", headerName: "Después", align: "right", renderCell: (h) => <strong>{money(h.costo)}</strong> },
+                  { field: "origen", headerName: "Origen", renderCell: (h) => <StatusBadge tone="info" label={h.origen} showDot={false} /> },
+                  { field: "usuario", headerName: "Quién", renderCell: (h) => <span className="text-tertiary">{h.usuario || "—"}</span> },
+                ]}
+                data={costos.data || []}
+                loading={costos.isLoading}
+                emptyMessage="Sin cambios de costo."
+              />
+            </Card>
+          )}
+        </Box>
+      )}
     </Box>
   );
 };

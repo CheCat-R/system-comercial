@@ -1,168 +1,108 @@
-import { useState } from "react";
+/** El padrón de proveedores, contra la API. */
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Box from "@mui/material/Box";
-import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
 import Avatar from "@mui/material/Avatar";
 import TextField from "@mui/material/TextField";
-import InputAdornment from "@mui/material/InputAdornment";
-import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
-import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
+import Tooltip from "@mui/material/Tooltip";
 
 import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
-import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
-import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
-import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
 
 import PageHeader from "../../components/PageHeader/PageHeader";
 import Button from "../../components/Button/Button";
-import StatCard from "../../components/Cards/StatCard/StatCard";
 import DataTable from "../../components/DataTable/DataTable";
 import StatusBadge from "../../components/StatusBadge/StatusBadge";
 import Modal from "../../components/Modal/Modal";
 import { useToast } from "../../components/Toast/ToastContext";
-import { listSuppliers, createSupplier, toggleSupplierActive, getSupplierAnalytics, getPortfolioSummary } from "./api/supplyApi";
-import { money } from "./lib/time";
+import { useAuth } from "../../context/AuthContext";
+import useVistaGuardada from "../../hooks/useVistaGuardada";
+import { QK } from "../../app/api/queryClient";
+import { proveedoresApi, CONDICION_IVA, CONDICION_COMPRA, PROVEEDOR_VACIO } from "./api/proveedoresApi";
+import ProveedorForm, { aPayload } from "./components/ProveedorForm";
 import "./Proveedores.css";
-
-const emptySupplier = () => ({ name: "", taxId: "", contactName: "", email: "", phone: "", address: "", leadTimeDays: 10, paymentTerms: "" });
 
 const Proveedores = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const [, setTick] = useState(0);
-  const [search, setSearch] = useState("");
-  const [modal, setModal] = useState(null);
-  const [anchor, setAnchor] = useState(null);
-  const [activeRow, setActiveRow] = useState(null);
+  const { check } = useAuth();
+  const qc = useQueryClient();
+  const puede = check("compras.proveedores");
 
-  const summary = getPortfolioSummary();
-  const q = search.toLowerCase();
-  const rows = listSuppliers()
-    .filter((s) => !q || s.name.toLowerCase().includes(q) || s.contactName.toLowerCase().includes(q))
-    .map((s) => ({ ...s, analytics: getSupplierAnalytics(s.id) }));
+  const { filtros, setFiltros } = useVistaGuardada("proveedores", { search: "", tipo: "" });
+  const { search, tipo } = filtros;
+  const [alta, setAlta] = useState(null);
 
-  const kpis = [
-    { title: "Proveedores activos", value: String(summary.activeSuppliers), icon: <GroupsOutlinedIcon /> },
-    { title: "OC abiertas", value: String(summary.openOrders), icon: <ReceiptLongOutlinedIcon /> },
-    { title: "Monto comprometido", value: money(summary.committedAmount), icon: <AccountBalanceWalletOutlinedIcon /> },
-    { title: "Monto comprado (histórico)", value: money(summary.purchasedTotal), icon: <PaymentsOutlinedIcon /> },
-  ];
+  const proveedores = useQuery({ queryKey: QK.proveedores, queryFn: () => proveedoresApi.listar() });
 
-  const saveSupplier = () => {
-    if (!modal.name?.trim()) return showToast("Poné un nombre al proveedor", "warning");
-    createSupplier(modal);
-    setModal(null);
-    setTick((t) => t + 1);
-    showToast("Proveedor creado", "success");
-  };
+  const crear = useMutation({
+    mutationFn: (body) => proveedoresApi.crear(aPayload(body)),
+    onSuccess: (p) => { showToast(`"${p.nombre}" creado.`, "success"); qc.invalidateQueries({ queryKey: QK.proveedores }); setAlta(null); navigate(`/abastecimiento/proveedores/${p.id}`); },
+    onError: (err) => showToast(err?.message || "No se pudo crear.", "error"),
+  });
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (proveedores.data || []).filter((p) => {
+      if (tipo === "mercaderia" && !p.proveeMercaderia) return false;
+      if (tipo === "gastos" && !p.proveeGastos) return false;
+      if (q && ![p.nombre, p.cuit, p.email].some((v) => String(v || "").toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [proveedores.data, search, tipo]);
 
   const columns = [
     {
-      field: "name",
-      headerName: "Proveedor",
-      width: "30%",
-      renderCell: (row) => (
+      field: "nombre", headerName: "Proveedor", width: "34%",
+      renderCell: (p) => (
         <Box className="prov-cell">
-          <Avatar variant="rounded" className="prov-cell__avatar"><BusinessOutlinedIcon sx={{ fontSize: 18 }} /></Avatar>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography className="prov-cell__name">{row.name}</Typography>
-            <Typography className="prov-cell__contact">{row.contactName}</Typography>
+          <Avatar variant="rounded" className="prov-cell__avatar"><BusinessOutlinedIcon fontSize="small" /></Avatar>
+          <Box>
+            <Typography className="prov-cell__name">{p.nombre}</Typography>
+            <Typography className="prov-cell__contact">{p.cuit || "sin CUIT"}{p.email ? ` · ${p.email}` : ""}{p.telefono ? ` · ${p.telefono}` : ""}</Typography>
           </Box>
         </Box>
       ),
     },
-    { field: "leadTimeDays", headerName: "Lead time", align: "right", renderCell: (row) => `${row.leadTimeDays} días` },
-    { field: "openOrders", headerName: "OC abiertas", align: "right", renderCell: (row) => row.analytics.openOrders },
-    { field: "purchasedTotal", headerName: "Monto comprado", align: "right", renderCell: (row) => money(row.analytics.purchasedTotal) },
-    { field: "status", headerName: "Estado", align: "center", renderCell: (row) => <StatusBadge status={row.isActive ? "activo" : "inactivo"} /> },
-    {
-      field: "actions", headerName: "", align: "right", width: 56,
-      renderCell: (row) => (
-        <IconButton size="small" onClick={(e) => { setAnchor(e.currentTarget); setActiveRow(row); }} aria-label="acciones">
-          <MoreVertIcon fontSize="small" />
-        </IconButton>
-      ),
-    },
+    { field: "condicionIva", headerName: "IVA", renderCell: (p) => <span className="text-tertiary">{CONDICION_IVA[p.condicionIva] || "—"}</span> },
+    { field: "condicionCompra", headerName: "Emite", renderCell: (p) => <StatusBadge tone={p.condicionCompra === "factura" ? "success" : "warning"} label={CONDICION_COMPRA[p.condicionCompra] || p.condicionCompra} showDot={false} /> },
+    { field: "provee", headerName: "Provee", sortable: false, renderCell: (p) => <span>{[p.proveeMercaderia && "Mercadería", p.proveeGastos && "Gastos"].filter(Boolean).join(" · ") || "—"}</span> },
+    { field: "productosCargados", headerName: "Productos", align: "right" },
+    { field: "diasPago", headerName: "Plazo", align: "right", renderCell: (p) => (p.diasPago ? `${p.diasPago} d` : "—") },
   ];
-
-  const toolbar = (
-    <Box className="table-toolbar">
-      <TextField
-        size="small"
-        placeholder="Buscar por nombre o contacto…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="table-toolbar__search"
-        slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
-      />
-    </Box>
-  );
 
   return (
     <Box className="page fade-in">
       <PageHeader
         title="Proveedores"
-        subtitle="Catálogo de proveedores, costos y condiciones de compra."
-        actions={<Button variant="primary" startIcon={<AddIcon />} onClick={() => setModal(emptySupplier())}>Nuevo proveedor</Button>}
-      />
-
-      <Grid container spacing={2.5}>
-        {kpis.map((k) => (
-          <Grid key={k.title} size={{ xs: 12, sm: 6, lg: 3 }}>
-            <StatCard {...k} />
-          </Grid>
-        ))}
-      </Grid>
-
-      <DataTable
-        toolbar={toolbar}
-        columns={columns}
-        data={rows}
-        onRowClick={(row) => navigate(`/abastecimiento/proveedores/${row.id}`)}
-        emptyMessage="No hay proveedores que coincidan con la búsqueda."
-      />
-
-      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
-        <MenuItem onClick={() => { navigate(`/abastecimiento/proveedores/${activeRow.id}`); setAnchor(null); }}>Ver perfil</MenuItem>
-        <MenuItem onClick={() => { toggleSupplierActive(activeRow.id); setTick((t) => t + 1); setAnchor(null); }}>
-          {activeRow?.isActive ? "Desactivar" : "Activar"}
-        </MenuItem>
-      </Menu>
-
-      <Modal
-        open={Boolean(modal)}
-        onClose={() => setModal(null)}
-        title="Nuevo proveedor"
-        maxWidth="sm"
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setModal(null)}>Cancelar</Button>
-            <Button variant="primary" onClick={saveSupplier}>Guardar</Button>
-          </>
-        }
-      >
-        {modal && (
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-            <TextField label="Nombre / razón social" size="small" fullWidth value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} />
-            <Box sx={{ display: "flex", gap: 2 }}>
-              <TextField label="CUIT" size="small" fullWidth value={modal.taxId} onChange={(e) => setModal({ ...modal, taxId: e.target.value })} />
-              <TextField label="Lead time (días)" type="number" size="small" fullWidth value={modal.leadTimeDays} onChange={(e) => setModal({ ...modal, leadTimeDays: e.target.value })} />
-            </Box>
-            <Box sx={{ display: "flex", gap: 2 }}>
-              <TextField label="Contacto" size="small" fullWidth value={modal.contactName} onChange={(e) => setModal({ ...modal, contactName: e.target.value })} />
-              <TextField label="Teléfono" size="small" fullWidth value={modal.phone} onChange={(e) => setModal({ ...modal, phone: e.target.value })} />
-            </Box>
-            <TextField label="Email" size="small" fullWidth value={modal.email} onChange={(e) => setModal({ ...modal, email: e.target.value })} />
-            <TextField label="Dirección" size="small" fullWidth value={modal.address} onChange={(e) => setModal({ ...modal, address: e.target.value })} />
-            <TextField label="Condiciones de pago" size="small" fullWidth value={modal.paymentTerms} onChange={(e) => setModal({ ...modal, paymentTerms: e.target.value })} />
-          </Box>
+        subtitle="La ficha comercial: qué documento emite, cómo se le paga y a cuántos días. Lo operativo (formatos de compra y costos) vive en cada producto."
+        actions={(
+          <Tooltip title={puede.allowed ? "" : puede.reason}>
+            <span><Button variant="primary" startIcon={<AddIcon />} disabled={!puede.allowed} onClick={() => setAlta({ ...PROVEEDOR_VACIO })}>Nuevo proveedor</Button></span>
+          </Tooltip>
         )}
+      />
+      <Box className="table-toolbar">
+        <TextField size="small" className="table-toolbar__search" placeholder="Buscar por nombre, CUIT o email…" value={search} onChange={(e) => setFiltros({ search: e.target.value })}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
+        <Box className="table-toolbar__filters">
+          <TextField select size="small" label="Provee" value={tipo} onChange={(e) => setFiltros({ tipo: e.target.value })} sx={{ minWidth: 160 }}>
+            <MenuItem value="">Todos</MenuItem>
+            <MenuItem value="mercaderia">Mercadería</MenuItem>
+            <MenuItem value="gastos">Gastos</MenuItem>
+          </TextField>
+        </Box>
+      </Box>
+      <DataTable columns={columns} data={rows} loading={proveedores.isLoading} emptyMessage="Ningún proveedor todavía." onRowClick={(p) => navigate(`/abastecimiento/proveedores/${p.id}`)} pagination={{ pageSize: 25 }} />
+
+      <Modal open={Boolean(alta)} onClose={() => setAlta(null)} title="Nuevo proveedor" maxWidth="md"
+        actions={(<><Button variant="ghost" onClick={() => setAlta(null)}>Cancelar</Button><Button variant="primary" loading={crear.isPending} onClick={() => { if (!alta.nombre.trim()) { showToast("Poné el nombre.", "warning"); return; } crear.mutate(alta); }}>Crear</Button></>)}>
+        {alta && <ProveedorForm value={alta} onChange={setAlta} />}
       </Modal>
     </Box>
   );
