@@ -1,297 +1,139 @@
+/**
+ * Existencias, contra la API. Una fila por Producto × Sucursal × Presentación,
+ * con el desglose por estado (disponible, comprometido, en tránsito, retenido…).
+ * Lo que se puede vender es lo DISPONIBLE; lo comprometido está apartado para
+ * una transferencia o incidencia y lo que viaja sigue siendo del origen.
+ */
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Box from "@mui/material/Box";
-import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
-import Avatar from "@mui/material/Avatar";
+import MenuItem from "@mui/material/MenuItem";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
+import Tooltip from "@mui/material/Tooltip";
 
 import SearchIcon from "@mui/icons-material/Search";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
-import ViewListOutlinedIcon from "@mui/icons-material/ViewListOutlined";
-import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
-import EqualizerOutlinedIcon from "@mui/icons-material/EqualizerOutlined";
-import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
-import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
-import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import SwapHorizOutlinedIcon from "@mui/icons-material/SwapHorizOutlined";
 
 import PageHeader from "../../components/PageHeader/PageHeader";
-import useVistaGuardada from "../../hooks/useVistaGuardada";
 import Button from "../../components/Button/Button";
 import StatCard from "../../components/Cards/StatCard/StatCard";
 import DataTable from "../../components/DataTable/DataTable";
-import Modal from "../../components/Modal/Modal";
-import { useToast } from "../../components/Toast/ToastContext";
-import WarehousePicker from "./components/WarehousePicker";
-import StockLevelBadge from "./components/StockLevelBadge";
-import StockMinMaxEditor from "./components/StockMinMaxEditor";
-import { getStockLevels, getStockGroupedBySku, getPortfolioSummary, setThresholds, setThresholdsBulk } from "./api/inventoryApi";
-import { money } from "./lib/time";
+import StatusBadge from "../../components/StatusBadge/StatusBadge";
+import useVistaGuardada from "../../hooks/useVistaGuardada";
+import { useAuth } from "../../context/AuthContext";
+import { useInventarioBase } from "./hooks/useInventario";
+import { ESTADOS_STOCK, num, money, formaDe } from "./api/inventarioApi";
 import "./Stock.css";
 
-const STATUS_TABS = [
-  { key: "", label: "Todos" },
-  { key: "bajo_minimo", label: "Bajo mínimo" },
-  { key: "critico", label: "Crítico" },
-  { key: "agotado", label: "Agotado" },
+const TABS = [
+  { key: "", label: "Todo" },
+  { key: "bajo", label: "Bajo mínimo" },
+  { key: "sin", label: "Sin stock" },
+  { key: "apartado", label: "Con apartados" },
 ];
 
 const Stock = () => {
   const navigate = useNavigate();
-  const { showToast } = useToast();
+  const { user, esJefe, can } = useAuth();
+  const { productos, sucursales, stock, productoDe, sucursalDe, cargando } = useInventarioBase();
+  const veCostos = can("precios", "compras.productos", "compras.proveedores");
 
-  const [location, setLocation] = useState({ branchId: null, warehouseId: null });
-  const { filtros, setFiltros } = useVistaGuardada("stock", { search: "", tab: 0 });
-  const { search, tab: statusTab } = filtros;
-  const [grouped, setGrouped] = useState(false);
-  const [selected, setSelected] = useState([]);
-  const [anchor, setAnchor] = useState(null);
-  const [activeRow, setActiveRow] = useState(null);
-  const [editorRows, setEditorRows] = useState([]);
-  const [breakdownRow, setBreakdownRow] = useState(null);
+  const { filtros, setFiltros } = useVistaGuardada("stock", { search: "", sucursal: "", tab: 0 });
+  const { search, sucursal, tab } = filtros;
+  const sucursalFiltro = esJefe ? sucursal : user?.sucursalId;
 
-  const summary = getPortfolioSummary();
+  /** Agrupa el stock por (producto, sucursal, presentación) con el desglose por estado. */
+  const filas = useMemo(() => {
+    const m = new Map();
+    (stock.data || []).forEach((s) => {
+      if (sucursalFiltro && s.sucursalId !== Number(sucursalFiltro)) return;
+      const k = `${s.productoId}:${s.sucursalId}:${s.presentacionId ?? ""}`;
+      if (!m.has(k)) m.set(k, { id: k, productoId: s.productoId, sucursalId: s.sucursalId, presentacionId: s.presentacionId ?? null, estados: {} });
+      m.get(k).estados[s.estado] = (m.get(k).estados[s.estado] || 0) + Number(s.cantidad);
+    });
+    const q = search.trim().toLowerCase();
+    return [...m.values()].map((f) => {
+      const p = productoDe(f.productoId);
+      const disponible = f.estados.disponible || 0;
+      const apartado = (f.estados.comprometido || 0) + (f.estados.retenido || 0) + (f.estados.en_transito || 0);
+      const unidad = f.presentacionId ? "paq." : (p?.tipo === "granel" ? "kg" : "u");
+      const costo = f.presentacionId ? (p?.presentaciones || []).find((x) => x.id === f.presentacionId)?.costoNeto : p?.costoNeto;
+      return { ...f, producto: p, nombre: p?.nombre || `#${f.productoId}`, forma: formaDe(p, f.presentacionId), sucursal: sucursalDe(f.sucursalId)?.nombre || "—", disponible, apartado, unidad, costo, valor: costo != null ? costo * disponible : null, bajoMinimo: !f.presentacionId && p?.stockMin > 0 && disponible < p.stockMin };
+    }).filter((f) => {
+      if (q && ![f.nombre, f.producto?.codigoPropio, f.producto?.marca].some((v) => String(v || "").toLowerCase().includes(q))) return false;
+      const t = TABS[tab]?.key;
+      if (t === "bajo") return f.bajoMinimo;
+      if (t === "sin") return f.disponible <= 0;
+      if (t === "apartado") return f.apartado > 0;
+      return true;
+    }).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.sucursal.localeCompare(b.sucursal));
+  }, [stock.data, sucursalFiltro, search, tab, productoDe, sucursalDe]);
 
-  const filters = useMemo(
-    () => ({ ...location, search, status: STATUS_TABS[statusTab].key || undefined }),
-    [location, search, statusTab]
-  );
+  const resumen = useMemo(() => ({
+    formas: filas.length,
+    bajo: filas.filter((f) => f.bajoMinimo).length,
+    apartado: filas.filter((f) => f.apartado > 0).length,
+    valor: filas.reduce((a, f) => a + (f.valor || 0), 0),
+  }), [filas]);
 
-  const rows = grouped ? getStockGroupedBySku(filters) : getStockLevels(filters);
-
-  const rowId = (r) => (grouped ? r.skuId : `${r.skuId}::${r.warehouseId}`);
-  const rowsWithId = rows.map((r) => ({ ...r, id: rowId(r) }));
-
-  const kpis = [
-    { title: "Valor total de inventario", value: money(summary.totalValue), icon: <Inventory2OutlinedIcon /> },
-    { title: "SKUs bajo mínimo", value: String(summary.belowMin), icon: <WarningAmberOutlinedIcon /> },
-    { title: "SKUs agotados", value: String(summary.outOfStock), icon: <ErrorOutlineOutlinedIcon /> },
-    { title: "Unidades reservadas", value: String(summary.totalReserved), icon: <EqualizerOutlinedIcon /> },
-  ];
-
-  const handleMenuOpen = (e, row) => { setAnchor(e.currentTarget); setActiveRow(row); };
-  const handleMenuClose = () => { setAnchor(null); setActiveRow(null); };
-
-  const saveThresholds = ({ minStock, safetyStock }) => {
-    if (editorRows.length === 1) {
-      setThresholds(editorRows[0].skuId, editorRows[0].warehouseId, { minStock, safetyStock });
-    } else {
-      setThresholdsBulk(editorRows.map((r) => ({ skuId: r.skuId, warehouseId: r.warehouseId })), { minStock, safetyStock });
-    }
-    setEditorRows([]);
-    setSelected([]);
-    showToast("Mínimo y seguridad actualizados", "success");
-  };
-
-  const baseColumns = [
+  const columns = [
     {
-      field: "name",
-      headerName: "Producto",
-      width: "26%",
-      renderCell: (row) => (
+      field: "nombre", headerName: "Producto", width: "30%",
+      renderCell: (f) => (
         <Box className="inv-sku-cell">
-          <Avatar variant="rounded" className="inv-sku-cell__thumb">{row.name.charAt(0)}</Avatar>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography className="inv-sku-cell__name">{row.name}</Typography>
-            <Typography className="inv-sku-cell__sku mono">{row.sku}</Typography>
+          <Box>
+            <Typography className="inv-sku-cell__name">{f.nombre}</Typography>
+            <Typography className="inv-sku-cell__sku">{f.producto?.codigoPropio}{f.producto?.marca ? ` · ${f.producto.marca}` : ""} · {f.forma}</Typography>
           </Box>
         </Box>
       ),
     },
+    { field: "sucursal", headerName: "Sucursal", renderCell: (f) => <span className="inv-warehouse-cell__branch">{f.sucursal}</span> },
+    { field: "disponible", headerName: "Disponible", align: "right", sortValue: (f) => f.disponible, renderCell: (f) => <span className={f.disponible <= 0 ? "inv-mov-qty--neg" : "inv-available"}>{num(f.disponible)} {f.unidad}</span> },
+    { field: "apartado", headerName: "Apartado", align: "right", sortValue: (f) => f.apartado, renderCell: (f) => (f.apartado > 0
+      ? <Tooltip title={Object.entries(f.estados).filter(([k]) => k !== "disponible").map(([k, v]) => `${ESTADOS_STOCK[k]?.label || k}: ${num(v)}`).join(" · ")}><span className="inv-num">{num(f.apartado)}</span></Tooltip>
+      : <span className="text-tertiary">—</span>) },
+    { field: "minimo", headerName: "Mínimo", align: "right", renderCell: (f) => <span className="inv-num">{f.presentacionId ? "—" : num(f.producto?.stockMin || 0)}</span> },
+    ...(veCostos ? [{ field: "valor", headerName: "Valor (costo)", align: "right", sortValue: (f) => f.valor || 0, renderCell: (f) => <span className="inv-num">{money(f.valor)}</span> }] : []),
+    { field: "estado", headerName: "Estado", sortable: false, renderCell: (f) => (f.disponible <= 0 ? <StatusBadge tone="danger" label="Sin stock" /> : f.bajoMinimo ? <StatusBadge tone="warning" label="Bajo mínimo" /> : <StatusBadge tone="success" label="OK" />) },
   ];
-
-  const groupedExtraColumns = [
-    {
-      field: "breakdown",
-      headerName: "Depósitos",
-      renderCell: (row) => (
-        <span className="text-tertiary">{row.breakdown.length} depósito{row.breakdown.length === 1 ? "" : "s"}</span>
-      ),
-    },
-  ];
-
-  const warehouseColumn = {
-    field: "warehouseName",
-    headerName: "Depósito",
-    renderCell: (row) => (
-      <Box>
-        <Typography className="inv-warehouse-cell__name">{row.warehouseName}</Typography>
-        <Typography className="inv-warehouse-cell__branch">{row.branchName}</Typography>
-      </Box>
-    ),
-  };
-
-  const numericColumns = [
-    { field: "onHand", headerName: "On hand", align: "right", renderCell: (row) => <span className="inv-num">{row.onHand}</span> },
-    { field: "reserved", headerName: "Reservado", align: "right", renderCell: (row) => <span className="inv-num">{row.reserved || "—"}</span> },
-    { field: "available", headerName: "Disponible", align: "right", renderCell: (row) => <span className="inv-available">{row.available}</span> },
-  ];
-
-  const ungroupedThresholdColumns = [
-    { field: "minStock", headerName: "Mínimo", align: "right", renderCell: (row) => <span className="inv-num">{row.minStock}</span> },
-    { field: "safetyStock", headerName: "Seguridad", align: "right", renderCell: (row) => <span className="inv-num">{row.safetyStock}</span> },
-  ];
-
-  const statusColumn = {
-    field: "status",
-    headerName: "Estado",
-    align: "center",
-    renderCell: (row) => <StockLevelBadge status={row.status} size="sm" />,
-  };
-
-  const actionsColumn = {
-    field: "actions",
-    headerName: "",
-    align: "right",
-    width: 56,
-    renderCell: (row) => (
-      <IconButton size="small" onClick={(e) => handleMenuOpen(e, row)} aria-label="acciones">
-        <MoreVertIcon fontSize="small" />
-      </IconButton>
-    ),
-  };
-
-  const columns = grouped
-    ? [...baseColumns, ...groupedExtraColumns, ...numericColumns, statusColumn]
-    : [...baseColumns, warehouseColumn, ...numericColumns, ...ungroupedThresholdColumns, statusColumn, actionsColumn];
-
-  const toolbar = (
-    <>
-      <Box className="table-tabs">
-        <Tabs value={statusTab} onChange={(_, v) => setFiltros({ tab: v })} variant="scrollable" scrollButtons={false}>
-          {STATUS_TABS.map((t) => <Tab key={t.key} label={t.label} />)}
-        </Tabs>
-      </Box>
-      <Box className="table-toolbar">
-        <TextField
-          size="small"
-          placeholder="Buscar por nombre o SKU…"
-          value={search}
-          onChange={(e) => setFiltros({ search: e.target.value })}
-          className="table-toolbar__search"
-          slotProps={{
-            input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> },
-          }}
-        />
-        <Box className="table-toolbar__filters">
-          <WarehousePicker value={location} onChange={setLocation} />
-        </Box>
-        <Button
-          variant={grouped ? "primary" : "secondary"}
-          size="small"
-          startIcon={grouped ? <ViewListOutlinedIcon /> : <LayersOutlinedIcon />}
-          onClick={() => { setGrouped((g) => !g); setSelected([]); }}
-        >
-          {grouped ? "Ver por depósito" : "Agrupar por SKU"}
-        </Button>
-      </Box>
-    </>
-  );
-
-  const bulkToolbar = (
-    <Box className="inv-bulk-bar">
-      <Typography variant="body2">
-        <strong>{selected.length}</strong> {selected.length === 1 ? "fila seleccionada" : "filas seleccionadas"}
-      </Typography>
-      <Box sx={{ display: "flex", gap: 1 }}>
-        <Button variant="ghost" size="small" onClick={() => setSelected([])}>Deseleccionar</Button>
-        <Button
-          variant="primary"
-          size="small"
-          startIcon={<TuneOutlinedIcon />}
-          onClick={() => setEditorRows(rowsWithId.filter((r) => selected.includes(r.id)))}
-        >
-          Editar mínimos
-        </Button>
-      </Box>
-    </Box>
-  );
 
   return (
     <Box className="page fade-in">
-      <PageHeader title="Inventario" subtitle="Stock disponible y reservado por sucursal y depósito." />
-
-      <Grid container spacing={2.5}>
-        {kpis.map((k) => (
-          <Grid key={k.title} size={{ xs: 12, sm: 6, lg: 3 }}>
-            <StatCard {...k} />
-          </Grid>
-        ))}
-      </Grid>
-
-      <DataTable
-        toolbar={!grouped && selected.length > 0 ? bulkToolbar : toolbar}
-        columns={columns}
-        data={rowsWithId}
-        selectable={!grouped}
-        selectedIds={selected}
-        onSelectionChange={setSelected}
-        onRowClick={(row) => (grouped ? setBreakdownRow(row) : undefined)}
-        emptyMessage="No hay stock que coincida con los filtros."
-      />
-
-      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={handleMenuClose}>
-        <MenuItem onClick={() => { navigate(`/inventario/movimientos?skuId=${activeRow.skuId}`); handleMenuClose(); }}>
-          <ListItemIcon><HistoryOutlinedIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Ver movimientos</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => { navigate(`/inventario/ajustes?skuId=${activeRow.skuId}&warehouseId=${activeRow.warehouseId}`); handleMenuClose(); }}>
-          <ListItemIcon><Inventory2OutlinedIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Ajustar stock</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => { navigate("/inventario/transferencias", { state: { skuId: activeRow.skuId, originId: activeRow.warehouseId } }); handleMenuClose(); }}>
-          <ListItemIcon><SwapHorizOutlinedIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Transferir</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => { setEditorRows([{ ...activeRow, id: rowId(activeRow) }]); handleMenuClose(); }}>
-          <ListItemIcon><TuneOutlinedIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Editar mínimo y seguridad</ListItemText>
-        </MenuItem>
-      </Menu>
-
-      <StockMinMaxEditor
-        open={editorRows.length > 0}
-        onClose={() => setEditorRows([])}
-        rows={editorRows}
-        onSave={saveThresholds}
-      />
-
-      <Modal
-        open={Boolean(breakdownRow)}
-        onClose={() => setBreakdownRow(null)}
-        title={breakdownRow?.name}
-        subtitle={`${breakdownRow?.sku} · desglose por depósito`}
-      >
-        {breakdownRow && (
-          <table className="line-table inv-breakdown-table">
-            <thead>
-              <tr><th>Depósito</th><th>On hand</th><th>Reservado</th><th>Disponible</th><th>Estado</th></tr>
-            </thead>
-            <tbody>
-              {breakdownRow.breakdown.map((b) => (
-                <tr key={b.warehouseId}>
-                  <td>{b.warehouseName}</td>
-                  <td>{b.onHand}</td>
-                  <td>{b.reserved || "—"}</td>
-                  <td>{b.available}</td>
-                  <td><StockLevelBadge status={b.status} size="sm" /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <PageHeader
+        title="Stock"
+        subtitle={esJefe ? "Existencias de todas las sucursales." : `Existencias de ${user?.sucursalNombre}.`}
+        actions={(
+          <>
+            <Button variant="secondary" startIcon={<SwapHorizOutlinedIcon />} onClick={() => navigate("/inventario/transferencias")}>Transferencias</Button>
+            <Button variant="primary" startIcon={<TuneOutlinedIcon />} onClick={() => navigate("/inventario/ajustes")}>Operaciones</Button>
+          </>
         )}
-      </Modal>
+      />
+      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 2, mb: 2 }}>
+        <StatCard title="Formas con stock" value={resumen.formas} hint="producto × sucursal × forma" />
+        <StatCard title="Bajo mínimo" value={resumen.bajo} hint="a reponer" />
+        <StatCard title="Con apartados" value={resumen.apartado} hint="comprometido / en tránsito" />
+        {veCostos && <StatCard title="Valorizado" value={money(resumen.valor)} hint="disponible × costo neto" />}
+      </Box>
+      <Box className="table-tabs">
+        <Tabs value={tab} onChange={(_, v) => setFiltros({ tab: v })}>{TABS.map((t) => <Tab key={t.key} label={t.label} />)}</Tabs>
+        <Box sx={{ flex: 1 }} />
+        {esJefe && (
+          <TextField select size="small" label="Sucursal" value={sucursal} onChange={(e) => setFiltros({ sucursal: e.target.value })} sx={{ minWidth: 180 }}>
+            <MenuItem value="">Todas</MenuItem>
+            {(sucursales.data || []).map((s) => <MenuItem key={s.id} value={s.id}>{s.nombre}</MenuItem>)}
+          </TextField>
+        )}
+        <TextField size="small" placeholder="Buscar producto…" value={search} onChange={(e) => setFiltros({ search: e.target.value })} sx={{ minWidth: 240 }}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
+      </Box>
+      <DataTable columns={columns} data={filas} loading={cargando} emptyMessage="Sin existencias que mostrar." onRowClick={(f) => navigate(`/productos/${f.productoId}`)} pagination={{ pageSize: 25 }} />
     </Box>
   );
 };

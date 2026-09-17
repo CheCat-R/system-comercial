@@ -1,166 +1,100 @@
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+/**
+ * Transferencias entre sucursales, contra la API. Modelo PULL: el DESTINO
+ * arma el pedido (borrador → pendiente), el ORIGEN lo prepara en dos listas
+ * (enteros y granel) y al confirmar cada una reserva el stock, despacha (en
+ * tránsito) y el destino recibe contando lo que llegó.
+ */
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Box from "@mui/material/Box";
-import Select from "@mui/material/Select";
-import MenuItem from "@mui/material/MenuItem";
+import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
-import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
+import Tooltip from "@mui/material/Tooltip";
 
 import AddIcon from "@mui/icons-material/Add";
-import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 
 import PageHeader from "../../components/PageHeader/PageHeader";
 import Button from "../../components/Button/Button";
 import DataTable from "../../components/DataTable/DataTable";
-import Modal from "../../components/Modal/Modal";
 import StatusBadge from "../../components/StatusBadge/StatusBadge";
+import Modal from "../../components/Modal/Modal";
 import { useToast } from "../../components/Toast/ToastContext";
-import { listTransfers, listWarehouses, listSkus, createTransfer } from "./api/inventoryApi";
-import { TRANSFER_STATUS } from "./lib/transfers";
-import { formatDateTime } from "./lib/time";
+import { useAuth } from "../../context/AuthContext";
+import { QK } from "../../app/api/queryClient";
+import { inventarioApi, ESTADOS_TRANSFER, stamp } from "./api/inventarioApi";
+import { useInventarioBase } from "./hooks/useInventario";
 import "./Transferencias.css";
 
-const emptyLine = () => ({ skuId: "", qtySent: "" });
+const TABS = [{ key: "", label: "Todas" }, { key: "abiertas", label: "Abiertas" }, { key: "recibida", label: "Recibidas" }, { key: "cancelada", label: "Canceladas" }];
 
 const Transferencias = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const { showToast } = useToast();
-  const [, setTick] = useState(0);
+  const { user, esJefe, check } = useAuth();
+  const qc = useQueryClient();
+  const { sucursales, sucursalDe } = useInventarioBase();
+  const [tab, setTab] = useState(1);
+  const [nuevo, setNuevo] = useState(null); // { origenId, destinoId }
+  const puedePedir = check("pedidos");
 
-  const [createOpen, setCreateOpen] = useState(false);
-  const [originId, setOriginId] = useState("");
-  const [destId, setDestId] = useState("");
-  const [lines, setLines] = useState([emptyLine()]);
+  const transferencias = useQuery({ queryKey: QK.transferencias, queryFn: inventarioApi.transferencias.listar });
 
-  const warehouses = listWarehouses();
-  const skus = listSkus();
-  const rows = listTransfers().map((t) => ({ ...t, id: t.id }));
+  const abrirBorrador = useMutation({
+    mutationFn: (b) => inventarioApi.transferencias.borrador(b),
+    onSuccess: (t) => { qc.invalidateQueries({ queryKey: QK.transferencias }); setNuevo(null); navigate(`/inventario/transferencias/${t.id}`); },
+    onError: (err) => showToast(err?.message || "No se pudo abrir el pedido.", "error"),
+  });
 
-  useEffect(() => {
-    const prefill = location.state;
-    if (prefill?.originId || prefill?.skuId) {
-      setOriginId(prefill.originId || "");
-      setLines([{ skuId: prefill.skuId || "", qtySent: "" }]);
-      setCreateOpen(true);
-      navigate(location.pathname, { replace: true, state: null });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const openCreate = () => {
-    setOriginId(""); setDestId(""); setLines([emptyLine()]);
-    setCreateOpen(true);
-  };
-
-  const updateLine = (i, patch) => setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  const addLine = () => setLines((ls) => [...ls, emptyLine()]);
-  const removeLine = (i) => setLines((ls) => ls.filter((_, idx) => idx !== i));
-
-  const handleSave = () => {
-    try {
-      const transfer = createTransfer({ originId, destId, lines });
-      setCreateOpen(false);
-      setTick((t) => t + 1);
-      showToast("Transferencia creada en borrador", "success");
-      navigate(`/inventario/transferencias/${transfer.id}`);
-    } catch (err) {
-      showToast(err.message, "warning");
-    }
-  };
+  const rows = useMemo(() => (transferencias.data || []).filter((t) => {
+    const k = TABS[tab]?.key;
+    if (k === "abiertas") return ["borrador", "pendiente", "preparada", "transito"].includes(t.estado);
+    if (k) return t.estado === k;
+    return true;
+  }).map((t) => ({ ...t, renglones: t.items?.length || 0, kg: t.items?.reduce((a, i) => a + Number(i.cantidad_preparada || i.cantidad || 0), 0) || 0 })), [transferencias.data, tab]);
 
   const columns = [
-    {
-      field: "route",
-      headerName: "Transferencia",
-      width: "34%",
-      renderCell: (row) => (
-        <Box className="inv-transfer-route">
-          <span>{row.originName}</span>
-          <ArrowForwardOutlinedIcon />
-          <span>{row.destName}</span>
-        </Box>
-      ),
-    },
-    { field: "lines", headerName: "Líneas", align: "right", renderCell: (row) => row.lines.length },
-    {
-      field: "status",
-      headerName: "Estado",
-      align: "center",
-      renderCell: (row) => <StatusBadge {...TRANSFER_STATUS[row.status]} />,
-    },
-    { field: "sentAt", headerName: "Enviada", renderCell: (row) => <span className="text-tertiary nowrap">{formatDateTime(row.sentAt)}</span> },
-    { field: "receivedAt", headerName: "Recibida", renderCell: (row) => <span className="text-tertiary nowrap">{formatDateTime(row.receivedAt)}</span> },
+    { field: "codigo", headerName: "Código", renderCell: (t) => <strong>{t.codigo || "borrador"}</strong> },
+    { field: "fecha", headerName: "Fecha", renderCell: (t) => <span className="nowrap">{stamp(t.fecha)}</span> },
+    { field: "ruta", headerName: "Ruta", sortable: false, renderCell: (t) => <span className="inv-transfer-route">{sucursalDe(t.origen_id)?.nombre || "—"} → {sucursalDe(t.destino_id)?.nombre || "—"}</span> },
+    { field: "renglones", headerName: "Renglones", align: "right" },
+    { field: "estado", headerName: "Estado", renderCell: (t) => <StatusBadge tone={ESTADOS_TRANSFER[t.estado]?.tone} label={ESTADOS_TRANSFER[t.estado]?.label || t.estado} /> },
+    { field: "listas", headerName: "Preparación", sortable: false, renderCell: (t) => (t.estado === "preparada"
+      ? <span className="text-tertiary">{t.enteros_listo ? "Enteros ✓" : "Enteros …"} · {t.granel_listo ? "Granel ✓" : "Granel …"}</span>
+      : <span className="text-tertiary">—</span>) },
   ];
+
+  const otras = (sucursales.data || []);
 
   return (
     <Box className="page fade-in">
       <PageHeader
         title="Transferencias"
-        subtitle="Movimientos de stock entre depósitos."
-        actions={<Button variant="primary" startIcon={<AddIcon />} onClick={openCreate}>Nueva transferencia</Button>}
+        subtitle="El destino pide, el origen prepara y despacha, el destino recibe contando. El stock acompaña cada estado."
+        actions={(
+          <Tooltip title={puedePedir.allowed ? "" : puedePedir.reason}><span>
+            <Button variant="primary" startIcon={<AddIcon />} disabled={!puedePedir.allowed} onClick={() => setNuevo({ origenId: otras.find((s) => s.tipo === "distribuidora")?.id ?? "", destinoId: user?.sucursalId ?? "" })}>Nuevo pedido</Button>
+          </span></Tooltip>
+        )}
       />
+      <Box className="table-tabs"><Tabs value={tab} onChange={(_, v) => setTab(v)}>{TABS.map((t) => <Tab key={t.key} label={t.label} />)}</Tabs></Box>
+      <DataTable columns={columns} data={rows} loading={transferencias.isLoading} emptyMessage="Sin transferencias." onRowClick={(t) => navigate(`/inventario/transferencias/${t.id}`)} pagination={{ pageSize: 25 }} />
 
-      <DataTable
-        columns={columns}
-        data={rows}
-        onRowClick={(row) => navigate(`/inventario/transferencias/${row.id}`)}
-        emptyMessage="Todavía no se registraron transferencias."
-      />
-
-      <Modal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Nueva transferencia"
-        subtitle="Queda en Borrador hasta que la envíes — recién ahí resta del depósito de origen."
-        maxWidth="md"
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSave}>Guardar borrador</Button>
-          </>
-        }
-      >
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5, pt: 1 }}>
-          <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-            <Select size="small" fullWidth displayEmpty value={originId} onChange={(e) => setOriginId(e.target.value)}>
-              <MenuItem value="" disabled>Depósito origen…</MenuItem>
-              {warehouses.map((w) => <MenuItem key={w.id} value={w.id}>{w.name}</MenuItem>)}
-            </Select>
-            <ArrowForwardOutlinedIcon sx={{ color: "var(--text-tertiary)", flexShrink: 0 }} />
-            <Select size="small" fullWidth displayEmpty value={destId} onChange={(e) => setDestId(e.target.value)}>
-              <MenuItem value="" disabled>Depósito destino…</MenuItem>
-              {warehouses.filter((w) => w.id !== originId).map((w) => <MenuItem key={w.id} value={w.id}>{w.name}</MenuItem>)}
-            </Select>
+      <Modal open={Boolean(nuevo)} onClose={() => setNuevo(null)} title="Nuevo pedido a otra sucursal" subtitle="Se abre como borrador: se arma con calma y se envía cuando está listo. Hay un solo borrador por ruta."
+        actions={(<><Button variant="ghost" onClick={() => setNuevo(null)}>Cancelar</Button><Button variant="primary" loading={abrirBorrador.isPending} disabled={!nuevo?.origenId || !nuevo?.destinoId || nuevo.origenId === nuevo.destinoId} onClick={() => abrirBorrador.mutate(nuevo)}>Abrir borrador</Button></>)}>
+        {nuevo && (
+          <Box sx={{ display: "grid", gap: 2, pt: 1 }}>
+            <TextField select size="small" label="Pedir a (origen)" value={nuevo.origenId} onChange={(e) => setNuevo({ ...nuevo, origenId: e.target.value })}>
+              {otras.map((s) => <MenuItem key={s.id} value={s.id}>{s.nombre}</MenuItem>)}
+            </TextField>
+            <TextField select size="small" label="Para (destino)" value={nuevo.destinoId} onChange={(e) => setNuevo({ ...nuevo, destinoId: e.target.value })} disabled={!esJefe} helperText={!esJefe ? "Tu sucursal." : undefined}>
+              {otras.map((s) => <MenuItem key={s.id} value={s.id}>{s.nombre}</MenuItem>)}
+            </TextField>
           </Box>
-
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-            <Box component="span" className="form-label">Líneas</Box>
-            {lines.map((line, i) => (
-              <Box key={i} sx={{ display: "flex", gap: 1 }}>
-                <Select size="small" displayEmpty value={line.skuId} onChange={(e) => updateLine(i, { skuId: e.target.value })} sx={{ flex: 2 }}>
-                  <MenuItem value="" disabled>SKU…</MenuItem>
-                  {skus.map((s) => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
-                </Select>
-                <TextField
-                  size="small"
-                  type="number"
-                  placeholder="Cantidad"
-                  value={line.qtySent}
-                  onChange={(e) => updateLine(i, { qtySent: e.target.value })}
-                  sx={{ flex: 1 }}
-                />
-                <IconButton size="small" onClick={() => removeLine(i)} disabled={lines.length === 1} aria-label="quitar línea">
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            ))}
-            <Button variant="ghost" size="small" startIcon={<AddIcon />} onClick={addLine} sx={{ alignSelf: "flex-start" }}>
-              Agregar línea
-            </Button>
-          </Box>
-        </Box>
+        )}
       </Modal>
     </Box>
   );

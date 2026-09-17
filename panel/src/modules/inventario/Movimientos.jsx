@@ -1,137 +1,64 @@
-import { useMemo, useState } from "react";
-import { Link as RouterLink, useSearchParams } from "react-router-dom";
+/** El kardex: la bitácora inmutable de todo lo que entró, salió o cambió de estado. */
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
-import InputAdornment from "@mui/material/InputAdornment";
-import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 
-import SearchIcon from "@mui/icons-material/Search";
-import CloseIcon from "@mui/icons-material/Close";
-
 import PageHeader from "../../components/PageHeader/PageHeader";
-import Button from "../../components/Button/Button";
 import DataTable from "../../components/DataTable/DataTable";
-import WarehousePicker from "./components/WarehousePicker";
-import MovementBadge from "./components/MovementBadge";
-import { getMovements, getSku } from "./api/inventoryApi";
-import { getOrderIdForReceipt } from "../abastecimiento/api/supplyApi";
-import { MOVEMENT_TYPES, refLabel } from "./lib/movements";
-import { formatDateTime } from "./lib/time";
+import StatusBadge from "../../components/StatusBadge/StatusBadge";
+import { useAuth } from "../../context/AuthContext";
+import { QK } from "../../app/api/queryClient";
+import { seguridadApi } from "../seguridad/api/seguridadApi";
+import { inventarioApi, TIPOS_MOV, ESTADOS_STOCK, num, stamp } from "./api/inventarioApi";
+import { useInventarioBase } from "./hooks/useInventario";
 import "./Movimientos.css";
 
-// La Recepción no tiene ruta propia (vive dentro del detalle de la OC en Abastecimiento) —
-// por eso resuelve a la Orden de Compra que la originó en vez de a sí misma.
-const REF_ROUTE = {
-  order: (id) => `/pedidos/${id}`,
-  transfer: (id) => `/inventario/transferencias/${id}`,
-  receipt: (id) => {
-    const orderId = getOrderIdForReceipt(id);
-    return orderId ? `/abastecimiento/ordenes-compra/${orderId}` : null;
-  },
-};
-
 const Movimientos = () => {
-  const [params, setParams] = useSearchParams();
-  const skuId = params.get("skuId") || "";
-  const [location, setLocation] = useState({ branchId: null, warehouseId: null });
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState("");
+  const { user, esJefe } = useAuth();
+  const { productoDe, sucursalDe } = useInventarioBase();
+  const [q, setQ] = useState({ productoId: "", sucursalId: "", tipo: "", desde: "", hasta: "" });
 
-  const skuFilterLabel = skuId ? getSku(skuId)?.name : null;
-
-  const rows = useMemo(
-    () => getMovements({ skuId: skuId || undefined, warehouseId: location.warehouseId, search, type: type || undefined })
-      .map((m) => ({ ...m, id: m.id })),
-    [skuId, location, search, type]
-  );
+  const usuarios = useQuery({ queryKey: QK.usuarios, queryFn: seguridadApi.usuarios, enabled: esJefe });
+  const movimientos = useQuery({ queryKey: QK.movimientos(q), queryFn: () => inventarioApi.movimientos({ ...q, limit: 500 }) });
+  const { sucursales, productos } = useInventarioBase();
+  const nombreUsuario = (id) => (usuarios.data || []).find((u) => u.id === id)?.nombre || (id === user?.id ? user.nombre : "—");
 
   const columns = [
-    {
-      field: "at",
-      headerName: "Fecha",
-      renderCell: (row) => <span className="text-tertiary nowrap">{formatDateTime(row.at)}</span>,
-    },
-    {
-      field: "name",
-      headerName: "Producto",
-      width: "22%",
-      renderCell: (row) => (
-        <Box>
-          <Typography variant="body2">{row.name}</Typography>
-          <Typography variant="caption" className="mono text-tertiary">{row.sku}</Typography>
-        </Box>
-      ),
-    },
-    { field: "warehouseName", headerName: "Depósito", renderCell: (row) => <span className="text-secondary">{row.warehouseName}</span> },
-    { field: "type", headerName: "Tipo", renderCell: (row) => <MovementBadge type={row.type} /> },
-    {
-      field: "qty",
-      headerName: "Cantidad",
-      align: "right",
-      renderCell: (row) => (
-        <span className={`inv-mov-qty ${row.qty > 0 ? "inv-mov-qty--pos" : row.qty < 0 ? "inv-mov-qty--neg" : "inv-mov-qty--neutral"}`}>
-          {row.qty > 0 ? `+${row.qty}` : row.qty}
-        </span>
-      ),
-    },
-    {
-      field: "balanceAfter",
-      headerName: "Saldo",
-      align: "right",
-      renderCell: (row) => (
-        <span className="inv-num">{row.balanceAfter}{row.counter === "reserved" ? " reserv." : ""}</span>
-      ),
-    },
-    {
-      field: "ref",
-      headerName: "Referencia",
-      renderCell: (row) => {
-        if (!row.refType) return <span className="text-tertiary">—</span>;
-        const routeFn = REF_ROUTE[row.refType];
-        const label = `${refLabel(row.refType)} #${row.refId}`;
-        const url = routeFn ? routeFn(row.refId) : null;
-        return url ? (
-          <RouterLink to={url} className="inv-mov-ref mono">{label}</RouterLink>
-        ) : (
-          <span className="text-tertiary mono">{label}</span>
-        );
-      },
-    },
+    { field: "fecha", headerName: "Fecha", renderCell: (m) => <span className="nowrap">{stamp(m.fecha)}</span> },
+    { field: "tipo", headerName: "Tipo", renderCell: (m) => <StatusBadge tone={TIPOS_MOV[m.tipo]?.dir > 0 ? "success" : TIPOS_MOV[m.tipo]?.dir < 0 ? "danger" : "info"} label={TIPOS_MOV[m.tipo]?.label || m.tipo} showDot={false} /> },
+    { field: "producto", headerName: "Producto", width: "26%", renderCell: (m) => <Box><strong>{productoDe(m.producto_id)?.nombre || `#${m.producto_id}`}</strong>{m.pres_label && <Typography variant="caption" color="text.secondary" display="block">{m.pres_label}</Typography>}</Box> },
+    { field: "sucursal", headerName: "Sucursal", renderCell: (m) => <span>{sucursalDe(m.sucursal_id)?.nombre || "—"}{m.sucursal_destino_id ? ` → ${sucursalDe(m.sucursal_destino_id)?.nombre || ""}` : ""}</span> },
+    { field: "cantidad", headerName: "Cantidad", align: "right", renderCell: (m) => <span className={`inv-mov-qty ${m.signo > 0 ? "inv-mov-qty--pos" : m.signo < 0 ? "inv-mov-qty--neg" : "inv-mov-qty--neutral"}`}>{m.signo > 0 ? "+" : m.signo < 0 ? "−" : "±"}{num(m.cantidad)} {m.unidad}</span> },
+    { field: "estados", headerName: "Estado", sortable: false, renderCell: (m) => <span className="text-tertiary nowrap">{[m.estado_desde && (ESTADOS_STOCK[m.estado_desde]?.label || m.estado_desde), m.estado_hacia && (ESTADOS_STOCK[m.estado_hacia]?.label || m.estado_hacia)].filter(Boolean).join(" → ") || "—"}</span> },
+    { field: "descripcion", headerName: "Detalle", width: "24%", renderCell: (m) => <span className="inv-mov-ref">{m.descripcion || m.motivo || "—"}</span> },
+    { field: "usuario", headerName: "Quién", renderCell: (m) => <span className="text-tertiary">{m.usuario_id ? nombreUsuario(m.usuario_id) : "—"}</span> },
   ];
-
-  const toolbar = (
-    <Box className="table-toolbar">
-      <TextField
-        size="small"
-        placeholder="Buscar por nombre o SKU…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="table-toolbar__search"
-        slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
-      />
-      <Box className="table-toolbar__filters">
-        <WarehousePicker value={location} onChange={setLocation} />
-        <Select size="small" displayEmpty value={type} onChange={(e) => setType(e.target.value)}>
-          <MenuItem value="">Todos los tipos</MenuItem>
-          {Object.entries(MOVEMENT_TYPES).map(([key, t]) => (
-            <MenuItem key={key} value={key}>{t.label}</MenuItem>
-          ))}
-        </Select>
-        {skuId && (
-          <Button variant="ghost" size="small" startIcon={<CloseIcon />} onClick={() => setParams({})}>
-            {skuFilterLabel || "SKU"}
-          </Button>
-        )}
-      </Box>
-    </Box>
-  );
 
   return (
     <Box className="page fade-in">
-      <PageHeader title="Movimientos" subtitle="Kardex de inventario — bitácora inmutable de cada cambio de stock." />
-      <DataTable toolbar={toolbar} columns={columns} data={rows} emptyMessage="No hay movimientos que coincidan con los filtros." />
+      <PageHeader title="Movimientos" subtitle="El kardex. Nada se edita ni se borra: cada operación deja su rastro con quién, cuánto y por qué." />
+      <Box className="table-tabs">
+        <TextField select size="small" label="Tipo" value={q.tipo} onChange={(e) => setQ({ ...q, tipo: e.target.value })} sx={{ minWidth: 170 }}>
+          <MenuItem value="">Todos</MenuItem>
+          {Object.entries(TIPOS_MOV).map(([k, v]) => <MenuItem key={k} value={k}>{v.label}</MenuItem>)}
+        </TextField>
+        {esJefe && (
+          <TextField select size="small" label="Sucursal" value={q.sucursalId} onChange={(e) => setQ({ ...q, sucursalId: e.target.value })} sx={{ minWidth: 170 }}>
+            <MenuItem value="">Todas</MenuItem>
+            {(sucursales.data || []).map((s) => <MenuItem key={s.id} value={s.id}>{s.nombre}</MenuItem>)}
+          </TextField>
+        )}
+        <TextField select size="small" label="Producto" value={q.productoId} onChange={(e) => setQ({ ...q, productoId: e.target.value })} sx={{ minWidth: 220 }}>
+          <MenuItem value="">Todos</MenuItem>
+          {(productos.data || []).map((p) => <MenuItem key={p.id} value={p.id}>{p.nombre}</MenuItem>)}
+        </TextField>
+        <TextField size="small" type="date" label="Desde" value={q.desde} onChange={(e) => setQ({ ...q, desde: e.target.value })} slotProps={{ inputLabel: { shrink: true } }} />
+        <TextField size="small" type="date" label="Hasta" value={q.hasta} onChange={(e) => setQ({ ...q, hasta: e.target.value })} slotProps={{ inputLabel: { shrink: true } }} />
+      </Box>
+      <DataTable columns={columns} data={(movimientos.data || []).map((m) => ({ ...m, id: m.id }))} loading={movimientos.isLoading} emptyMessage="Sin movimientos con ese filtro." pagination={{ pageSize: 50 }} />
     </Box>
   );
 };

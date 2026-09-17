@@ -22,7 +22,7 @@ import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
 import { useQuery } from "@tanstack/react-query";
-import { httpClient } from "../../app/api/httpClient";
+import { seguridadApi } from "../../modules/seguridad/api/seguridadApi";
 import { QK } from "../../app/api/queryClient";
 
 import { useThemeMode } from "../../theme/ThemeContext";
@@ -37,9 +37,8 @@ const Navbar = ({ onMenuOpen }) => {
   const { user, logout, esJefe, cambiarSucursal } = useAuth();
   const sucursales = useQuery({
     queryKey: QK.sucursales,
-    queryFn: () => httpClient.get("/sucursales"),
+    queryFn: seguridadApi.sucursales,
     enabled: Boolean(user) && esJefe,
-    select: (r) => r?.data ?? r,
   });
   const { showToast } = useToast();
   const { toggleCommandPalette, openNotifications } = useUI();
