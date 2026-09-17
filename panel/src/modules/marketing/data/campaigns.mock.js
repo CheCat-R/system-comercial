@@ -1,0 +1,86 @@
+import { atDaysAgo } from "../lib/time";
+
+/**
+ * Campañas — orquestan audiencia + mensaje + oferta + calendario + objetivo. Los `MessageSend` se
+ * materializan solos (`ensureSends`, patrón `ensureShipment`) a partir del `audienceSnapshot` con una
+ * distribución determinística del embudo. Ver docs/MODULO-MARKETING.md §2 / §5.4.
+ *
+ * `audienceSnapshot` = lista de accountIds congelada al lanzar (para métricas estables).
+ */
+export const campaigns = [
+  {
+    id: "CMP-01",
+    name: "Newsletter mayoristas · agosto",
+    objective: "awareness",
+    audienceId: "AUD-01",
+    channel: "email",
+    templateId: "TPL-01",
+    offer: { type: "none" },
+    schedule: { type: "once", sendAt: atDaysAgo(26, "10", "00") },
+    status: "finalizada",
+    audienceSnapshot: ["CLI-001", "CLI-005", "CLI-007"],
+    createdAt: atDaysAgo(28),
+    launchedAt: atDaysAgo(26, "10", "00"),
+    finishedAt: atDaysAgo(12),
+  },
+  {
+    id: "CMP-02",
+    name: "Reactivación · cupón 15%",
+    objective: "winback",
+    audienceId: "AUD-02",
+    channel: "email",
+    templateId: "TPL-02",
+    offer: { type: "coupon", couponCode: "VOLVE20" },
+    schedule: { type: "once", sendAt: atDaysAgo(20, "09", "00") },
+    status: "finalizada",
+    audienceSnapshot: ["CLI-004", "CLI-007", "CLI-008"],
+    createdAt: atDaysAgo(21),
+    launchedAt: atDaysAgo(20, "09", "00"),
+    finishedAt: atDaysAgo(6),
+  },
+  {
+    id: "CMP-03",
+    name: "Bienvenida · nuevos clientes",
+    objective: "retention",
+    audienceId: "AUD-03",
+    channel: "email",
+    templateId: "TPL-03",
+    offer: { type: "coupon", couponCode: "BIENVENIDA15" },
+    schedule: { type: "triggered", trigger: "first_purchase_nudge" },
+    status: "en_curso",
+    audienceSnapshot: ["CLI-003"],
+    createdAt: atDaysAgo(15),
+    launchedAt: atDaysAgo(15),
+    finishedAt: null,
+  },
+  {
+    id: "CMP-04",
+    name: "Vuelta a clases · 10% OFF",
+    objective: "conversion",
+    audienceId: "AUD-04",
+    channel: "email",
+    templateId: "TPL-01",
+    offer: { type: "promotion", promotionId: "PRM-02" },
+    schedule: { type: "once", sendAt: atDaysAgo(5, "08", "30") },
+    status: "en_curso",
+    audienceSnapshot: ["CLI-001", "CLI-004", "CLI-005", "CLI-007"],
+    createdAt: atDaysAgo(6),
+    launchedAt: atDaysAgo(5, "08", "30"),
+    finishedAt: null,
+  },
+  {
+    id: "CMP-05",
+    name: "Semana del Calzado",
+    objective: "conversion",
+    audienceId: "AUD-04",
+    channel: "email",
+    templateId: "TPL-04",
+    offer: { type: "promotion", promotionId: "PRM-05" },
+    schedule: { type: "once", sendAt: atDaysAgo(-7, "09", "00") },
+    status: "programada",
+    audienceSnapshot: [],
+    createdAt: atDaysAgo(2),
+    launchedAt: null,
+    finishedAt: null,
+  },
+];

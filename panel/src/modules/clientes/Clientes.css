@@ -1,0 +1,51 @@
+/* .tier-badge y .tag-chip → globals.css */
+
+.cliente-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.cliente-cell__avatar {
+  width: 34px !important;
+  height: 34px !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  background-color: var(--accent-subtle-bg) !important;
+  color: var(--accent-text) !important;
+}
+
+.cliente-cell__name {
+  font-weight: var(--weight-semibold) !important;
+  font-size: var(--text-base) !important;
+  color: var(--text-primary);
+}
+
+.cliente-cell__email {
+  font-size: var(--text-xs) !important;
+  color: var(--text-tertiary);
+}
+
+.cliente-cell__ltv {
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.cli-view-item {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-width: 200px;
+}
+
+.cli-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--accent-subtle-bg);
+  flex-wrap: wrap;
+}

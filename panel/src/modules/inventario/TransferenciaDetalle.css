@@ -1,0 +1,40 @@
+.inv-pipeline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.inv-pipeline__step {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+  background: var(--bg-sunken);
+}
+.inv-pipeline__step--done { color: var(--success-text); background: var(--success-bg); border-color: var(--success-border); }
+.inv-pipeline__step--current { color: var(--accent-text); background: var(--accent-subtle-bg); border-color: var(--accent-subtle-border); }
+
+.inv-pipeline__arrow { color: var(--text-tertiary); font-size: 14px !important; }
+
+.inv-transfer-lines-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  font-weight: var(--weight-medium);
+}
+
+.inv-transfer-lines-table input {
+  width: 80px;
+  text-align: right;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}

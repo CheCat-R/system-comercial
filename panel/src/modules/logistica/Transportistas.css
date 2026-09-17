@@ -1,0 +1,44 @@
+.log-carrier-header {
+  display: flex;
+  align-items: center;
+}
+
+.log-carrier-header__summary {
+  flex: 1;
+  min-width: 0;
+}
+
+.log-carrier-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  padding-right: var(--space-4);
+}
+
+.log-carrier-summary__title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.log-carrier-summary__name {
+  font-weight: var(--weight-semibold) !important;
+  color: var(--text-primary);
+}
+
+.log-carrier-summary__contact {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.log-method-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.log-method-row:last-child { border-bottom: none; }
+
+.log-method-row__name { font-weight: var(--weight-medium); color: var(--text-primary); font-size: var(--text-sm); }

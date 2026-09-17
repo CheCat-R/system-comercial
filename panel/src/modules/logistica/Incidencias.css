@@ -1,0 +1,4 @@
+.log-incident-age--stale {
+  color: var(--danger-text);
+  font-weight: var(--weight-semibold);
+}

@@ -1,0 +1,74 @@
+.libro-iva-totales {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+.libro-iva-totales > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.libro-iva-totales span {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.libro-iva-totales strong {
+  font-size: var(--text-md);
+  color: var(--text-primary);
+}
+.libro-iva-totales__grand {
+  margin-left: auto;
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--border-default);
+}
+.libro-iva-totales__grand strong {
+  color: var(--accent-text);
+}
+
+.tax-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 560px;
+}
+.tax-config-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+}
+
+.tax-config-emisor {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3) var(--space-5);
+  max-width: 720px;
+}
+.tax-config-emisor > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tax-config-emisor span {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.tax-config-emisor strong {
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+@media (max-width: 640px) {
+  .tax-config-emisor { grid-template-columns: 1fr; }
+}

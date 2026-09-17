@@ -1,0 +1,32 @@
+.main-layout-wrapper {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--bg-canvas);
+}
+
+.main-layout-container {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.main-content {
+  flex: 1;
+  padding: var(--space-6) var(--space-8);
+  background-color: var(--bg-canvas);
+  min-height: calc(100vh - var(--navbar-height));
+  overflow-x: hidden;
+}
+
+@media (max-width: 1100px) {
+  .main-content {
+    padding: var(--space-5) var(--space-5);
+  }
+}
+
+@media (max-width: 640px) {
+  .main-content {
+    padding: var(--space-4) var(--space-4);
+  }
+}

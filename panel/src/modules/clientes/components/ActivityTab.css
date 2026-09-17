@@ -1,0 +1,38 @@
+.act-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.act-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.act-form__kinds {
+  flex-wrap: wrap;
+}
+
+.act-form__kinds .MuiToggleButton-root {
+  text-transform: none;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  gap: var(--space-1-5);
+  padding: 5px var(--space-3);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+.act-form__kinds .MuiToggleButton-root.Mui-selected {
+  background: var(--accent-subtle-bg);
+  color: var(--accent-text);
+  border-color: var(--accent-subtle-border);
+}
+.act-form__kinds .MuiToggleButton-root.Mui-selected:hover {
+  background: var(--accent-subtle-bg);
+}

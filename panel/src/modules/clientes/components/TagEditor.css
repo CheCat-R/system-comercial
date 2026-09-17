@@ -1,0 +1,7 @@
+.tag-editor {
+  max-width: 420px;
+}
+
+.tag-editor .MuiOutlinedInput-root {
+  padding: 3px var(--space-1-5);
+}

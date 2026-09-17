@@ -1,0 +1,10 @@
+/* SelectField.css
+   Los colores son manejados por el tema MUI en ThemeContext.jsx. */
+
+.form-select-field .MuiOutlinedInput-root {
+  border-radius: var(--radius-sm) !important;
+}
+
+.form-select-field .MuiFormLabel-root {
+  font-weight: 500;
+}

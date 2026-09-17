@@ -1,0 +1,50 @@
+.toolbar-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.toolbar-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  background-color: var(--accent-subtle-bg);
+  border: 1px solid var(--accent-subtle-border);
+  border-radius: var(--radius-sm);
+  width: 100%;
+}
+
+.toolbar-bulk-text {
+  font-weight: var(--weight-semibold);
+  color: var(--accent-text);
+  font-size: var(--text-base);
+}
+
+.toolbar-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.toolbar-select-field .MuiOutlinedInput-root {
+  border-radius: var(--radius-sm) !important;
+}

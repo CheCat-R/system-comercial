@@ -1,0 +1,7 @@
+.inv-count-diff {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+}
+.inv-count-diff--zero { color: var(--text-tertiary); }
+.inv-count-diff--pos { color: var(--success-text); }
+.inv-count-diff--neg { color: var(--danger-text); }

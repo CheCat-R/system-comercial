@@ -1,0 +1,219 @@
+/**
+ * Centro de comando.
+ *
+ * Se reescribió junto con la pantalla: el CSS anterior sostenía widgets que ya
+ * no existen (el gráfico placeholder, la dona dibujada con `border-*-color`, la
+ * lista de actividad inventada). Lo que queda es lo que la portada usa hoy.
+ */
+
+.dash-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.dash-period {
+  min-width: 168px;
+  background-color: var(--bg-surface);
+}
+
+/* El Tooltip necesita un hijo que acepte ref; el wrapper no debe romper la grilla. */
+.dash-kpi-wrap { display: block; }
+
+/* ---- KPI restringido -------------------------------------------------- */
+.dash-restricted {
+  border-style: dashed !important;
+}
+
+.dash-restricted__msg {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  line-height: var(--leading-normal);
+  margin-top: var(--space-2);
+}
+
+/* ---- Columna lateral -------------------------------------------------- */
+.dash-chart-card,
+.dash-side {
+  height: 100%;
+}
+
+.dash-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ---- Urgencias operativas --------------------------------------------- */
+.dash-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-strong);
+}
+
+.dash-alert--danger { border-left-color: var(--danger-solid); }
+.dash-alert--warning { border-left-color: var(--warning-solid); }
+.dash-alert--info { border-left-color: var(--accent); }
+
+.dash-alert__icon {
+  display: inline-flex;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.dash-alert--danger .dash-alert__icon { color: var(--danger-text); }
+.dash-alert--warning .dash-alert__icon { color: var(--warning-text); }
+.dash-alert--info .dash-alert__icon { color: var(--accent-text); }
+
+.dash-alert__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dash-alert__body strong {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.dash-alert__body em {
+  font-style: normal;
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+}
+
+/* ---- Notas de Analytics (umbrales y objetivos) ------------------------- */
+.dash-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  font-size: var(--text-2xs);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+/* ---- Ranking de productos --------------------------------------------- */
+.dash-rank {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dash-rank:last-child { border-bottom: none; }
+
+.dash-rank__label {
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-rank__track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.dash-rank__bar {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  transition: width var(--transition-slow);
+}
+
+.dash-rank__value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.dash-rank__value em {
+  font-style: normal;
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+}
+
+/* ---- Actividad reciente ------------------------------------------------ */
+.dash-activity {
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-activity__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dash-activity__row:last-child { border-bottom: none; }
+
+.dash-activity__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--border-strong);
+  flex-shrink: 0;
+}
+
+.dash-activity__dot--info { background: var(--accent); }
+.dash-activity__dot--warning { background: var(--warning-solid); }
+.dash-activity__dot--success { background: var(--success-solid); }
+
+.dash-activity__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dash-activity__body strong {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.dash-activity__body span {
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-activity__row em {
+  font-style: normal;
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* ---- Mobile: los KPIs no se comen la pantalla -------------------------- */
+@media (max-width: 600px) {
+  .dash-header-actions { width: 100%; }
+  .dash-period { flex: 1; }
+}

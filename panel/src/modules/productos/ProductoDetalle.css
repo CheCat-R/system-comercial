@@ -1,0 +1,142 @@
+/* Estilos compartidos (.entity-*, .card-title, .mt-3, .form-label) → globals.css */
+
+.entity-sku {
+  display: inline-block;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.form-group + .form-group {
+  margin-top: var(--space-4);
+}
+
+.upload-zone {
+  border: 1.5px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-10) var(--space-5);
+  text-align: center;
+  background-color: var(--bg-sunken);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  cursor: pointer;
+}
+
+.upload-zone:hover {
+  border-color: var(--accent);
+  background-color: var(--accent-subtle-bg);
+}
+
+.upload-icon {
+  font-size: 40px !important;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-2);
+}
+
+.margin-display {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  height: 100%;
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.variants-editor {
+  background-color: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.status-select {
+  font-weight: var(--weight-medium) !important;
+}
+
+/* ---- Ficha de producto (reescrita sobre catalogApi) -------------------- */
+.pd-grid {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: var(--space-2) var(--space-4);
+  align-items: baseline;
+  font-size: var(--text-xs);
+}
+
+.pd-grid > span {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pd-grid > div { color: var(--text-primary); line-height: var(--leading-normal); }
+
+.pd-grid--tight { gap: var(--space-2) var(--space-3); }
+
+.pd-tags { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+
+.pd-price {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.pd-price strong {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-price em {
+  font-style: normal;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.pd-history { display: flex; flex-direction: column; }
+
+.pd-history__row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+}
+
+.pd-history__row:last-child { border-bottom: none; }
+
+.pd-history__move {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pd-history__move em { font-style: normal; color: var(--text-tertiary); margin: 0 2px; }
+.pd-history__move strong { color: var(--text-primary); }
+
+.pd-history__pct {
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  padding: 1px var(--space-1-5);
+  border-radius: var(--radius-full);
+}
+
+.pd-history__pct.is-up { background: var(--success-bg); color: var(--success-text); }
+.pd-history__pct.is-down { background: var(--danger-bg); color: var(--danger-text); }
+
+.pd-history__reason {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .pd-history__row { grid-template-columns: 1fr; gap: var(--space-1); }
+}

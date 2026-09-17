@@ -1,0 +1,18 @@
+.cbte-detalle__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.cbte-detalle__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+@media (max-width: 1080px) {
+  .cbte-detalle__grid {
+    grid-template-columns: 1fr;
+  }
+}

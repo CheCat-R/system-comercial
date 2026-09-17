@@ -1,0 +1,25 @@
+.prov-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.prov-cell__avatar {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: var(--radius-sm) !important;
+  background-color: var(--bg-sunken) !important;
+  color: var(--text-tertiary) !important;
+  font-size: var(--text-sm) !important;
+}
+
+.prov-cell__name {
+  font-weight: var(--weight-medium) !important;
+  color: var(--text-primary) !important;
+  font-size: var(--text-sm) !important;
+}
+
+.prov-cell__contact {
+  color: var(--text-tertiary) !important;
+  font-size: var(--text-xs) !important;
+}
