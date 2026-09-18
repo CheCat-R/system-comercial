@@ -1,15 +1,21 @@
 <?php
 
+use App\Http\Controllers\Api\ArcaController;
 use App\Http\Controllers\Api\AuditoriaController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CajaController;
 use App\Http\Controllers\Api\CatalogosController;
 use App\Http\Controllers\Api\ChatController;
+use App\Http\Controllers\Api\ClientesController;
+use App\Http\Controllers\Api\CobranzasController;
 use App\Http\Controllers\Api\ConfiguracionController;
 use App\Http\Controllers\Api\ConteosController;
 use App\Http\Controllers\Api\IncidenciasController;
 use App\Http\Controllers\Api\InventarioController;
 use App\Http\Controllers\Api\ListasController;
+use App\Http\Controllers\Api\OfertasController;
 use App\Http\Controllers\Api\PreciosController;
+use App\Http\Controllers\Api\PresupuestosController;
 use App\Http\Controllers\Api\ProductosController;
 use App\Http\Controllers\Api\ProveedoresController;
 use App\Http\Controllers\Api\RolesController;
@@ -17,6 +23,7 @@ use App\Http\Controllers\Api\SucursalesController;
 use App\Http\Controllers\Api\TerminalesController;
 use App\Http\Controllers\Api\TransferenciasController;
 use App\Http\Controllers\Api\UsuariosController;
+use App\Http\Controllers\Api\VentasController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -204,6 +211,112 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/items/{itemId}/recontar', [ConteosController::class, 'recontar'])->middleware('permiso:conteos_aplicar');
         Route::post('/{id}/aplicar', [ConteosController::class, 'aplicar'])->middleware('permiso:conteos_aplicar');
         Route::delete('/{id}', [ConteosController::class, 'destroy']);
+    });
+
+    /* ---------------- Ventas (F2) ---------------- */
+
+    $seccionesVentas = 'ventas.pos,ventas.listado,ventas.ordenes,ventas.presupuestos,ventas.clientes,ventas.cobranzas,ventas.caja,ventas.listas,ventas.ofertas,ventas.cambios,ventas.configuracion';
+
+    // Clientes: el padrón lo lee cualquier sesión (POS, presupuestos); escribir pide la sección.
+    Route::prefix('clientes')->group(function () {
+        Route::get('/', [ClientesController::class, 'index']);
+        Route::get('/{id}', [ClientesController::class, 'show'])->whereNumber('id');
+        Route::get('/{id}/cuenta', [ClientesController::class, 'cuenta'])->middleware('permiso:ventas.clientes,ventas.cobranzas,ventas.pos');
+        Route::middleware('permiso:ventas.clientes')->group(function () {
+            Route::post('/', [ClientesController::class, 'store']);
+            Route::patch('/{id}', [ClientesController::class, 'update']);
+            Route::post('/{id}/reactivar', [ClientesController::class, 'reactivar']);
+            Route::delete('/{id}', [ClientesController::class, 'destroy']);
+        });
+        // El atajo del crédito: acá la llave gatea el endpoint entero.
+        Route::patch('/{id}/credito', [ClientesController::class, 'credito'])->middleware('permiso:cta_cte');
+    });
+
+    Route::prefix('caja')->group(function () {
+        // El POS pregunta si hay turno abierto para saber si puede cobrar.
+        Route::get('/actual/{sucursalId}', [CajaController::class, 'actual'])->middleware('permiso:ventas.caja,ventas.pos');
+        // Sacar plata del cajón es la acción más fuerte del módulo: llave propia.
+        Route::post('/{id}/movimiento', [CajaController::class, 'movimiento'])->middleware('permiso:diferencias');
+        Route::middleware('permiso:ventas.caja')->group(function () {
+            Route::get('/', [CajaController::class, 'index']);
+            Route::get('/{id}/arqueo', [CajaController::class, 'arqueo']);
+            Route::get('/{id}', [CajaController::class, 'show']);
+            Route::post('/abrir', [CajaController::class, 'abrir']);
+            Route::post('/{id}/cerrar', [CajaController::class, 'cerrar']);
+            Route::post('/{id}/control', [CajaController::class, 'control']);
+        });
+    });
+
+    Route::prefix('ventas')->group(function () use ($seccionesVentas) {
+        // El bootstrap lo abre cualquier sección de Ventas.
+        Route::get('/bootstrap', [VentasController::class, 'bootstrap'])->middleware('permiso:'.$seccionesVentas);
+        Route::get('/catalogo', [VentasController::class, 'catalogo'])->middleware('permiso:ventas.pos,ventas.presupuestos,presupuestos');
+        Route::get('/cuenta/{clienteId}', [VentasController::class, 'cuenta'])->middleware('permiso:ventas.pos,ventas.cobranzas,ventas.clientes');
+        Route::get('/listado', [VentasController::class, 'listado'])->middleware('permiso:ventas.listado');
+        Route::get('/', [VentasController::class, 'index'])->middleware('permiso:ventas.pos,ventas.listado');
+        Route::get('/{id}', [VentasController::class, 'show'])->whereNumber('id')->middleware('permiso:ventas.pos,ventas.listado,ventas.cobranzas');
+        // Ver el punto de venta y COBRAR son dos permisos: escribir pide la acción `ventas`.
+        Route::middleware('permiso:ventas')->group(function () {
+            Route::post('/', [VentasController::class, 'store']);
+            Route::put('/{id}', [VentasController::class, 'update']);
+            Route::post('/{id}/confirmar', [VentasController::class, 'confirmar']);
+            Route::post('/{id}/delegar', [VentasController::class, 'delegar']);
+            Route::delete('/{id}', [VentasController::class, 'destroy']);
+        });
+        Route::post('/{id}/facturar', [VentasController::class, 'facturar'])->middleware('permiso:ventas.listado,ventas.configuracion');
+        Route::post('/{id}/anular', [VentasController::class, 'anular'])->middleware('permiso:devoluciones');
+        Route::post('/{id}/nota-credito', [VentasController::class, 'notaCredito'])->middleware('permiso:nota_credito');
+    });
+
+    Route::prefix('cobranzas')->group(function () {
+        Route::post('/{id}/anular', [CobranzasController::class, 'anular'])->middleware('permiso:devoluciones');
+        Route::middleware('permiso:ventas.cobranzas')->group(function () {
+            Route::get('/', [CobranzasController::class, 'index']);
+            Route::get('/{id}', [CobranzasController::class, 'show']);
+            Route::post('/', [CobranzasController::class, 'store']);
+        });
+    });
+
+    Route::prefix('presupuestos')->middleware('permiso:ventas.presupuestos,presupuestos,ventas.ordenes')->group(function () {
+        Route::get('/', [PresupuestosController::class, 'index']);
+        Route::get('/ordenes/pendientes', [PresupuestosController::class, 'ordenesPendientes']);
+        Route::get('/{id}', [PresupuestosController::class, 'show'])->whereNumber('id');
+        Route::post('/{id}/aceptar', [PresupuestosController::class, 'aceptar']);
+        Route::post('/{id}/cancelar', [PresupuestosController::class, 'cancelar']);
+        Route::middleware('permiso:ventas.presupuestos,presupuestos')->group(function () {
+            Route::post('/', [PresupuestosController::class, 'store']);
+            Route::patch('/{id}', [PresupuestosController::class, 'update']);
+            Route::post('/{id}/enviar', [PresupuestosController::class, 'enviar']);
+            Route::post('/{id}/reabrir', [PresupuestosController::class, 'reabrir']);
+            Route::post('/{id}/confirmar', [PresupuestosController::class, 'confirmar']);
+            Route::post('/{id}/armar', [PresupuestosController::class, 'armar']);
+            Route::post('/{id}/delegar', [PresupuestosController::class, 'delegar']);
+        });
+    });
+
+    Route::prefix('ofertas')->group(function () {
+        Route::get('/', [OfertasController::class, 'index']);
+        Route::middleware('permiso:ventas.ofertas,ofertas')->group(function () {
+            Route::post('/', [OfertasController::class, 'store']);
+            Route::patch('/{id}', [OfertasController::class, 'update']);
+            Route::delete('/{id}', [OfertasController::class, 'destroy']);
+        });
+    });
+
+    Route::prefix('descuentos')->group(function () {
+        Route::get('/', [OfertasController::class, 'descuentos'])->middleware('permiso:ventas.pos,ventas.configuracion');
+        Route::middleware('permiso:ventas.configuracion')->group(function () {
+            Route::post('/', [OfertasController::class, 'crearDescuento']);
+            Route::patch('/{id}', [OfertasController::class, 'editarDescuento']);
+            Route::delete('/{id}', [OfertasController::class, 'borrarDescuento']);
+        });
+    });
+
+    Route::prefix('arca')->middleware('permiso:ventas.configuracion')->group(function () {
+        Route::get('/estado', [ArcaController::class, 'estado']);
+        Route::post('/probar', [ArcaController::class, 'probar']);
+        Route::post('/certificado/pedido', [ArcaController::class, 'pedido']);
+        Route::post('/certificado/instalar', [ArcaController::class, 'instalar']);
     });
 
     /* ---------------- Transversal ---------------- */
