@@ -16,9 +16,10 @@ import { useToast } from "../../components/Toast/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import { useEntityLabel } from "../../components/Breadcrumbs/EntityLabelContext";
 import { QK } from "../../app/api/queryClient";
-import { proveedoresApi, CONDICION_IVA, CONDICION_COMPRA, PROVEEDOR_VACIO } from "./api/proveedoresApi";
-import ProveedorForm, { aPayload } from "./components/ProveedorForm";
+import { proveedoresApi, CONDICION_IVA, CONDICION_COMPRA, PROVEEDOR_VACIO, aPayload } from "./api/proveedoresApi";
+import ProveedorForm from "./components/ProveedorForm";
 import { productosApi, money, num } from "../productos/api/productosApi";
+import { useEstadoDesde } from "../../hooks/useEstadoDesde";
 import "./ProveedorDetalle.css";
 
 const stamp = (iso) => (iso ? new Date(iso).toLocaleString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
@@ -32,9 +33,10 @@ const ProveedorDetalle = () => {
   const puede = check("compras.proveedores").allowed;
   const veCostos = can("precios", "compras.productos", "compras.proveedores");
   const [tab, setTab] = useState(0);
-  const [form, setForm] = useState(PROVEEDOR_VACIO);
 
   const proveedor = useQuery({ queryKey: QK.proveedor(id), queryFn: () => proveedoresApi.get(id) });
+  // El formulario arranca de la ficha cargada; si la ficha cambia (se guardó o refrescó), se vuelve a armar.
+  const [form, setForm] = useEstadoDesde(proveedor.data, (x) => (x ? { ...PROVEEDOR_VACIO, ...x, diasPago: x.diasPago ?? "", medioHabitual: x.medioHabitual ?? "", letraGasto: x.letraGasto ?? "" } : PROVEEDOR_VACIO));
   const productos = useQuery({ queryKey: QK.productos, queryFn: productosApi.listar });
   const auditoria = useQuery({ queryKey: QK.auditoria("proveedor", id), queryFn: () => proveedoresApi.auditoria(id), enabled: tab === 2 });
   const costos = useQuery({ queryKey: QK.precios.historial({ proveedorId: Number(id) }), queryFn: () => proveedoresApi.historialCostos(id), enabled: tab === 2 && veCostos });
@@ -42,7 +44,6 @@ const ProveedorDetalle = () => {
   const p = proveedor.data;
   const { setLabel } = useEntityLabel();
   useEffect(() => { if (p?.nombre) setLabel(id, p.nombre); }, [id, p?.nombre, setLabel]);
-  useEffect(() => { if (p) setForm({ ...PROVEEDOR_VACIO, ...p, diasPago: p.diasPago ?? "", medioHabitual: p.medioHabitual ?? "", letraGasto: p.letraGasto ?? "" }); }, [p]);
 
   const guardar = useMutation({
     mutationFn: (body) => proveedoresApi.editar(id, aPayload(body)),

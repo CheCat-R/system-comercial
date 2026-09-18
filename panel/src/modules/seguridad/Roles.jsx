@@ -7,7 +7,7 @@
  * las dos reglas de repartir permisos —el comodín no se pide, y no se otorga
  * lo que no se tiene— y las devuelve como mensaje cuando se rompen.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -28,6 +28,7 @@ import { useToast } from "../../components/Toast/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import { QK } from "../../app/api/queryClient";
 import { seguridadApi } from "./api/seguridadApi";
+import { useEstadoDesde } from "../../hooks/useEstadoDesde";
 import "./Seguridad.css";
 
 const TONO_ROL = { superadmin: "danger", admin: "warning", cajero: "info", fraccionador: "success" };
@@ -39,13 +40,13 @@ const Roles = () => {
   const canManage = check("gerencia.usuarios");
 
   const [grupo, setGrupo] = useState("");
-  const [borrador, setBorrador] = useState({}); // { rolId: Set(claves) } sólo de los roles tocados
   const [nuevo, setNuevo] = useState(null);     // null | { nombre, descripcion }
 
   const roles = useQuery({ queryKey: QK.roles, queryFn: seguridadApi.roles });
   const catalogo = useQuery({ queryKey: QK.permisos, queryFn: seguridadApi.permisos });
 
-  useEffect(() => { setBorrador({}); }, [roles.data]);
+  // { rolId: Set(claves) } sólo de los roles tocados. Cuando llegan roles nuevos del servidor, lo editado ya no vale.
+  const [borrador, setBorrador] = useEstadoDesde(roles.data, () => ({}));
 
   const guardarRol = useMutation({
     mutationFn: ({ id, permisos }) => seguridadApi.editarRol(id, { permisos }),

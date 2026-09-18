@@ -43,7 +43,7 @@ const CatalogoGenerico = ({ tipo, titulo, subtitulo, singular, conCategoria = fa
   const catalogos = useQuery({ queryKey: QK.catalogos, queryFn: productosApi.catalogos });
   const productos = useQuery({ queryKey: QK.productos, queryFn: productosApi.listar });
 
-  const filas = catalogos.data?.[tipo] || [];
+  const filas = useMemo(() => catalogos.data?.[tipo] || [], [catalogos.data, tipo]);
   const categorias = catalogos.data?.categorias || [];
 
   /** Cuántos productos usan cada ítem. */

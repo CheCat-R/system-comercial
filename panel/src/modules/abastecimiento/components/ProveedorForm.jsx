@@ -46,12 +46,4 @@ const ProveedorForm = ({ value, onChange, disabled = false }) => {
   );
 };
 
-export const aPayload = (v) => ({
-  ...v,
-  diasPago: v.diasPago === "" || v.diasPago == null ? null : Number(v.diasPago),
-  porcSinFactura: Number(v.porcSinFactura) || 0,
-  letraGasto: v.letraGasto || "",
-  medioHabitual: v.medioHabitual || "",
-});
-
 export default ProveedorForm;

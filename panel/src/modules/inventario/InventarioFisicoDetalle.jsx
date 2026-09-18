@@ -42,15 +42,13 @@ const InventarioFisicoDetalle = () => {
 
   const invalidar = () => { qc.invalidateQueries({ queryKey: QK.conteo(id) }); qc.invalidateQueries({ queryKey: QK.conteos }); };
   const err = (e) => showToast(e?.message || "No se pudo.", "error");
-  const mutar = (fn, ok, extra) => useMutation({ mutationFn: fn, onSuccess: (r) => { if (ok) showToast(typeof ok === "function" ? ok(r) : ok, "success"); invalidar(); extra?.(r); }, onError: err });
-  /* eslint-disable react-hooks/rules-of-hooks */
-  const contar = mutar(({ itemId, contado }) => inventarioApi.conteos.contar(id, itemId, contado), null);
-  const cerrar = mutar(() => inventarioApi.conteos.cerrar(id), "Control cerrado: la foto final. Ahora se revisa y se aplica.");
-  const reabrir = mutar(() => inventarioApi.conteos.reabrir(id), "Reabierto para seguir contando.");
-  const recontar = mutar(({ itemId, recontar: v }) => inventarioApi.conteos.recontar(id, itemId, v), null);
-  const aplicar = mutar(() => inventarioApi.conteos.aplicar(id), (r) => `${r.ajustes} ajuste(s) aplicados, ${r.sinDiferencia} sin diferencia.${r.avisos?.length ? ` Avisos: ${r.avisos.length}.` : ""}`, (r) => { qc.invalidateQueries({ queryKey: QK.stock }); qc.invalidateQueries({ queryKey: ["movimientos"] }); if (r.avisos?.length) r.avisos.forEach((a) => showToast(a, "warning")); });
-  const descartar = mutar(() => inventarioApi.conteos.descartar(id), "Control descartado.", () => navigate("/inventario/fisico"));
-  /* eslint-enable react-hooks/rules-of-hooks */
+  const useAccion = (fn, ok, extra) => useMutation({ mutationFn: fn, onSuccess: (r) => { if (ok) showToast(typeof ok === "function" ? ok(r) : ok, "success"); invalidar(); extra?.(r); }, onError: err });
+  const contar = useAccion(({ itemId, contado }) => inventarioApi.conteos.contar(id, itemId, contado), null);
+  const cerrar = useAccion(() => inventarioApi.conteos.cerrar(id), "Control cerrado: la foto final. Ahora se revisa y se aplica.");
+  const reabrir = useAccion(() => inventarioApi.conteos.reabrir(id), "Reabierto para seguir contando.");
+  const recontar = useAccion(({ itemId, recontar: v }) => inventarioApi.conteos.recontar(id, itemId, v), null);
+  const aplicar = useAccion(() => inventarioApi.conteos.aplicar(id), (r) => `${r.ajustes} ajuste(s) aplicados, ${r.sinDiferencia} sin diferencia.${r.avisos?.length ? ` Avisos: ${r.avisos.length}.` : ""}`, (r) => { qc.invalidateQueries({ queryKey: QK.stock }); qc.invalidateQueries({ queryKey: ["movimientos"] }); if (r.avisos?.length) r.avisos.forEach((a) => showToast(a, "warning")); });
+  const descartar = useAccion(() => inventarioApi.conteos.descartar(id), "Control descartado.", () => navigate("/inventario/fisico"));
 
   const items = useMemo(() => {
     const q = search.trim().toLowerCase();

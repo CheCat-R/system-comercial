@@ -42,21 +42,19 @@ import { useEntityLabel } from "../../components/Breadcrumbs/EntityLabelContext"
 import { QK } from "../../app/api/queryClient";
 import { productosApi, money, num, fmtTam, ESTADOS_PRODUCTO, IVAS } from "./api/productosApi";
 import { seguridadApi } from "../seguridad/api/seguridadApi";
+import { useEstadoDesde } from "../../hooks/useEstadoDesde";
 import "./ProductoDetalle.css";
 
 const stamp = (iso) => (iso ? new Date(iso).toLocaleString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
 
 /* ------------------------------------------------------------- ficha */
 const Ficha = ({ p, catalogos, puede, onGuardar, guardando }) => {
-  const [f, setF] = useState({});
-  useEffect(() => {
-    setF({
-      nombre: p.nombre, descripcion: p.descripcion || "", codigoPropio: p.codigoPropio, codigoBarras: p.codigoBarras, dun: p.dun,
-      unidadesPorBulto: p.unidadesPorBulto, marcaId: p.marcaId || "", categoriaId: p.categoriaId || "", subcategoriaId: p.subcategoriaId || "",
-      iva: p.iva, stockMin: p.stockMin, redondeo: p.redondeo ?? "", soloFraccionar: p.soloFraccionar, publicado: p.publicado,
-      etiquetaMarca: p.etiquetaMarca || "", etiquetaNombre: p.etiquetaNombre || "", etiquetas: p.etiquetas || [],
-    });
-  }, [p]);
+  const [f, setF] = useEstadoDesde(p, (x) => ({
+    nombre: x.nombre, descripcion: x.descripcion || "", codigoPropio: x.codigoPropio, codigoBarras: x.codigoBarras, dun: x.dun,
+    unidadesPorBulto: x.unidadesPorBulto, marcaId: x.marcaId || "", categoriaId: x.categoriaId || "", subcategoriaId: x.subcategoriaId || "",
+    iva: x.iva, stockMin: x.stockMin, redondeo: x.redondeo ?? "", soloFraccionar: x.soloFraccionar, publicado: x.publicado,
+    etiquetaMarca: x.etiquetaMarca || "", etiquetaNombre: x.etiquetaNombre || "", etiquetas: x.etiquetas || [],
+  }));
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
   const subcats = (catalogos?.subcategorias || []).filter((s) => String(s.categoriaId) === String(f.categoriaId));
 
@@ -115,8 +113,7 @@ const Ficha = ({ p, catalogos, puede, onGuardar, guardando }) => {
 
 /* ------------------------------------------------ formatos de compra */
 const FormatosCompra = ({ p, proveedores, puede, veCostos, onGuardar, guardando }) => {
-  const [filas, setFilas] = useState([]);
-  useEffect(() => { setFilas((p.formatosCompra || []).map((f) => ({ ...f }))); }, [p]);
+  const [filas, setFilas] = useEstadoDesde(p, (x) => (x.formatosCompra || []).map((f) => ({ ...f })));
   const upd = (i, k, v) => setFilas(filas.map((f, j) => (j === i ? { ...f, [k]: v } : f)));
   const activar = (i) => setFilas(filas.map((f, j) => ({ ...f, usarParaPrecio: j === i })));
   const unidad = p.tipo === "granel" ? "kg" : "u";
@@ -179,8 +176,7 @@ const FormatosCompra = ({ p, proveedores, puede, veCostos, onGuardar, guardando 
 /* ------------------------------------------------------ presentaciones */
 const Presentaciones = ({ p, puede, onGuardar, guardando }) => {
   const { showToast } = useToast();
-  const [filas, setFilas] = useState([]);
-  useEffect(() => { setFilas((p.presentaciones || []).map((x) => ({ id: x.id, tamKg: x.tamKg, codigoBarras: x.codigoBarras }))); }, [p]);
+  const [filas, setFilas] = useEstadoDesde(p, (y) => (y.presentaciones || []).map((x) => ({ id: x.id, tamKg: x.tamKg, codigoBarras: x.codigoBarras })));
   const generar = async (i) => {
     try {
       const r = await productosApi.siguienteEan(filas.map((f) => f.codigoBarras));
@@ -227,8 +223,7 @@ const Presentaciones = ({ p, puede, onGuardar, guardando }) => {
 
 /* ------------------------------------------------------ formato de venta */
 const EditorListas = ({ titulo, subtitulo, filasIniciales, listasCatalogo, puede, veCostos, onGuardar, guardando }) => {
-  const [filas, setFilas] = useState([]);
-  useEffect(() => { setFilas((filasIniciales || []).map((f) => ({ ...f }))); }, [filasIniciales]);
+  const [filas, setFilas] = useEstadoDesde(filasIniciales, (ini) => (ini || []).map((f) => ({ ...f })));
   const activas = (listasCatalogo?.listas || []).filter((l) => l.activa);
   const libres = activas.filter((l) => !filas.some((f) => f.listaId === l.id));
   const upd = (i, k, v) => setFilas(filas.map((f, j) => (j === i ? { ...f, [k]: v } : f)));
@@ -315,24 +310,22 @@ const ProductoDetalle = () => {
     qc.invalidateQueries({ queryKey: QK.productos });
     qc.invalidateQueries({ queryKey: ["precios"] });
   };
-  const mut = (fn, ok) => useMutation({
+  const useAccion = (fn, ok) => useMutation({
     mutationFn: fn,
     onSuccess: () => { showToast(ok, "success"); invalidar(); },
     onError: (err) => showToast(err?.message || "No se pudo guardar.", "error"),
   });
-  /* eslint-disable react-hooks/rules-of-hooks */
-  const guardarFicha = mut((body) => productosApi.editar(id, body), "Ficha guardada.");
-  const guardarFormatos = mut((items) => productosApi.setFormatosCompra(id, items), "Formatos de compra guardados. El precio se recalculó.");
-  const guardarPresentaciones = mut((items) => productosApi.setPresentaciones(id, items), "Presentaciones guardadas.");
-  const guardarListas = mut((items) => productosApi.setListas(id, items), "Formato de venta guardado.");
-  const guardarListasPres = mut(({ presId, items }) => productosApi.setListasPresentacion(presId, items), "Formato de venta del paquete guardado.");
-  const cambiarEstado = mut(({ estado, motivo }) => productosApi.cambiarEstado(id, estado, motivo), "Estado cambiado.");
+  const guardarFicha = useAccion((body) => productosApi.editar(id, body), "Ficha guardada.");
+  const guardarFormatos = useAccion((items) => productosApi.setFormatosCompra(id, items), "Formatos de compra guardados. El precio se recalculó.");
+  const guardarPresentaciones = useAccion((items) => productosApi.setPresentaciones(id, items), "Presentaciones guardadas.");
+  const guardarListas = useAccion((items) => productosApi.setListas(id, items), "Formato de venta guardado.");
+  const guardarListasPres = useAccion(({ presId, items }) => productosApi.setListasPresentacion(presId, items), "Formato de venta del paquete guardado.");
+  const cambiarEstado = useAccion(({ estado, motivo }) => productosApi.cambiarEstado(id, estado, motivo), "Estado cambiado.");
   const borrar = useMutation({
     mutationFn: () => productosApi.borrar(id),
     onSuccess: () => { showToast("Producto eliminado.", "info"); qc.invalidateQueries({ queryKey: QK.productos }); navigate("/productos"); },
     onError: (err) => showToast(err?.message || "No se pudo eliminar.", "error"),
   });
-  /* eslint-enable react-hooks/rules-of-hooks */
 
   const stockDe = useMemo(() => (stock.data || []).filter((s) => s.productoId === Number(id)), [stock.data, id]);
   const nombreSuc = (sid) => (sucursales.data || []).find((s) => s.id === sid)?.nombre || `Sucursal ${sid}`;

@@ -66,19 +66,17 @@ const TransferenciaDetalle = () => {
 
   const invalidar = () => { qc.invalidateQueries({ queryKey: QK.transferencia(id) }); qc.invalidateQueries({ queryKey: QK.transferencias }); qc.invalidateQueries({ queryKey: QK.stock }); qc.invalidateQueries({ queryKey: QK.incidencias }); };
   const err = (e) => showToast(e?.message || "No se pudo.", "error");
-  const mutar = (fn, ok) => useMutation({ mutationFn: fn, onSuccess: (r) => { showToast(typeof ok === "function" ? ok(r) : ok, "success"); invalidar(); }, onError: err });
-  /* eslint-disable react-hooks/rules-of-hooks */
-  const guardar = mutar(() => inventarioApi.transferencias.guardarBorrador(id, { items: renglones.filter((r) => r.productoId), observaciones: obs }), (r) => `Borrador guardado (${r.renglones} renglones).`);
-  const enviar = mutar(async () => { await inventarioApi.transferencias.guardarBorrador(id, { items: renglones.filter((r) => r.productoId), observaciones: obs }); return inventarioApi.transferencias.enviar(id); }, (r) => `Pedido ${r.codigo} enviado.`);
+  const useAccion = (fn, ok) => useMutation({ mutationFn: fn, onSuccess: (r) => { showToast(typeof ok === "function" ? ok(r) : ok, "success"); invalidar(); }, onError: err });
+  const guardar = useAccion(() => inventarioApi.transferencias.guardarBorrador(id, { items: renglones.filter((r) => r.productoId), observaciones: obs }), (r) => `Borrador guardado (${r.renglones} renglones).`);
+  const enviar = useAccion(async () => { await inventarioApi.transferencias.guardarBorrador(id, { items: renglones.filter((r) => r.productoId), observaciones: obs }); return inventarioApi.transferencias.enviar(id); }, (r) => `Pedido ${r.codigo} enviado.`);
   const descartar = useMutation({ mutationFn: () => inventarioApi.transferencias.descartar(id), onSuccess: () => { showToast("Borrador descartado.", "info"); qc.invalidateQueries({ queryKey: QK.transferencias }); navigate("/inventario/transferencias"); }, onError: err });
-  const avanzar = mutar(() => inventarioApi.transferencias.avanzar(id, data?.estado), (r) => (r.estado === "preparada" ? "Tomada: en preparación." : "Despachada: en tránsito."));
-  const editarItem = mutar(({ itemId, body }) => inventarioApi.transferencias.editarItem(id, itemId, body), "Renglón actualizado.");
-  const agregarItem = mutar((b) => inventarioApi.transferencias.agregarItem(id, b), "Renglón agregado.");
-  const quitarItem = mutar((itemId) => inventarioApi.transferencias.quitarItem(id, itemId), "Renglón quitado.");
-  const confirmarLista = mutar(({ tipo, listo }) => inventarioApi.transferencias.confirmarLista(id, tipo, listo), ({ listo, tipo }) => (listo ? `Lista ${tipo} confirmada: stock reservado.` : `Lista ${tipo} desconfirmada: stock liberado.`));
-  const recibir = mutar(() => inventarioApi.transferencias.recibir(id, { items: Object.entries(contado).map(([itemId, c]) => ({ itemId: Number(itemId), cantidadRecibida: Number(c) })), observaciones: obs !== data?.observaciones ? obs : undefined }), (r) => (r.incidencias?.length ? `Recibida. Faltantes en incidencia: ${r.incidencias.join(", ")}.` : "Recibida completa."));
-  const cancelar = mutar(() => inventarioApi.transferencias.cancelar(id), "Cancelada. Lo reservado volvió a disponible.");
-  /* eslint-enable react-hooks/rules-of-hooks */
+  const avanzar = useAccion(() => inventarioApi.transferencias.avanzar(id, data?.estado), (r) => (r.estado === "preparada" ? "Tomada: en preparación." : "Despachada: en tránsito."));
+  const editarItem = useAccion(({ itemId, body }) => inventarioApi.transferencias.editarItem(id, itemId, body), "Renglón actualizado.");
+  const agregarItem = useAccion((b) => inventarioApi.transferencias.agregarItem(id, b), "Renglón agregado.");
+  const quitarItem = useAccion((itemId) => inventarioApi.transferencias.quitarItem(id, itemId), "Renglón quitado.");
+  const confirmarLista = useAccion(({ tipo, listo }) => inventarioApi.transferencias.confirmarLista(id, tipo, listo), ({ listo, tipo }) => (listo ? `Lista ${tipo} confirmada: stock reservado.` : `Lista ${tipo} desconfirmada: stock liberado.`));
+  const recibir = useAccion(() => inventarioApi.transferencias.recibir(id, { items: Object.entries(contado).map(([itemId, c]) => ({ itemId: Number(itemId), cantidadRecibida: Number(c) })), observaciones: obs !== data?.observaciones ? obs : undefined }), (r) => (r.incidencias?.length ? `Recibida. Faltantes en incidencia: ${r.incidencias.join(", ")}.` : "Recibida completa."));
+  const cancelar = useAccion(() => inventarioApi.transferencias.cancelar(id), "Cancelada. Lo reservado volvió a disponible.");
 
   const esOrigen = esJefe || data?.origen_id === user?.sucursalId;
   const esDestino = esJefe || data?.destino_id === user?.sucursalId;

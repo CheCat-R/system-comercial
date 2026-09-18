@@ -28,3 +28,12 @@ export const PROVEEDOR_VACIO = {
   proveeMercaderia: true, proveeGastos: false, letraGasto: "", condicionCompra: "factura", porcSinFactura: 0,
   medioHabitual: "", diasPago: "", modoCuenta: "facturas",
 };
+
+/** Lo que el formulario tiene como texto, al tipo que espera la API. */
+export const aPayload = (v) => ({
+  ...v,
+  diasPago: v.diasPago === "" || v.diasPago == null ? null : Number(v.diasPago),
+  porcSinFactura: Number(v.porcSinFactura) || 0,
+  letraGasto: v.letraGasto || "",
+  medioHabitual: v.medioHabitual || "",
+});

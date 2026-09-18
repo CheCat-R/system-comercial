@@ -4,7 +4,7 @@
  * Lo que se puede vender es lo DISPONIBLE; lo comprometido está apartado para
  * una transferencia o incidencia y lo que viaja sigue siendo del origen.
  */
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -40,7 +40,7 @@ const TABS = [
 const Stock = () => {
   const navigate = useNavigate();
   const { user, esJefe, can } = useAuth();
-  const { productos, sucursales, stock, productoDe, sucursalDe, cargando } = useInventarioBase();
+  const { sucursales, stock, productoDe, sucursalDe, cargando } = useInventarioBase();
   const veCostos = can("precios", "compras.productos", "compras.proveedores");
 
   const { filtros, setFiltros } = useVistaGuardada("stock", { search: "", sucursal: "", tab: 0 });

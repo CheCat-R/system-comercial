@@ -23,8 +23,8 @@ import { useToast } from "../../components/Toast/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import useVistaGuardada from "../../hooks/useVistaGuardada";
 import { QK } from "../../app/api/queryClient";
-import { proveedoresApi, CONDICION_IVA, CONDICION_COMPRA, PROVEEDOR_VACIO } from "./api/proveedoresApi";
-import ProveedorForm, { aPayload } from "./components/ProveedorForm";
+import { proveedoresApi, CONDICION_IVA, CONDICION_COMPRA, PROVEEDOR_VACIO, aPayload } from "./api/proveedoresApi";
+import ProveedorForm from "./components/ProveedorForm";
 import "./Proveedores.css";
 
 const Proveedores = () => {

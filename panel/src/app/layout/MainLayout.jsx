@@ -7,6 +7,7 @@ import AppBreadcrumbs from "../../components/Breadcrumbs/AppBreadcrumbs";
 import { EntityLabelProvider } from "../../components/Breadcrumbs/EntityLabelContext";
 import CommandPalette from "../../components/CommandPalette/CommandPalette";
 import NotificationCenter from "../../components/NotificationCenter/NotificationCenter";
+import ChatDock from "../../components/ChatDock/ChatDock";
 import ErrorBoundary from "../../components/ErrorBoundary/ErrorBoundary";
 import { UIProvider } from "../../context/UIContext";
 
@@ -48,6 +49,7 @@ const MainLayout = () => {
         {/* Componentes Globales Inyectados en el Shell */}
         <CommandPalette />
         <NotificationCenter />
+        <ChatDock />
       </Box>
     </UIProvider>
   );

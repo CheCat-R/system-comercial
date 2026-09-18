@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\ErrorDeNegocio;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -62,6 +63,12 @@ class ChatService
         return DB::table('sucursales')->where('id', $sucursalId)->value('tipo') === 'distribuidora';
     }
 
+    /** Las fechas salen en ISO 8601 (UTC), como las de Eloquent, para que el panel las convierta a hora local. */
+    private function fila(object $m): array
+    {
+        return ['id' => (int) $m->id, 'fecha' => Carbon::parse($m->fecha)->toIso8601String(), 'usuarioId' => (int) $m->usuarioId, 'usuarioNombre' => $m->usuarioNombre, 'paraUsuarioId' => $m->paraUsuarioId === null ? null : (int) $m->paraUsuarioId, 'texto' => $m->texto];
+    }
+
     private function visibles(int $sucursalId, int $usuarioId)
     {
         return DB::table('chat_mensajes as m')
@@ -79,7 +86,7 @@ class ChatService
         }
         $this->latido($sucursalId, $usuarioId);
         $this->purgarSiToca();
-        $ultimos = $this->visibles($sucursalId, $usuarioId)->orderByDesc('m.id')->limit(self::LIMITE_BOOTSTRAP)->get()->reverse()->values();
+        $ultimos = $this->visibles($sucursalId, $usuarioId)->orderByDesc('m.id')->limit(self::LIMITE_BOOTSTRAP)->get()->reverse()->values()->map(fn ($m) => $this->fila($m));
         $lecturas = DB::table('chat_lecturas')->where('sucursal_id', $sucursalId)->where('usuario_id', $usuarioId)
             ->get(['canal_usuario_id as canalUsuarioId', 'ultimo_mensaje_id as ultimoMensajeId']);
 
@@ -93,7 +100,7 @@ class ChatService
     {
         $this->latido($sucursalId, $usuarioId);
         $this->purgarSiToca();
-        $mensajes = $this->visibles($sucursalId, $usuarioId)->where('m.id', '>', $desde)->orderBy('m.id')->limit(self::LIMITE_POLL)->get();
+        $mensajes = $this->visibles($sucursalId, $usuarioId)->where('m.id', '>', $desde)->orderBy('m.id')->limit(self::LIMITE_POLL)->get()->map(fn ($m) => $this->fila($m));
 
         return ['mensajes' => $mensajes->all(), 'enLinea' => $this->enLinea($sucursalId)];
     }
@@ -125,9 +132,7 @@ class ChatService
         $this->latido($sucursalId, $u->id);
         $id = DB::table('chat_mensajes')->insertGetId(['fecha' => now(), 'sucursal_id' => $sucursalId, 'usuario_id' => $u->id, 'para_usuario_id' => $para, 'texto' => $texto]);
         $this->marcarLeido($sucursalId, $u->id, $para ?? 0, $id);
-        $m = DB::table('chat_mensajes')->find($id);
-
-        return ['id' => $m->id, 'fecha' => $m->fecha, 'usuarioId' => $m->usuario_id, 'usuarioNombre' => $u->nombre, 'paraUsuarioId' => $m->para_usuario_id, 'texto' => $m->texto];
+        return $this->fila($this->visibles($sucursalId, $u->id)->where('m.id', $id)->first());
     }
 
     public function marcarLeido(int $sucursalId, int $usuarioId, int $canalUsuarioId, int $ultimoMensajeId): array

@@ -74,15 +74,13 @@ const Ajustes = () => {
 
   const invalidar = () => { qc.invalidateQueries({ queryKey: QK.stock }); qc.invalidateQueries({ queryKey: ["movimientos"] }); qc.invalidateQueries({ queryKey: QK.incidencias }); qc.invalidateQueries({ queryKey: QK.productos }); };
   const err = (e) => showToast(e?.message || "No se pudo registrar.", "error");
-  const mutar = (fn, ok, reset) => useMutation({ mutationFn: fn, onSuccess: (r) => { showToast(typeof ok === "function" ? ok(r) : ok, "success"); invalidar(); reset?.(); }, onError: err });
-  /* eslint-disable react-hooks/rules-of-hooks */
-  const enviarMov = mutar((b) => inventarioApi.operaciones.movimiento(b), "Movimiento registrado.", () => setMov((m) => ({ ...m, cantidad: "", motivo: "" })));
-  const enviarFrac = mutar((b) => inventarioApi.operaciones.fraccionar(b), (r) => r?.movimiento?.descripcion || "Fraccionado.", () => setFrac((f) => ({ ...f, asignaciones: {} })));
-  const enviarCorr = mutar((b) => inventarioApi.operaciones.corregirFraccionado(b), (r) => (r?.sinCambios ? "Ya estaba así: sin cambios." : r?.movimiento?.descripcion || "Corregido."), () => setCorr((c) => ({ ...c, cantidadReal: "", motivo: "" })));
-  const enviarInc = mutar((b) => inventarioApi.incidencias.crear(b), (r) => `${r.codigo} creada: la mercadería queda apartada.`, () => setInc((i) => ({ ...i, cantidad: "", motivo: "" })));
-  const avanzarInc = mutar((id) => inventarioApi.incidencias.avanzar(id), "Pasó a revisión.");
-  const resolverInc = mutar(({ id, resolucion }) => inventarioApi.incidencias.resolver(id, resolucion), "Incidencia resuelta.", () => setResolver(null));
-  /* eslint-enable react-hooks/rules-of-hooks */
+  const useAccion = (fn, ok, reset) => useMutation({ mutationFn: fn, onSuccess: (r) => { showToast(typeof ok === "function" ? ok(r) : ok, "success"); invalidar(); reset?.(); }, onError: err });
+  const enviarMov = useAccion((b) => inventarioApi.operaciones.movimiento(b), "Movimiento registrado.", () => setMov((m) => ({ ...m, cantidad: "", motivo: "" })));
+  const enviarFrac = useAccion((b) => inventarioApi.operaciones.fraccionar(b), (r) => r?.movimiento?.descripcion || "Fraccionado.", () => setFrac((f) => ({ ...f, asignaciones: {} })));
+  const enviarCorr = useAccion((b) => inventarioApi.operaciones.corregirFraccionado(b), (r) => (r?.sinCambios ? "Ya estaba así: sin cambios." : r?.movimiento?.descripcion || "Corregido."), () => setCorr((c) => ({ ...c, cantidadReal: "", motivo: "" })));
+  const enviarInc = useAccion((b) => inventarioApi.incidencias.crear(b), (r) => `${r.codigo} creada: la mercadería queda apartada.`, () => setInc((i) => ({ ...i, cantidad: "", motivo: "" })));
+  const avanzarInc = useAccion((id) => inventarioApi.incidencias.avanzar(id), "Pasó a revisión.");
+  const resolverInc = useAccion(({ id, resolucion }) => inventarioApi.incidencias.resolver(id, resolucion), "Incidencia resuelta.", () => setResolver(null));
 
   const SucursalSelect = ({ value, onChange }) => (
     <TextField select size="small" label="Sucursal" value={value ?? ""} onChange={(e) => onChange(e.target.value)} disabled={!esJefe} helperText={!esJefe ? "La de tu sesión." : undefined}>
@@ -98,7 +96,6 @@ const Ajustes = () => {
   const prodCorr = productoDe(corr.productoId);
   const presCorr = (prodCorr?.presentaciones || []).find((x) => x.id === Number(corr.presId));
   const actualCorr = presCorr ? cantidad(corr.productoId, Number(corr.sucursalId), presCorr.id) : null;
-  const prodInc = productoDe(inc.productoId);
   const dispInc = inc.productoId ? cantidad(inc.productoId, Number(inc.sucursalId), inc.presId ? Number(inc.presId) : null) : null;
 
   const puedeTipo = (t) => can(TIPOS_MANUALES[t].llave);
