@@ -121,7 +121,7 @@ class VentasF2Test extends TestCase
         $t = $this->abrirCaja(1000);
         $this->assertSame('abierta', $t['estado']);
         $this->admin()->postJson('/api/caja/abrir', ['montoInicial' => 500])->assertStatus(400)->assertJsonPath('message', 'Ya hay un turno de caja abierto en esta sucursal. Cerralo antes de abrir otro.');
-        $this->cajero()->getJson('/api/caja/actual/'.$this->central()->id)->assertOk()->assertJsonPath('id', $t['id']);
+        $this->cajero()->getJson('/api/caja/actual/'.$this->central()->id)->assertOk()->assertJsonPath('turno.id', $t['id']);
 
         // Movimiento manual pide `diferencias`.
         $this->fraccionador()->postJson('/api/caja/'.$t['id'].'/movimiento', ['tipo' => 'egreso', 'importe' => 200, 'motivo' => 'Flete'])->assertStatus(403);

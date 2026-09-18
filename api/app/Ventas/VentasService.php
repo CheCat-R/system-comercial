@@ -152,7 +152,7 @@ class VentasService
 
         return $rows->map(function ($v) use ($imput, $items, $usuarios, $clientes) {
             $cobrado = $imput[$v->id] ?? 0;
-            $base = [...Fila::camel($v), 'cobrado' => $cobrado, 'saldo' => Pricing::money((float) $v->total - $cobrado),
+            $base = [...Fila::camel($v), 'cobrado' => $cobrado, 'saldo' => $v->condicion_pago === 'cuenta_corriente' ? Pricing::money((float) $v->total - $cobrado) : 0,
                 'clienteNombre' => $clientes[$v->cliente_id] ?? '—', 'cajeroNombre' => $usuarios[$v->usuario_id] ?? '—'];
 
             return $items !== null ? [...$base, 'items' => Fila::camelTodos($items->get($v->id) ?? [])] : $base;
@@ -267,7 +267,8 @@ class VentasService
                 return [...Fila::camel($v),
                     'clienteNombre' => $v->cliente_nombre, 'sucursalNombre' => $v->sucursal_nombre ?? '—', 'cajeroNombre' => $v->cajero_nombre ?? '—',
                     'cobrado' => $cobrado, 'acreditado' => Pricing::money($acreditado),
-                    'saldo' => self::esNotaCredito($v->tipo) ? 0 : Pricing::money((float) $v->total - $cobrado - $acreditado),
+                    // Al contado no hay saldo: los pagos cubren el total. El saldo es de la cuenta corriente.
+                    'saldo' => (self::esNotaCredito($v->tipo) || $v->condicion_pago !== 'cuenta_corriente') ? 0 : Pricing::money((float) $v->total - $cobrado - $acreditado),
                     'medios' => ($pagos->get($v->id) ?? collect())->map(fn ($p) => ['medio' => $p->medio, 'importe' => (float) $p->importe])->values()->all(),
                     'renglones' => (int) ($a->renglones ?? 0), 'unidades' => Pricing::money((float) ($a->unidades ?? 0)), 'ofertaDescuento' => Pricing::money((float) ($a->oferta_descuento ?? 0)),
                     'ofertas' => array_values(array_filter(explode('|', (string) ($a->ofertas ?? '')))), 'listas' => array_values(array_filter(explode('|', (string) ($a->listas ?? '')))),
@@ -339,7 +340,7 @@ class VentasService
             'sucursalNombre' => $suc?->nombre ?? '—', 'sucursalDireccion' => $suc?->direccion ?? '',
             'cajeroNombre' => $usr ?? '—', 'cobradoPorNombre' => $cobrador ?? '',
             'items' => $itemsSalida, 'extras' => Fila::camelTodos($extras), 'pagos' => Fila::camelTodos($pagos),
-            'cobrado' => $cobrado, 'saldo' => self::esNotaCredito($v->tipo) ? 0 : $saldoReal,
+            'cobrado' => $cobrado, 'saldo' => (self::esNotaCredito($v->tipo) || $v->condicion_pago !== 'cuenta_corriente') ? 0 : $saldoReal,
             'notas' => $nc['notas'], 'acreditado' => Pricing::money($nc['total']),
             'acreditable' => $quedaAlgo ? Pricing::money((float) $v->total - $nc['total']) : 0, 'extrasAcreditados' => $nc['extras'],
             'origen' => $origen ? Fila::camel($origen) : null];

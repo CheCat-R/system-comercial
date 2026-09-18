@@ -1,191 +1,133 @@
-import { useState, useMemo, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+/**
+ * La ficha de un cliente: datos, cuenta corriente (saldo, límite, comprobantes
+ * que deben), sus ventas y sus recibos. Editar pide `ventas.clientes`; el
+ * crédito, `cta_cte`. Con historial se desactiva; sin historial se borra.
+ */
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Box from "@mui/material/Box";
-import Card from "@mui/material/Card";
+import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
-import IconButton from "@mui/material/IconButton";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
+import Tooltip from "@mui/material/Tooltip";
+import Alert from "@mui/material/Alert";
 
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-
+import EntityHeader from "../../components/EntityHeader/EntityHeader";
 import Button from "../../components/Button/Button";
 import DataTable from "../../components/DataTable/DataTable";
 import StatusBadge from "../../components/StatusBadge/StatusBadge";
+import StatCard from "../../components/Cards/StatCard/StatCard";
+import Modal from "../../components/Modal/Modal";
 import { useToast } from "../../components/Toast/ToastContext";
-
-import CustomerHeader from "./components/CustomerHeader";
-import ActivityTimeline from "./components/ActivityTimeline";
-import ActivityTab from "./components/ActivityTab";
-import AddressesTab from "./components/AddressesTab";
-import SegmentacionTab from "./components/SegmentacionTab";
-import VentasTab from "./components/VentasTab";
-import RfmScorecard from "./components/RfmScorecard";
-import ValuePanel from "./components/ValuePanel";
-import TagEditor from "./components/TagEditor";
-
-import {
-  getAccount, getAccountOrders, getOrderSummary,
-  getActivities, getSegmentAverages,
-} from "./api/clientsApi";
-import { getAccountMarketingActivity, getAccountLoyaltyActivity } from "../marketing/api/marketingApi";
-import { money, formatDate } from "./lib/time";
+import { useAuth } from "../../context/AuthContext";
+import { useEntityLabel } from "../../components/Breadcrumbs/EntityLabelContext";
+import { ventasApi, CONDICIONES_IVA, ESTADOS_VENTA, MEDIOS_PAGO, TIPOS_DOC, etiquetaVenta, money, stamp } from "../ventas/api/ventasApi";
+import ClienteForm from "./components/ClienteForm";
+import { CLIENTE_VACIO, aPayloadCliente } from "./lib/fichaCliente";
 import "./ClienteDetalle.css";
-
-const TABS = ["Resumen", "Historial", "Pedidos", "Ventas", "Actividad", "Direcciones", "Segmentación"];
-
-const orderColumns = [
-  { field: "id", headerName: "Pedido", renderCell: (o) => <span className="mono" style={{ fontWeight: 600 }}>#{o.id}</span> },
-  { field: "date", headerName: "Fecha", renderCell: (o) => <span className="text-tertiary nowrap">{formatDate(o.date)}</span> },
-  {
-    field: "payment", headerName: "Pago", align: "center",
-    renderCell: (o) => <StatusBadge status={{ paid: "Pagado", pending: "Pendiente", refunded: "Reembolsado" }[o.paymentStatus]} />,
-  },
-  {
-    field: "fulfillment", headerName: "Logística", align: "center",
-    renderCell: (o) => <StatusBadge status={{ unfulfilled: "Sin despachar", shipped: "Despachado", delivered: "Entregado", returned: "Devuelto" }[o.fulfillmentStatus]} />,
-  },
-  { field: "total", headerName: "Total", align: "right", renderCell: (o) => <span style={{ fontWeight: 600 }}>{money(o.total)}</span> },
-];
 
 const ClienteDetalle = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { can, check } = useAuth();
+  const qc = useQueryClient();
+  const { setLabel } = useEntityLabel();
   const [tab, setTab] = useState(0);
-  const [version, setVersion] = useState(0);
-  const refresh = useCallback(() => setVersion((v) => v + 1), []);
+  const [editar, setEditar] = useState(null);
+  const puede = check("ventas.clientes");
+  const puedeCredito = can("cta_cte");
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const account = useMemo(() => getAccount(id), [id, version]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const orders = useMemo(() => getAccountOrders(id), [id, version]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const activities = useMemo(() => getActivities(id, [...getAccountMarketingActivity(id), ...getAccountLoyaltyActivity(id)]), [id, version]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const orderSummary = useMemo(() => getOrderSummary(id), [id, version]);
+  const q = useQuery({ queryKey: ["cliente", id], queryFn: () => ventasApi.clientes.get(id) });
+  const boot = useQuery({ queryKey: ["ventas", "bootstrap"], queryFn: ventasApi.bootstrap, staleTime: 60_000 });
+  const cuenta = useQuery({ queryKey: ["cuenta", Number(id)], queryFn: () => ventasApi.clientes.cuenta(id), enabled: Boolean(q.data) && !q.data.esConsumidorFinal });
+  const ventas = useQuery({ queryKey: ["ventas", "cliente", id], queryFn: () => ventasApi.ventas({ clienteId: id, limit: 100 }), enabled: tab === 1 });
+  const recibos = useQuery({ queryKey: ["cobranzas", "cliente", id], queryFn: () => ventasApi.cobranzas.listar({ clienteId: id, limit: 100 }), enabled: tab === 2 });
+  const c = q.data;
+  useEffect(() => { if (c) setLabel(id, c.nombre); }, [id, c, setLabel]);
 
-  if (!account) {
-    return (
-      <Box className="page">
-        <Typography variant="h5" fontWeight={700}>Cliente no encontrado</Typography>
-        <Button variant="secondary" onClick={() => navigate("/clientes")} sx={{ mt: 2 }}>
-          Volver a Clientes
-        </Button>
-      </Box>
-    );
-  }
+  const invalidar = () => { qc.invalidateQueries({ queryKey: ["cliente", id] }); qc.invalidateQueries({ queryKey: ["clientes"] }); qc.invalidateQueries({ queryKey: ["ventas", "bootstrap"] }); };
+  const err = (e) => showToast(e?.message || "No se pudo.", "error");
+  const mEditar = useMutation({ mutationFn: (b) => ventasApi.clientes.editar(id, b), onSuccess: () => { showToast("Ficha guardada.", "success"); setEditar(null); invalidar(); }, onError: err });
+  const mBorrar = useMutation({ mutationFn: () => ventasApi.clientes.borrar(id), onSuccess: (r) => { showToast(r.desactivado ? "Tiene historial: quedó desactivado." : "Cliente borrado.", "success"); invalidar(); if (!r.desactivado) navigate("/clientes"); }, onError: err });
+  const mReactivar = useMutation({ mutationFn: () => ventasApi.clientes.reactivar(id), onSuccess: () => { showToast("Cliente reactivado.", "success"); invalidar(); }, onError: err });
 
-  const m = account.metrics;
-  const segAverages = getSegmentAverages(m.segmentKey, account.id);
+  if (q.isLoading) return <div className="route-loading" aria-busy="true" />;
+  if (!c) return <Box className="page"><Typography>Cliente inexistente.</Typography></Box>;
+
+  const listas = boot.data?.listasCatalogo?.listas || [];
+  const cta = cuenta.data;
+  const abrirEdicion = () => setEditar({ ...CLIENTE_VACIO, ...c, vendedorId: c.vendedorId || "", sucursalId: c.sucursalId || "", observaciones: c.observaciones || "" });
+
+  const colVentas = [
+    { field: "fecha", headerName: "Fecha", renderCell: (v) => <span className="nowrap">{stamp(v.fecha)}</span> },
+    { field: "numero", headerName: "Comprobante", renderCell: (v) => <strong>{etiquetaVenta(v)}</strong> },
+    { field: "condicionPago", headerName: "Condición", renderCell: (v) => (v.condicionPago === "cuenta_corriente" ? "Cta. cte." : "Contado") },
+    { field: "total", headerName: "Total", align: "right", renderCell: (v) => money(v.total) },
+    { field: "saldo", headerName: "Saldo", align: "right", renderCell: (v) => (v.saldo > 0.009 && v.estado === "confirmada" && !v.tipo.startsWith("nota_credito") ? money(v.saldo) : <span className="text-tertiary">—</span>) },
+    { field: "estado", headerName: "Estado", renderCell: (v) => <StatusBadge tone={ESTADOS_VENTA[v.estado]?.tone} label={ESTADOS_VENTA[v.estado]?.label} /> },
+  ];
+  const colRecibos = [
+    { field: "fecha", headerName: "Fecha", renderCell: (r) => <span className="nowrap">{stamp(r.fecha)}</span> },
+    { field: "numero", headerName: "Recibo", renderCell: (r) => <strong>{r.puntoVenta}-{String(r.numero).padStart(8, "0")}</strong> },
+    { field: "pagos", headerName: "Medios", sortable: false, renderCell: (r) => <span className="text-tertiary">{(r.pagos || []).map((p) => MEDIOS_PAGO[p.medio] || p.medio).join(" + ")}</span> },
+    { field: "total", headerName: "Total", align: "right", renderCell: (r) => money(r.total) },
+    { field: "aCuenta", headerName: "A cuenta", align: "right", renderCell: (r) => (r.aCuenta > 0 ? money(r.aCuenta) : <span className="text-tertiary">—</span>) },
+    { field: "estado", headerName: "Estado", renderCell: (r) => <StatusBadge tone={r.estado === "anulada" ? "error" : "success"} label={r.estado === "anulada" ? "Anulado" : "Confirmado"} /> },
+  ];
 
   return (
     <Box className="page fade-in">
-      <IconButton className="entity-back" onClick={() => navigate("/clientes")} aria-label="volver">
-        <ArrowBackIcon fontSize="small" />
-      </IconButton>
+      <EntityHeader
+        eyebrow={`${CONDICIONES_IVA[c.condicionIva]?.label || ""}${c.numeroDoc ? ` · ${TIPOS_DOC[c.tipoDoc] || c.tipoDoc} ${c.numeroDoc}` : ""}`}
+        title={c.nombre}
+        subtitle={[c.nombreFantasia, c.localidad, c.telefono, c.email].filter(Boolean).join(" · ") || "Sin datos de contacto"}
+        badges={<><StatusBadge tone={c.esConsumidorFinal ? "info" : c.activo ? "success" : "neutral"} label={c.esConsumidorFinal ? "Consumidor Final genérico" : c.activo ? "Activo" : "Inactivo"} />{c.ctaCteHabilitada && <StatusBadge tone="warning" label="Cuenta corriente" showDot={false} />}</>}
+        onBack={() => navigate("/clientes")}
+        actions={(<>
+          <Tooltip title={puede.allowed ? "" : puede.reason}><span><Button size="small" variant="secondary" disabled={!puede.allowed} onClick={abrirEdicion}>Editar</Button></span></Tooltip>
+          {!c.esConsumidorFinal && puede.allowed && (c.activo ? <Button size="small" variant="danger" onClick={() => { if (window.confirm("¿Dar de baja al cliente? Con historial queda desactivado; sin historial se borra.")) mBorrar.mutate(); }}>Dar de baja</Button> : <Button size="small" variant="ghost" onClick={() => mReactivar.mutate()}>Reactivar</Button>)}
+        </>)}
+      />
 
-      <CustomerHeader account={account} onEdit={() => showToast("Edición de cuenta — Fase 2", "info")} />
+      {!c.esConsumidorFinal && cta && (
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid size={{ xs: 6, md: 3 }}><StatCard title="Saldo" value={money(cta.saldo)} hint={cta.saldo > 0.009 ? `${cta.comprobantes.length} comprobante(s) con saldo` : "al día"} /></Grid>
+          <Grid size={{ xs: 6, md: 3 }}><StatCard title="Crédito" value={c.ctaCteHabilitada ? (cta.limiteCredito > 0 ? money(cta.limiteCredito) : "sin tope") : "—"} hint={c.ctaCteHabilitada ? (cta.disponible != null ? `disponible ${money(cta.disponible)} · ${c.diasPlazo} días` : `${c.diasPlazo} días de plazo`) : "sin cuenta corriente"} /></Grid>
+          <Grid size={{ xs: 6, md: 3 }}><StatCard title="Facturado en cta. cte." value={money(cta.facturado)} hint={`acreditado ${money(cta.acreditado)}`} /></Grid>
+          <Grid size={{ xs: 6, md: 3 }}><StatCard title="Cobrado" value={money(cta.cobrado)} hint={`descuento ${c.descuento}% · ${c.listas?.length || 0} lista(s)`} /></Grid>
+        </Grid>
+      )}
+      {c.esConsumidorFinal && <Alert severity="info" sx={{ mb: 2 }}>El Consumidor Final es el cliente del ticket de mostrador: no lleva cuenta corriente ni se le cambia lo fiscal.</Alert>}
 
-      <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons={false}>
-          {TABS.map((t) => <Tab key={t} label={t} />)}
-        </Tabs>
-      </Box>
-
-      {/* ---- RESUMEN ---- */}
+      <Box className="table-tabs"><Tabs value={tab} onChange={(_, v) => setTab(v)}><Tab label="Cuenta corriente" /><Tab label="Ventas" /><Tab label="Recibos" /></Tabs></Box>
       {tab === 0 && (
-        <Box className="cd-grid">
-          <Box className="cd-col">
-            <Card className="entity-card">
-              <Box className="card-title-row">
-                <Typography variant="h6" className="card-title" sx={{ mb: 0 }}>Últimos pedidos</Typography>
-                <Button variant="ghost" size="small" onClick={() => setTab(2)}>Ver todos</Button>
-              </Box>
-              <DataTable
-                columns={orderColumns}
-                data={orders.slice(0, 4)}
-                onRowClick={(o) => navigate(`/pedidos/${o.id}`)}
-                emptyMessage="Sin pedidos todavía."
-              />
-            </Card>
-
-            <Card className="entity-card">
-              <Box className="card-title-row">
-                <Typography variant="h6" className="card-title" sx={{ mb: 0 }}>Actividad reciente</Typography>
-                <Button variant="ghost" size="small" onClick={() => setTab(1)}>Ver historial</Button>
-              </Box>
-              <ActivityTimeline activities={activities} variant="compact" limit={5} />
-            </Card>
-          </Box>
-
-          <Box className="cd-col cd-col--side">
-            <Card className="entity-card">
-              <Typography variant="h6" className="card-title">Valor del cliente</Typography>
-              <ValuePanel metrics={m} segmentAverages={segAverages} />
-            </Card>
-
-            <Card className="entity-card">
-              <Typography variant="h6" className="card-title">Segmento</Typography>
-              <RfmScorecard metrics={m} />
-            </Card>
-
-            <Card className="entity-card">
-              <Typography variant="h6" className="card-title">Etiquetas</Typography>
-              <TagEditor account={account} onChange={refresh} />
-            </Card>
-          </Box>
+        <Box>
+          {c.esConsumidorFinal ? <Typography color="text.secondary" sx={{ p: 2 }}>No aplica.</Typography> : cta && (
+            <>
+              {cta.comprobantes.length === 0 && <Typography color="text.secondary" sx={{ p: 2 }}>Sin comprobantes con saldo.</Typography>}
+              {cta.comprobantes.length > 0 && <DataTable columns={[
+                { field: "fecha", headerName: "Fecha", renderCell: (v) => <span className="nowrap">{stamp(v.fecha)}</span> },
+                { field: "etiqueta", headerName: "Comprobante", renderCell: (v) => <strong>{v.etiqueta}</strong> },
+                { field: "vencimientoPago", headerName: "Vence", renderCell: (v) => (v.vencimientoPago ? stamp(v.vencimientoPago) : "—") },
+                { field: "total", headerName: "Total", align: "right", renderCell: (v) => money(v.total) },
+                { field: "cobrado", headerName: "Cobrado", align: "right", renderCell: (v) => money(v.cobrado + v.acreditado) },
+                { field: "saldo", headerName: "Debe", align: "right", renderCell: (v) => <strong>{money(v.saldo)}</strong> },
+              ]} data={cta.comprobantes} onRowClick={(v) => navigate(`/ventas/${v.id}`)} />}
+              <Box sx={{ mt: 2 }}><Button variant="primary" onClick={() => navigate("/ventas/cobranzas")}>Registrar un recibo</Button></Box>
+            </>
+          )}
         </Box>
       )}
+      {tab === 1 && <DataTable columns={colVentas} data={ventas.data || []} loading={ventas.isLoading} emptyMessage="Sin ventas." onRowClick={(v) => navigate(`/ventas/${v.id}`)} />}
+      {tab === 2 && <DataTable columns={colRecibos} data={recibos.data || []} loading={recibos.isLoading} emptyMessage="Sin recibos." />}
 
-      {/* ---- HISTORIAL ---- */}
-      {tab === 1 && (
-        <Card className="entity-card">
-          <Typography variant="h6" className="card-title">Historial completo</Typography>
-          <ActivityTimeline activities={activities} variant="full" />
-        </Card>
-      )}
-
-      {/* ---- PEDIDOS ---- */}
-      {tab === 2 && (
-        <Box className="cd-stack">
-          <Box className="cd-orders-summary">
-            <div><strong>{money(orderSummary.billed)}</strong><span>Total facturado</span></div>
-            <div><strong>{orderSummary.ordersCount}</strong><span>Pedidos pagados</span></div>
-            <div><strong>{money(orderSummary.aov)}</strong><span>Ticket promedio</span></div>
-            <div>
-              <strong className={orderSummary.returns ? "text-danger" : ""}>{orderSummary.returns}</strong>
-              <span>Devoluciones ({orderSummary.returnRate}%)</span>
-            </div>
-          </Box>
-          <DataTable
-            columns={orderColumns}
-            data={orders}
-            onRowClick={(o) => navigate(`/pedidos/${o.id}`)}
-            emptyMessage="Esta cuenta no tiene pedidos."
-          />
-        </Box>
-      )}
-
-      {/* ---- VENTAS ---- */}
-      {tab === 3 && (
-        <VentasTab account={account} onChange={refresh} />
-      )}
-
-      {/* ---- ACTIVIDAD ---- */}
-      {tab === 4 && (
-        <ActivityTab accountId={account.id} activities={activities} onChange={refresh} />
-      )}
-
-      {/* ---- DIRECCIONES ---- */}
-      {tab === 5 && (
-        <AddressesTab account={account} onChange={refresh} />
-      )}
-
-      {/* ---- SEGMENTACIÓN ---- */}
-      {tab === 6 && (
-        <SegmentacionTab account={account} activities={activities} onChange={refresh} />
-      )}
+      <Modal open={Boolean(editar)} onClose={() => setEditar(null)} title={`Editar ${c.nombre}`} maxWidth="md"
+        actions={(<><Button variant="ghost" onClick={() => setEditar(null)}>Cancelar</Button><Button variant="primary" loading={mEditar.isPending} disabled={!editar?.nombre?.trim()} onClick={() => mEditar.mutate(aPayloadCliente(editar, puedeCredito))}>Guardar</Button></>)}>
+        {editar && <ClienteForm valor={editar} onChange={setEditar} listas={listas} usuarios={boot.data?.usuarios || []} sucursales={boot.data?.sucursales || []} puedeCredito={puedeCredito} esConsumidorFinal={c.esConsumidorFinal} />}
+      </Modal>
     </Box>
   );
 };

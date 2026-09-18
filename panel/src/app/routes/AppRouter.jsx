@@ -35,6 +35,14 @@ const PedidoDetalle = lazy(() => import("../../modules/pedidos/PedidoDetalle"));
 
 /* ventas */
 const Ventas = lazy(() => import("../../modules/ventas/Ventas"));
+const VentaDetalle = lazy(() => import("../../modules/ventas/VentaDetalle"));
+const Pos = lazy(() => import("../../modules/ventas/Pos"));
+const Caja = lazy(() => import("../../modules/ventas/Caja"));
+const Cobranzas = lazy(() => import("../../modules/ventas/Cobranzas"));
+const Presupuestos = lazy(() => import("../../modules/ventas/Presupuestos"));
+const PresupuestoDetalle = lazy(() => import("../../modules/ventas/PresupuestoDetalle"));
+const Ofertas = lazy(() => import("../../modules/ventas/Ofertas"));
+const ConfiguracionVentas = lazy(() => import("../../modules/ventas/ConfiguracionVentas"));
 
 /* clientes */
 const Clientes = lazy(() => import("../../modules/clientes/Clientes"));
@@ -202,8 +210,18 @@ const AppRouter = () => {
             <Route path=":id" element={<PedidoDetalle />} />
           </Route>
 
-          {/* Módulo Ventas */}
-          <Route path="ventas" element={<Ventas />} />
+          {/* Módulo Ventas (F2): POS, listado, caja, cobranzas, presupuestos, ofertas, configuración */}
+          <Route path="ventas">
+            <Route index element={<Ventas />} />
+            <Route path="pos" element={<Pos />} />
+            <Route path="caja" element={<Caja />} />
+            <Route path="cobranzas" element={<Cobranzas />} />
+            <Route path="presupuestos" element={<Presupuestos />} />
+            <Route path="presupuestos/:id" element={<PresupuestoDetalle />} />
+            <Route path="ofertas" element={<Ofertas />} />
+            <Route path="configuracion" element={<ConfiguracionVentas />} />
+            <Route path=":id" element={<VentaDetalle />} />
+          </Route>
 
           {/* Sub-rutas del Módulo Clientes / CRM */}
           <Route path="clientes">

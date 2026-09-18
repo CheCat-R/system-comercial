@@ -64,7 +64,20 @@ export const NAV_SECTIONS = [
         ],
       },
       { text: "Pedidos", icon: <ShoppingBagOutlinedIcon fontSize="small" />, path: "/pedidos" },
-      { text: "Ventas", icon: <ReceiptLongOutlinedIcon fontSize="small" />, path: "/ventas" },
+      {
+        text: "Ventas",
+        icon: <ReceiptLongOutlinedIcon fontSize="small" />,
+        path: "/ventas",
+        children: [
+          { text: "Punto de venta", path: "/ventas/pos" },
+          { text: "Ventas", path: "/ventas" },
+          { text: "Caja", path: "/ventas/caja" },
+          { text: "Cobranzas", path: "/ventas/cobranzas" },
+          { text: "Presupuestos", path: "/ventas/presupuestos" },
+          { text: "Ofertas", path: "/ventas/ofertas" },
+          { text: "Configuración", path: "/ventas/configuracion" },
+        ],
+      },
     ],
   },
   {

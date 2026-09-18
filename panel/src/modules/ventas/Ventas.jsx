@@ -1,310 +1,95 @@
 /**
- * Ventas — el embudo comercial.
- *
- * ⭐ Era la tercera pantalla scaffold del panel: `mockCotizaciones` con cuatro
- * filas escritas a mano ("Empresa ABC S.A.", "Tech Startup SRL"), `mockVendedores`
- * con objetivos inventados y cuatro KPIs literales, encima de un CRM que **ya
- * tiene** las cotizaciones reales y de una capa financiera que **ya calcula** las
- * comisiones por vendedor.
- *
- * ── ⭐ Ventas no es dueña de nada, y por eso esta pantalla lee ──────────
- *
- * El principio de ARCHITECTURE §1.2 separa Pedidos (transacciones ejecutadas) de
- * Ventas (canales, cotizaciones y fuerza de venta). En el panel, la cotización
- * vive en el CRM —es un hecho de la cuenta— y la comisión vive en Finanzas —es
- * un costo del P&L—. Ventas es **la vista que los junta**, no un módulo con
- * datos propios. Por eso acá no hay `data/` ni `api/` nuevo: hay dos lecturas.
- *
- * Lo único que se agregó en el camino fue `clientsApi.listQuotes()`: el CRM ya
- * tenía las cotizaciones pero sólo las exponía **por cuenta**, y esta pantalla
- * necesita verlas todas.
+ * VENTAS — "¿qué se vendió?" con todos sus cortes. Paginado de verdad,
+ * totales del filtro entero (sin anuladas) y la pestaña ⚠ Sin facturar con los
+ * tickets provisorios que esperan ARCA.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
-import Card from "@mui/material/Card";
-import Typography from "@mui/material/Typography";
+import TextField from "@mui/material/TextField";
+import MenuItem from "@mui/material/MenuItem";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
-import Avatar from "@mui/material/Avatar";
-import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import InputAdornment from "@mui/material/InputAdornment";
-import Tooltip from "@mui/material/Tooltip";
-
-import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
-import RequestQuoteOutlinedIcon from "@mui/icons-material/RequestQuoteOutlined";
-import DonutLargeOutlinedIcon from "@mui/icons-material/DonutLargeOutlined";
-import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import SearchIcon from "@mui/icons-material/Search";
-import PersonIcon from "@mui/icons-material/Person";
+import PointOfSaleIcon from "@mui/icons-material/PointOfSale";
 
 import PageHeader from "../../components/PageHeader/PageHeader";
-import useVistaGuardada from "../../hooks/useVistaGuardada";
 import Button from "../../components/Button/Button";
-import StatCard from "../../components/Cards/StatCard/StatCard";
 import DataTable from "../../components/DataTable/DataTable";
 import StatusBadge from "../../components/StatusBadge/StatusBadge";
-
-import { listQuotes, getQuotesSummary } from "../clientes/api/clientsApi";
-import { listCommissions, getPnlSummary } from "../finanzas/api/financeApi";
+import StatCard from "../../components/Cards/StatCard/StatCard";
+import { useAuth } from "../../context/AuthContext";
+import { ventasApi, ESTADOS_VENTA, MEDIOS_PAGO, TIPOS_VENTA, etiquetaVenta, hoyISO, money, num, stamp } from "./api/ventasApi";
 import "./Ventas.css";
 
-const money = (v) => `$${Math.round(v || 0).toLocaleString("es-AR")}`;
-
-const STAGE_TONE = {
-  draft: "neutral",
-  sent: "info",
-  accepted: "success",
-  converted: "success",
-  lost: "danger",
-};
-
-const TABS = [
-  { key: "", label: "Todas" },
-  { key: "sent", label: "Enviadas" },
-  { key: "accepted", label: "Aceptadas" },
-  { key: "converted", label: "Convertidas" },
-  { key: "lost", label: "Perdidas" },
-];
+const TABS = [{ key: "", label: "Todas" }, { key: "sinFacturar", label: "Sin facturar" }, { key: "anuladas", label: "Anuladas" }];
 
 const Ventas = () => {
   const navigate = useNavigate();
-  const { filtros, setFiltros } = useVistaGuardada("ventas", { tab: 0, search: "" });
-  const { tab, search } = filtros;
+  const { esJefe } = useAuth();
+  const [tab, setTab] = useState(0);
+  const [f, setF] = useState({ desde: hoyISO(), hasta: hoyISO(), q: "", medioPago: "", origen: "", sucursalId: "", usuarioId: "" });
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
 
-  const summary = useMemo(() => getQuotesSummary(), []);
-  const pnl = useMemo(() => getPnlSummary(), []);
-  const quotes = useMemo(
-    () => listQuotes({ status: TABS[tab].key || undefined, search }),
-    [tab, search]
-  );
-
-  /**
-   * ⭐ El desempeño por vendedor sale del **devengado real de Finanzas**, no de
-   * un objetivo inventado. Sin objetivos cargados en el sistema no se puede
-   * dibujar una barra de cumplimiento, y dibujarla contra un número imaginario
-   * es exactamente lo que esta pantalla hacía antes.
-   */
-  const vendedores = useMemo(() => {
-    const rows = listCommissions({ kind: "vendedor" });
-    const bySeller = new Map();
-    rows.forEach((c) => {
-      // `rateLabel` es el nombre de la tarifa del vendedor: es lo que Finanzas
-      // usa para nombrarlo en su propio listado, así que las dos pantallas dicen
-      // lo mismo.
-      const key = c.rateLabel || "—";
-      const e = bySeller.get(key) || { name: key, base: 0, commission: 0, orders: 0 };
-      e.base += c.base || 0;
-      e.commission += c.amount || 0;
-      e.orders += 1;
-      bySeller.set(key, e);
-    });
-    return [...bySeller.values()].sort((a, b) => b.base - a.base);
-  }, []);
-
-  const maxBase = Math.max(...vendedores.map((v) => v.base), 1);
+  const boot = useQuery({ queryKey: ["ventas", "bootstrap"], queryFn: ventasApi.bootstrap, staleTime: 60_000 });
+  const params = useMemo(() => ({
+    desde: f.desde || undefined, hasta: f.hasta || undefined, q: f.q || undefined, medioPago: f.medioPago || undefined, origen: f.origen || undefined,
+    sucursalId: f.sucursalId || undefined, usuarioId: f.usuarioId || undefined,
+    estado: TABS[tab].key === "anuladas" ? "anulada" : undefined, sinFacturar: TABS[tab].key === "sinFacturar" ? "true" : undefined,
+    offset: page * rowsPerPage, limit: rowsPerPage,
+  }), [f, tab, page, rowsPerPage]);
+  const q = useQuery({ queryKey: ["ventas", "listado", params], queryFn: () => ventasApi.listado(params), placeholderData: (prev) => prev });
+  const t = q.data?.totales;
 
   const columns = [
-    {
-      field: "id",
-      headerName: "Cotización",
-      width: 110,
-      renderCell: (r) => <span className="mono nowrap" style={{ fontWeight: 600 }}>{r.id}</span>,
-    },
-    {
-      field: "accountName",
-      headerName: "Cliente",
-      width: "26%",
-      renderCell: (r) => (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
-          <Avatar className="ventas-client-avatar"><PersonIcon fontSize="small" /></Avatar>
-          <Typography className="ventas-client-name">{r.accountName}</Typography>
-        </Box>
-      ),
-    },
-    { field: "sellerName", headerName: "Vendedor" },
-    {
-      field: "amount",
-      headerName: "Importe",
-      align: "right",
-      renderCell: (r) => <span className="ventas-amount">{money(r.amount)}</span>,
-    },
-    {
-      field: "status",
-      headerName: "Estado",
-      align: "center",
-      renderCell: (r) => (
-        <StatusBadge tone={STAGE_TONE[r.status] || "neutral"} label={r.stageMeta.label} />
-      ),
-    },
-    {
-      field: "createdAt",
-      headerName: "Creada",
-      renderCell: (r) => (
-        <span className="text-tertiary nowrap">
-          {new Date(r.createdAt).toLocaleDateString("es-AR", { day: "2-digit", month: "short" })}
-        </span>
-      ),
-    },
+    { field: "fecha", headerName: "Fecha", renderCell: (v) => <span className="nowrap">{stamp(v.fecha)}</span> },
+    { field: "numero", headerName: "Comprobante", renderCell: (v) => <Box><strong>{etiquetaVenta(v)}</strong>{v.facturarPendiente && v.estado !== "anulada" && <Typography variant="caption" display="block" color="warning.main">provisorio · sin CAE</Typography>}{v.cae && <Typography variant="caption" display="block" color="text.secondary">CAE {v.cae}</Typography>}</Box> },
+    { field: "clienteNombre", headerName: "Cliente" },
+    { field: "cajeroNombre", headerName: "Vendedor", renderCell: (v) => <span className="text-tertiary">{v.cajeroNombre}{esJefe ? ` · ${v.sucursalNombre}` : ""}</span> },
+    { field: "medios", headerName: "Pago", sortable: false, renderCell: (v) => <span className="text-tertiary">{v.condicionPago === "cuenta_corriente" ? "Cta. cte." : (v.medios || []).map((m) => MEDIOS_PAGO[m.medio] || m.medio).join(" + ") || "—"}</span> },
+    { field: "renglones", headerName: "Reng.", align: "right" },
+    { field: "total", headerName: "Total", align: "right", renderCell: (v) => <strong className={`ventas-num ${v.tipo.startsWith("nota_credito") ? "ventas-num--neg" : ""}`}>{v.tipo.startsWith("nota_credito") ? "−" : ""}{money(v.total)}</strong> },
+    { field: "saldo", headerName: "Saldo", align: "right", renderCell: (v) => (v.saldo > 0.009 ? <span className="ventas-num ventas-num--saldo">{money(v.saldo)}</span> : <span className="text-tertiary">—</span>) },
+    { field: "estado", headerName: "Estado", renderCell: (v) => <StatusBadge tone={ESTADOS_VENTA[v.estado]?.tone} label={ESTADOS_VENTA[v.estado]?.label || v.estado} /> },
   ];
+
+  const set = (k) => (e) => { setF({ ...f, [k]: e.target.value }); setPage(0); };
 
   return (
     <Box className="page fade-in">
-      <PageHeader
-        title="Ventas"
-        subtitle="Cotizaciones y fuerza de venta. La cotización vive en el CRM y la comisión en Finanzas: acá se leen juntas."
-        actions={(
-          <>
-            <Button variant="secondary" onClick={() => navigate("/clientes")}>
-              Ir a Clientes
-            </Button>
-            {/* El alta de cotización todavía no existe como operación: el CRM
-                sólo sabe convertir una existente en pedido. Se dice. */}
-            <Tooltip title="Crear una cotización todavía no existe como operación: el CRM sólo puede convertir una cotización existente en pedido (clientsApi.convertQuoteToOrder).">
-              <span>
-                <Button variant="primary" disabled>Nueva cotización</Button>
-              </span>
-            </Tooltip>
-          </>
-        )}
-      />
+      <PageHeader title="Ventas" subtitle="Tickets, facturas y notas de crédito emitidos. Los borradores viven en el punto de venta." actions={<Button variant="primary" startIcon={<PointOfSaleIcon />} onClick={() => navigate("/ventas/pos")}>Punto de venta</Button>} />
 
-      {/* ------------------------------------------------------- KPIs */}
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 6, sm: 6, md: 3 }}>
-          <StatCard
-            title="Ingreso neto realizado"
-            value={money(pnl.revenueNet)}
-            icon={<PaymentsOutlinedIcon />}
-            hint={`${pnl.orders} pedido(s) computados`}
-          />
+      {t && (
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid size={{ xs: 6, md: 3 }}><StatCard title="Vendido" value={money(t.plata)} hint={`${t.tickets} ticket(s) · promedio ${money(t.promedio)}`} /></Grid>
+          <Grid size={{ xs: 6, md: 3 }}><StatCard title="Neto / IVA" value={money(t.neto)} hint={`IVA ${money(t.iva)}`} /></Grid>
+          <Grid size={{ xs: 6, md: 3 }}><StatCard title="Descuentos" value={money(t.descuentos)} hint={t.ofertas?.ventas ? `${money(t.ofertas.plata)} en ${t.ofertas.ventas} venta(s) con promo` : "sin promos"} /></Grid>
+          <Grid size={{ xs: 6, md: 3 }}><StatCard title="Devuelto / anulado" value={money(t.plataAcreditada)} hint={`${t.notasCredito} NC · ${t.anuladas} anulada(s) por ${money(t.plataAnulada)}`} /></Grid>
         </Grid>
-        <Grid size={{ xs: 6, sm: 6, md: 3 }}>
-          <StatCard
-            title="Cotizaciones abiertas"
-            value={String(summary.open)}
-            icon={<RequestQuoteOutlinedIcon />}
-            hint={`${money(summary.openAmount)} en el embudo`}
-          />
-        </Grid>
-        <Grid size={{ xs: 6, sm: 6, md: 3 }}>
-          <Tooltip title="Convertidas sobre el total de cotizaciones ya decididas (convertidas + perdidas). Las abiertas no cuentan: todavía no perdieron.">
-            <span style={{ display: "block" }}>
-              <StatCard
-                title="Tasa de cierre"
-                value={summary.winRate == null ? "—" : `${(summary.winRate * 100).toFixed(0)} %`}
-                icon={<DonutLargeOutlinedIcon />}
-                hint={`${summary.won} ganada(s) de ${summary.decided} ya decidida(s)`}
-              />
-            </span>
-          </Tooltip>
-        </Grid>
-        <Grid size={{ xs: 6, sm: 6, md: 3 }}>
-          <StatCard
-            title="Vendedores con devengado"
-            value={String(vendedores.length)}
-            icon={<GroupsOutlinedIcon />}
-            hint="según las comisiones de Finanzas"
-          />
-        </Grid>
-      </Grid>
+      )}
 
-      <Grid container spacing={2}>
-        {/* ------------------------------------------------- embudo */}
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <Card className="entity-card">
-            <Typography variant="h6" className="card-title">Embudo</Typography>
-            {summary.byStage.map((s) => (
-              <div className="ventas-stage" key={s.key}>
-                <StatusBadge tone={STAGE_TONE[s.key] || "neutral"} label={s.label} showDot={false} />
-                <span className="ventas-stage__count">{s.count}</span>
-                <span className="ventas-stage__amount">{money(s.amount)}</span>
-              </div>
-            ))}
-          </Card>
+      <Box className="ventas-filtros">
+        <TextField size="small" type="date" label="Desde" value={f.desde} onChange={set("desde")} slotProps={{ inputLabel: { shrink: true } }} />
+        <TextField size="small" type="date" label="Hasta" value={f.hasta} onChange={set("hasta")} slotProps={{ inputLabel: { shrink: true } }} />
+        <TextField size="small" placeholder="Nº o cliente" value={f.q} onChange={set("q")} slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }} />
+        <TextField select size="small" label="Medio" value={f.medioPago} onChange={set("medioPago")} sx={{ minWidth: 150 }}><MenuItem value="">Todos</MenuItem>{Object.entries(MEDIOS_PAGO).map(([k, v]) => <MenuItem key={k} value={k}>{v}</MenuItem>)}</TextField>
+        <TextField select size="small" label="Origen" value={f.origen} onChange={set("origen")} sx={{ minWidth: 140 }}><MenuItem value="">Todos</MenuItem><MenuItem value="pos">Mostrador</MenuItem><MenuItem value="presupuesto">Pedidos</MenuItem></TextField>
+        {esJefe && <TextField select size="small" label="Sucursal" value={f.sucursalId} onChange={set("sucursalId")} sx={{ minWidth: 150 }}><MenuItem value="">Todas</MenuItem>{(boot.data?.sucursales || []).map((s) => <MenuItem key={s.id} value={s.id}>{s.nombre}</MenuItem>)}</TextField>}
+        <TextField select size="small" label="Vendedor" value={f.usuarioId} onChange={set("usuarioId")} sx={{ minWidth: 150 }}><MenuItem value="">Todos</MenuItem>{(boot.data?.usuarios || []).map((u) => <MenuItem key={u.id} value={u.id}>{u.nombre}</MenuItem>)}</TextField>
+      </Box>
 
-          <Card className="entity-card mt-3">
-            <Box className="card-title-row">
-              <Typography variant="h6" className="card-title" sx={{ mb: 0 }}>
-                Fuerza de venta
-              </Typography>
-              <Button variant="ghost" onClick={() => navigate("/finanzas/comisiones")}>
-                Comisiones →
-              </Button>
-            </Box>
-
-            {vendedores.length === 0 ? (
-              <Typography variant="body2" className="text-tertiary">
-                Ninguna venta devengó comisión todavía. Se devenga con la venta B2B concretada, no
-                con la cotización.
-              </Typography>
-            ) : vendedores.map((v) => (
-              <div className="ventas-seller" key={v.name}>
-                <span className="ventas-seller__name">{v.name}</span>
-                <span className="ventas-seller__track">
-                  <span
-                    className="ventas-seller__bar"
-                    style={{ width: `${Math.max(2, (v.base / maxBase) * 100)}%` }}
-                  />
-                </span>
-                <span className="ventas-seller__value">
-                  {money(v.base)}
-                  <em>{v.orders} venta(s) · {money(v.commission)} de comisión</em>
-                </span>
-              </div>
-            ))}
-          </Card>
-        </Grid>
-
-        {/* --------------------------------------------- cotizaciones */}
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <Card className="entity-card ventas-table-card">
-            <Tabs
-              value={tab}
-              onChange={(_, v) => setFiltros({ tab: v })}
-              className="table-tabs"
-              variant="scrollable"
-              scrollButtons="auto"
-            >
-              {TABS.map((t) => <Tab key={t.key || "all"} label={t.label} />)}
-            </Tabs>
-
-            <DataTable
-              toolbar={(
-                <Box className="table-toolbar">
-                  <TextField
-                    size="small"
-                    placeholder="Buscar por cliente, vendedor o número…"
-                    value={search}
-                    onChange={(e) => setFiltros({ search: e.target.value })}
-                    className="table-toolbar__search"
-                    slotProps={{
-                      input: {
-                        startAdornment: (
-                          <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>
-                        ),
-                      },
-                    }}
-                  />
-                </Box>
-              )}
-              columns={columns}
-              data={quotes}
-              onRowClick={(row) => navigate(`/clientes/${row.accountId}`)}
-              emptyState={{
-                icon: <RequestQuoteOutlinedIcon />,
-                title: TABS[tab].key
-                  ? `No hay cotizaciones ${TABS[tab].label.toLowerCase()}`
-                  : "Todavía no hay cotizaciones",
-                description: "Las cotizaciones se cargan en la ficha de cada cuenta del CRM, y desde"
-                  + " ahí se convierten en pedido.",
-                action: <Button variant="ghost" onClick={() => navigate("/clientes")}>Ir a Clientes</Button>,
-              }}
-            />
-          </Card>
-        </Grid>
-      </Grid>
+      <Box className="table-tabs">
+        <Tabs value={tab} onChange={(_, v) => { setTab(v); setPage(0); }}>{TABS.map((x) => <Tab key={x.key} label={x.key === "sinFacturar" && t?.sinFacturar ? `${x.label} (${t.sinFacturar})` : x.label} />)}</Tabs>
+        {t?.porMedio?.length > 0 && <span className="text-tertiary ventas-medios">{t.porMedio.map((m) => `${MEDIOS_PAGO[m.medio] || m.medio} ${money(m.importe)}`).join(" · ")}</span>}
+      </Box>
+      <DataTable columns={columns} data={q.data?.filas || []} loading={q.isLoading} emptyMessage="Sin ventas en este corte." onRowClick={(v) => navigate(`/ventas/${v.id}`)}
+        pagination={{ page, rowsPerPage, totalCount: q.data?.total || 0, onPageChange: (_, p) => setPage(p), onRowsPerPageChange: (e) => { setRowsPerPage(Number(e.target.value)); setPage(0); } }} />
+      {q.data && <Typography variant="caption" color="text.secondary">{num(q.data.total, 0)} comprobante(s) en el corte · tipos: {[...new Set((q.data.filas || []).map((v) => TIPOS_VENTA[v.tipo]?.label))].join(", ") || "—"}</Typography>}
     </Box>
   );
 };

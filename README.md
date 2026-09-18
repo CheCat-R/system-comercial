@@ -38,5 +38,14 @@ catálogo de productos (formatos de compra, presentaciones, listas de venta, pre
 historial), proveedores, inventario (stock, movimientos, fraccionado, transferencias, incidencias,
 controles de stock), configuración y chat interno.
 
-Siguientes: **F2** ventas/POS/caja/cobranzas/clientes/presupuestos/ofertas + ARCA · **F3** compras,
-comprobantes, gastos y pagos · **F4** el resto (marketing, tienda, analytics reales).
+**Fase 2 (mostrador) — lista.** Punto de venta con borradores y autoguardado, listas por
+cantidad/marca/monto/cliente, ofertas (%, precio fijo, N×M, 2ª unidad, pack, combo, ticket),
+descuentos con nombre, cobro con varios medios y redondeo, tickets y facturas A/B/C, notas de
+crédito total/parcial, anulación con rastro, caja (turnos, arqueo, controles, movimientos),
+cuenta corriente y cobranzas, clientes, presupuestos (reserva de stock y cierre en el POS) y
+facturación electrónica ARCA (WSAA/WSFE, QR RG 4892, trámite del certificado, diagnóstico).
+ARCA se enciende con las variables `ARCA_*` del `.env` de la API y el interruptor en
+Ventas › Configuración; sin ellas, todo funciona igual con comprobantes internos.
+
+Siguientes: **F3** compras, comprobantes de proveedor, gastos y pagos · **F4** el resto
+(marketing, tienda, analytics reales).

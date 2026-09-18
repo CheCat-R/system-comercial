@@ -28,7 +28,8 @@ class CajaController extends Controller
         }
         $t = $this->svc->actual($sucursalId);
 
-        return response()->json($t ? \App\Support\Fila::camel($t) : null);
+        // Envuelto: un JSON `null` pelado sale como `{}` y el panel lo tomaría por un turno.
+        return response()->json(['turno' => $t ? \App\Support\Fila::camel($t) : null]);
     }
 
     public function index(Request $request, Sesion $sesion): JsonResponse
