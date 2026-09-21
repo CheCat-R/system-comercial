@@ -20,6 +20,7 @@ import { proveedoresApi, CONDICION_IVA, CONDICION_COMPRA, PROVEEDOR_VACIO, aPayl
 import ProveedorForm from "./components/ProveedorForm";
 import { productosApi, money, num } from "../productos/api/productosApi";
 import { useEstadoDesde } from "../../hooks/useEstadoDesde";
+import PercepcionesYCuentas from "./components/PercepcionesYCuentas";
 import "./ProveedorDetalle.css";
 
 const stamp = (iso) => (iso ? new Date(iso).toLocaleString("es-AR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
@@ -38,8 +39,8 @@ const ProveedorDetalle = () => {
   // El formulario arranca de la ficha cargada; si la ficha cambia (se guardó o refrescó), se vuelve a armar.
   const [form, setForm] = useEstadoDesde(proveedor.data, (x) => (x ? { ...PROVEEDOR_VACIO, ...x, diasPago: x.diasPago ?? "", medioHabitual: x.medioHabitual ?? "", letraGasto: x.letraGasto ?? "" } : PROVEEDOR_VACIO));
   const productos = useQuery({ queryKey: QK.productos, queryFn: productosApi.listar });
-  const auditoria = useQuery({ queryKey: QK.auditoria("proveedor", id), queryFn: () => proveedoresApi.auditoria(id), enabled: tab === 2 });
-  const costos = useQuery({ queryKey: QK.precios.historial({ proveedorId: Number(id) }), queryFn: () => proveedoresApi.historialCostos(id), enabled: tab === 2 && veCostos });
+  const auditoria = useQuery({ queryKey: QK.auditoria("proveedor", id), queryFn: () => proveedoresApi.auditoria(id), enabled: tab === 3 });
+  const costos = useQuery({ queryKey: QK.precios.historial({ proveedorId: Number(id) }), queryFn: () => proveedoresApi.historialCostos(id), enabled: tab === 3 && veCostos });
 
   const p = proveedor.data;
   const { setLabel } = useEntityLabel();
@@ -72,12 +73,13 @@ const ProveedorDetalle = () => {
         subtitle={[p.direccion, p.telefono, p.email].filter(Boolean).join(" · ") || "Sin datos de contacto"}
         badges={<><StatusBadge tone={p.condicionCompra === "factura" ? "success" : "warning"} label={CONDICION_COMPRA[p.condicionCompra]} showDot={false} />{p.proveeMercaderia && <StatusBadge tone="info" label="Mercadería" showDot={false} />}{p.proveeGastos && <StatusBadge tone="neutral" label="Gastos" showDot={false} />}</>}
         onBack={() => navigate("/abastecimiento/proveedores")}
-        actions={puede && <Button size="small" variant="danger" disabled={catalogo.length > 0} onClick={() => { if (window.confirm("¿Borrar el proveedor?")) borrar.mutate(); }}>Borrar</Button>}
+        actions={(<Box sx={{ display: "flex", gap: 1 }}>{can("proveedores.edoc") && <Button size="small" variant="secondary" onClick={() => navigate(`/abastecimiento/cuentas/${id}`)}>Estado de cuenta</Button>}{can("facturas") && <Button size="small" variant="primary" onClick={() => navigate(`/abastecimiento/compras/nuevo?proveedorId=${id}`)}>Cargar comprobante</Button>}{puede && <Button size="small" variant="danger" disabled={catalogo.length > 0} onClick={() => { if (window.confirm("¿Borrar el proveedor?")) borrar.mutate(); }}>Borrar</Button>}</Box>)}
       />
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} className="sup-tabs" sx={{ mb: 2 }}>
         <Tab label="Ficha" />
         <Tab label={`Productos que trae (${catalogo.length})`} />
+        <Tab label="Percepciones y cuentas" />
         <Tab label="Historial" />
       </Tabs>
 
@@ -107,7 +109,9 @@ const ProveedorDetalle = () => {
         />
       )}
 
-      {tab === 2 && (
+      {tab === 2 && <PercepcionesYCuentas proveedorId={id} puede={puede} />}
+
+      {tab === 3 && (
         <Box sx={{ display: "grid", gap: 2 }}>
           <Card className="entity-card">
             <Typography className="card-title" sx={{ mb: 1 }}>Cambios en la ficha y los formatos</Typography>

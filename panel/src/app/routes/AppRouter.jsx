@@ -66,6 +66,13 @@ const ProveedorDetalle = lazy(() => import("../../modules/abastecimiento/Proveed
 const OrdenesCompra = lazy(() => import("../../modules/abastecimiento/OrdenesCompra"));
 const OrdenCompraDetalle = lazy(() => import("../../modules/abastecimiento/OrdenCompraDetalle"));
 const Compras = lazy(() => import("../../modules/abastecimiento/Compras"));
+const CompraNueva = lazy(() => import("../../modules/abastecimiento/CompraNueva"));
+const CompraDetalle = lazy(() => import("../../modules/abastecimiento/CompraDetalle"));
+const PagosProveedores = lazy(() => import("../../modules/abastecimiento/PagosProveedores"));
+const PedidosProveedor = lazy(() => import("../../modules/abastecimiento/Pedidos"));
+const Vencimientos = lazy(() => import("../../modules/abastecimiento/Vencimientos"));
+const EstadosDeCuenta = lazy(() => import("../../modules/abastecimiento/EstadosDeCuenta"));
+const EstadoDeCuenta = lazy(() => import("../../modules/abastecimiento/EstadoDeCuenta"));
 const Reposicion = lazy(() => import("../../modules/abastecimiento/Reposicion"));
 
 /* logistica */
@@ -85,6 +92,7 @@ const FacturacionImpuestos = lazy(() => import("../../modules/facturacion/Impues
 const FinanzasResumen = lazy(() => import("../../modules/finanzas/Resumen"));
 const FinanzasRentabilidad = lazy(() => import("../../modules/finanzas/Rentabilidad"));
 const FinanzasGastos = lazy(() => import("../../modules/finanzas/Gastos"));
+const FinanzasGastoDetalle = lazy(() => import("../../modules/finanzas/GastoDetalle"));
 const FinanzasComisiones = lazy(() => import("../../modules/finanzas/Comisiones"));
 const FinanzasReembolsos = lazy(() => import("../../modules/finanzas/Reembolsos"));
 
@@ -257,7 +265,18 @@ const AppRouter = () => {
               <Route path=":id" element={<OrdenCompraDetalle />} />
             </Route>
             <Route path="reposicion" element={<Reposicion />} />
-            <Route path="compras" element={<Compras />} />
+            <Route path="compras">
+              <Route index element={<Compras />} />
+              <Route path="nuevo" element={<CompraNueva />} />
+              <Route path=":id" element={<CompraDetalle />} />
+            </Route>
+            <Route path="pagos" element={<PagosProveedores />} />
+            <Route path="pedidos" element={<PedidosProveedor />} />
+            <Route path="vencimientos" element={<Vencimientos />} />
+            <Route path="cuentas">
+              <Route index element={<EstadosDeCuenta />} />
+              <Route path=":id" element={<EstadoDeCuenta />} />
+            </Route>
           </Route>
 
           {/* Sub-rutas del Módulo Logística & Fulfillment */}
@@ -281,7 +300,10 @@ const AppRouter = () => {
           <Route path="finanzas">
             <Route index element={<FinanzasResumen />} />
             <Route path="rentabilidad" element={<FinanzasRentabilidad />} />
-            <Route path="gastos" element={<FinanzasGastos />} />
+            <Route path="gastos">
+              <Route index element={<FinanzasGastos />} />
+              <Route path=":id" element={<FinanzasGastoDetalle />} />
+            </Route>
             <Route path="comisiones" element={<FinanzasComisiones />} />
             <Route path="reembolsos" element={<FinanzasReembolsos />} />
           </Route>

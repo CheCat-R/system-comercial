@@ -150,11 +150,13 @@ class ComprasF3Test extends TestCase
 
         // Modo "por facturas": un pago suelto que no es el saldo ni una cuota se rechaza; una cuota pasa.
         $this->admin()->postJson('/api/pagos-proveedor', ['proveedorId' => $prov['id'], 'importe' => 3000, 'medio' => 'transferencia', 'imputaciones' => [['comprobanteId' => $f['id'], 'importe' => 3000]]])->assertStatus(400);
-        $k1 = $f['compromisos'][0];
-        $pk = $this->admin()->postJson('/api/compromisos/'.$k1['id'].'/pagar', ['medio' => 'transferencia', 'referencia' => 'TR-1'])->assertOk()->json();
-        $this->assertTrue($pk['pagado']);
-        $this->assertEquals(10000.0, $pk['pago']['importe']);
-        $this->admin()->getJson('/api/comprobantes/'.$f['id'])->assertOk()->assertJsonPath('saldo', 10250);
+        // Un pago común por el importe exacto de la cuota 1: pasa el candado y cierra ESA cuota (la 2 sigue pendiente).
+        $pk = $this->admin()->postJson('/api/pagos-proveedor', ['proveedorId' => $prov['id'], 'importe' => 10000, 'medio' => 'transferencia', 'referencia' => 'TR-1', 'imputaciones' => [['comprobanteId' => $f['id'], 'importe' => 10000]]])->assertCreated()->json();
+        $c1 = $this->admin()->getJson('/api/comprobantes/'.$f['id'])->assertOk()->assertJsonPath('saldo', 10250)->json();
+        $this->assertTrue($c1['compromisos'][0]['pagado']);
+        $this->assertSame($pk['id'], $c1['compromisos'][0]['pagoId']);
+        $this->assertFalse($c1['compromisos'][1]['pagado']);
+        $this->admin()->getJson('/api/compromisos?filtro=pendientes')->assertOk()->assertJsonPath('total', 1);
         // La última cuota por su saldo completo con pago mixto: cierra la factura y el compromiso.
         $p2 = $this->admin()->postJson('/api/pagos-proveedor', ['proveedorId' => $prov['id'], 'importe' => 10250, 'formas' => [['medio' => 'transferencia', 'importe' => 10000], ['medio' => 'efectivo', 'importe' => 250]],
             'cajaSesionId' => $turno['id'], 'imputaciones' => [['comprobanteId' => $f['id'], 'importe' => 10250]]])->assertCreated()->json();

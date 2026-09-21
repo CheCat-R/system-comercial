@@ -568,8 +568,30 @@ class PagosProveedorService
             } else {
                 $this->recalcularComprobante($comprobanteId);
                 $this->sincronizarCompromisos($comprobanteId, $pagoId);
+                // En el alta del comprobante el contado y los pagos tomados ya quedaron FUERA de las cuotas: no cierran ninguna.
+                if (! $enAltaComprobante) {
+                    $this->cerrarCuotaPagada($comprobanteId, $importe, $pagoId);
+                }
             }
         }
+    }
+
+    /**
+     * LA CUOTA PAGADA POR SU IMPORTE EXACTO. El puente cierra los compromisos
+     * cuando la factura queda saldada; si sigue con saldo pero este pago es
+     * justo una cuota pactada (el mismo caso que el candado deja pasar), esa
+     * cuota se da por pagada, firmada por este pago — que es lo que el que
+     * pagó quiso decir.
+     */
+    private function cerrarCuotaPagada(int $comprobanteId, float $importe, int $pagoId): void
+    {
+        $k = DB::table('proveedor_compromisos')->where('comprobante_id', $comprobanteId)->where('pagado', false)
+            ->whereRaw('abs(importe - ?) <= ?', [$importe, self::EPS])->orderBy('fecha_venc')->first();
+        if (! $k) {
+            return;
+        }
+        DB::table('proveedor_compromisos')->where('id', $k->id)->update(['pagado' => true, 'pago_id' => $pagoId]);
+        DB::table('proveedor_echeqs')->where('compromiso_id', $k->id)->whereIn('estado', ['emitido', 'entregado'])->update(['estado' => 'cobrado', 'pago_id' => $pagoId]);
     }
 
     public function imputar(int $pagoId, array $imputaciones, ?int $usuarioId, bool $cruzaSucursales = false, bool $enAltaComprobante = false): array

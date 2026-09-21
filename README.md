@@ -47,5 +47,14 @@ facturación electrónica ARCA (WSAA/WSFE, QR RG 4892, trámite del certificado,
 ARCA se enciende con las variables `ARCA_*` del `.env` de la API y el interruptor en
 Ventas › Configuración; sin ellas, todo funciona igual con comprobantes internos.
 
-Siguientes: **F3** compras, comprobantes de proveedor, gastos y pagos · **F4** el resto
-(marketing, tienda, analytics reales).
+**Fase 3 (compras y plata que sale) — lista.** Comprobantes de compra (factura, remito,
+liquidación, notas de crédito/débito, orden de compra) con recepción de stock, actualización de
+costos de catálogo, percepciones, bonificación y duplicados; remito → factura sin volver a mover
+stock; pagos a proveedores desde la caja de la sucursal o administración (multi-forma, fletes
+adelantados, bandeja de sin aplicar, imputación con candados); gastos con rubros, renglones,
+pie abierto, pago inmediato, cuentas a pagar, gastos fijos por período y adjuntos; compromisos de
+pago (cuotas), cartera de echeqs, estados de cuenta (mayor DEBE/HABER, antigüedad FIFO, ajustes,
+conciliación) y el kanban de pedidos. Panel: Abastecimiento › Compras / Pagos / Pedidos /
+Vencimientos / Estados de cuenta y Finanzas › Gastos.
+
+Siguiente: **F4** el resto (marketing, tienda, analytics reales, lectura de facturas PDF).

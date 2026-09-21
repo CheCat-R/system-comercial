@@ -102,9 +102,12 @@ export const NAV_SECTIONS = [
         path: "/abastecimiento",
         children: [
           { text: "Proveedores", path: "/abastecimiento/proveedores" },
-          { text: "Órdenes de compra", path: "/abastecimiento/ordenes-compra" },
-          { text: "Reposición", path: "/abastecimiento/reposicion" },
           { text: "Compras", path: "/abastecimiento/compras" },
+          { text: "Pagos a proveedores", path: "/abastecimiento/pagos" },
+          { text: "Pedidos", path: "/abastecimiento/pedidos" },
+          { text: "Vencimientos y echeqs", path: "/abastecimiento/vencimientos" },
+          { text: "Estados de cuenta", path: "/abastecimiento/cuentas" },
+          { text: "Reposición", path: "/abastecimiento/reposicion" },
         ],
       },
       {
