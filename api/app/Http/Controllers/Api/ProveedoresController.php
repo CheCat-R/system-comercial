@@ -40,4 +40,29 @@ class ProveedoresController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    public function percepciones(Proveedor $proveedor): JsonResponse
+    {
+        return response()->json($this->svc->percepciones($proveedor->id));
+    }
+
+    public function setPercepciones(Request $request, Proveedor $proveedor, Sesion $sesion): JsonResponse
+    {
+        $d = $request->validate(['percepciones' => ['present', 'array', 'max:20'], 'percepciones.*.nombre' => ['required', 'string', 'max:120'],
+            'percepciones.*.alicuota' => ['nullable', 'numeric'], 'percepciones.*.base' => ['nullable', 'in:neto,total'], 'percepciones.*.activa' => ['nullable', 'boolean']]);
+
+        return response()->json($this->svc->setPercepciones($proveedor, $d['percepciones'], $sesion->usuarioId));
+    }
+
+    public function cuentas(Proveedor $proveedor): JsonResponse
+    {
+        return response()->json($this->svc->cuentas($proveedor->id));
+    }
+
+    public function setCuentas(Request $request, Proveedor $proveedor): JsonResponse
+    {
+        $d = $request->validate(['cuentas' => ['present', 'array', 'max:10'], 'cuentas.*.cbuAlias' => ['required', 'string', 'max:120'], 'cuentas.*.descripcion' => ['nullable', 'string', 'max:120']]);
+
+        return response()->json($this->svc->setCuentas($proveedor, $d['cuentas']));
+    }
 }

@@ -17,12 +17,15 @@ final class Fila
     private const BOOLEANOS = [
         'activo', 'activa', 'es_consumidor_final', 'cta_cte_habilitada', 'facturar_pendiente', 'reservado', 'requiere_admin',
         'incluye_fraccionados', 'relevo_caja', 'es_sistema', 'publicado', 'destacado', 'solo_fraccionar', 'usar_para_precio', 'ciego',
+        'recepcion', 'es_flete', 'es_echeq', 'pedido_enviado', 'provee_mercaderia', 'provee_gastos',
     ];
 
     /** Columnas que son instantes. Todo lo demás viaja tal cual. */
     private const FECHAS = [
         'fecha', 'apertura', 'cierre', 'vence', 'desde', 'hasta', 'vencimiento', 'vencimiento_pago',
         'cae_vencimiento', 'anulado_en', 'created_at', 'updated_at', 'expires_at', 'estado_desde',
+        'fecha_carga', 'fecha_emision', 'fecha_venc', 'fecha_alta', 'fecha_pedido', 'fecha_recepcion', 'revisado_at', 'subido_en',
+        'conciliado_hasta', 'conciliado_at',
     ];
 
     public static function camel(object|array|null $fila): ?array

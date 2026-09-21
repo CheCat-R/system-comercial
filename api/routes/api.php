@@ -8,12 +8,17 @@ use App\Http\Controllers\Api\CatalogosController;
 use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\ClientesController;
 use App\Http\Controllers\Api\CobranzasController;
+use App\Http\Controllers\Api\ComprobantesController;
 use App\Http\Controllers\Api\ConfiguracionController;
 use App\Http\Controllers\Api\ConteosController;
+use App\Http\Controllers\Api\FinanzasProveedorController;
+use App\Http\Controllers\Api\GastosController;
 use App\Http\Controllers\Api\IncidenciasController;
 use App\Http\Controllers\Api\InventarioController;
 use App\Http\Controllers\Api\ListasController;
 use App\Http\Controllers\Api\OfertasController;
+use App\Http\Controllers\Api\PagosProveedorController;
+use App\Http\Controllers\Api\PedidosProveedorController;
 use App\Http\Controllers\Api\PreciosController;
 use App\Http\Controllers\Api\PresupuestosController;
 use App\Http\Controllers\Api\ProductosController;
@@ -317,6 +322,129 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/probar', [ArcaController::class, 'probar']);
         Route::post('/certificado/pedido', [ArcaController::class, 'pedido']);
         Route::post('/certificado/instalar', [ArcaController::class, 'instalar']);
+    });
+
+    /* ---------------- Compras, gastos y pagos (F3) ---------------- */
+
+    // Percepciones y cuentas bancarias del proveedor: las lee quien carga facturas o paga; las escribe quien administra el padrón.
+    Route::get('/proveedores/{proveedor}/percepciones', [ProveedoresController::class, 'percepciones']);
+    Route::get('/proveedores/{proveedor}/cuentas', [ProveedoresController::class, 'cuentas']);
+    Route::middleware('permiso:compras.proveedores,gastos.proveedores,proveedores.padron')->group(function () {
+        Route::put('/proveedores/{proveedor}/percepciones', [ProveedoresController::class, 'setPercepciones']);
+        Route::put('/proveedores/{proveedor}/cuentas', [ProveedoresController::class, 'setCuentas']);
+    });
+
+    // Comprobantes de compra: todo detrás de `compras.facturacion`; cargar pide además la acción `facturas`.
+    Route::prefix('comprobantes')->middleware('permiso:compras.facturacion')->group(function () {
+        Route::get('/', [ComprobantesController::class, 'index']);
+        Route::get('/saldos', [ComprobantesController::class, 'saldos']);
+        Route::get('/remitos-pendientes', [ComprobantesController::class, 'remitosPendientes']);
+        Route::get('/cuenta/{proveedorId}', [ComprobantesController::class, 'cuenta']);
+        Route::get('/referenciables/{proveedorId}', [ComprobantesController::class, 'referenciables']);
+        Route::get('/{id}', [ComprobantesController::class, 'show'])->whereNumber('id');
+        Route::middleware('permiso:facturas')->group(function () {
+            Route::post('/', [ComprobantesController::class, 'store']);
+            Route::post('/{id}/facturar', [ComprobantesController::class, 'facturar']);
+            Route::post('/{id}/confirmar', [ComprobantesController::class, 'confirmar']);
+            Route::post('/{id}/anular', [ComprobantesController::class, 'anular']);
+            Route::delete('/{id}', [ComprobantesController::class, 'destroy']);
+        });
+    });
+
+    // Plata que sale hacia un proveedor: tres caminos legítimos (administración, gastos, la cajera cuando llega el camión).
+    Route::prefix('pagos-proveedor')->middleware('permiso:compras.pagos,gastos.pagos_proveedor,ventas.caja')->group(function () {
+        Route::get('/', [PagosProveedorController::class, 'index']);
+        Route::get('/sin-aplicar', [PagosProveedorController::class, 'sinAplicar']);
+        Route::get('/disponibles/{proveedorId}', [PagosProveedorController::class, 'disponibles']);
+        Route::get('/pendientes/{proveedorId}', [PagosProveedorController::class, 'pendientes']);
+        Route::get('/cuenta/{proveedorId}', [PagosProveedorController::class, 'cuenta']);
+        Route::get('/{id}', [PagosProveedorController::class, 'show'])->whereNumber('id');
+        Route::post('/', [PagosProveedorController::class, 'store']);
+        Route::post('/descontar-fletes', [PagosProveedorController::class, 'descontarFletes']);
+        Route::post('/{id}/anular', [PagosProveedorController::class, 'anular']);
+        Route::patch('/{id}/papel', [PagosProveedorController::class, 'papel']);
+        // Imputar es del administrador: decidir contra qué documento se descuenta un pago que ya existe.
+        Route::middleware('permiso:gastos_imputar,gastos.pagos_proveedor,compras.pagos')->group(function () {
+            Route::post('/{id}/imputar', [PagosProveedorController::class, 'imputar']);
+            Route::delete('/imputaciones/{id}', [PagosProveedorController::class, 'desimputar']);
+            Route::patch('/{id}/destino', [PagosProveedorController::class, 'destino']);
+        });
+    });
+
+    $pisoGastos = 'gastos.gastos,gastos.pagos,gastos.pagos_proveedor,gastos.fijos,gastos.categorias,gastos.proveedores,gastos.resumen';
+    $verGastos = 'gastos.gastos,gastos.pagos,gastos.resumen';
+    $pagarGastos = 'gastos_pagar,gastos_pagar_proveedor,ventas.caja';
+    Route::prefix('gastos')->middleware('permiso:'.$pisoGastos)->group(function () use ($verGastos, $pagarGastos) {
+        Route::get('/bootstrap', [GastosController::class, 'bootstrap']);
+        Route::get('/pendientes', [GastosController::class, 'pendientes'])->middleware('permiso:gastos.gastos,gastos.pagos');
+        Route::get('/cuentas-a-pagar', [GastosController::class, 'cuentasAPagar'])->middleware('permiso:gastos.pagos');
+        Route::get('/resumen', [GastosController::class, 'resumen'])->middleware('permiso:gastos.resumen');
+        Route::get('/categorias', [GastosController::class, 'categorias']);
+        Route::middleware('permiso:gastos.categorias')->group(function () {
+            Route::post('/categorias', [GastosController::class, 'crearCategoria']);
+            Route::patch('/categorias/{id}', [GastosController::class, 'editarCategoria']);
+            Route::delete('/categorias/{id}', [GastosController::class, 'borrarCategoria']);
+        });
+        Route::middleware('permiso:gastos.fijos')->group(function () {
+            Route::get('/recurrentes', [GastosController::class, 'recurrentes']);
+            Route::post('/recurrentes', [GastosController::class, 'crearRecurrente']);
+            Route::get('/recurrentes/periodo/{periodo}', [GastosController::class, 'previaPeriodo']);
+            Route::post('/recurrentes/generar', [GastosController::class, 'generarPeriodo']);
+            Route::patch('/recurrentes/{id}', [GastosController::class, 'editarRecurrente']);
+            Route::delete('/recurrentes/{id}', [GastosController::class, 'borrarRecurrente']);
+        });
+        Route::get('/adjuntos/{id}', [GastosController::class, 'adjunto'])->middleware('permiso:'.$verGastos);
+        Route::delete('/adjuntos/{id}', [GastosController::class, 'borrarAdjunto'])->middleware('permiso:gastos.gastos');
+        Route::get('/', [GastosController::class, 'index'])->middleware('permiso:'.$verGastos);
+        Route::get('/{id}', [GastosController::class, 'show'])->whereNumber('id')->middleware('permiso:'.$verGastos);
+        Route::post('/', [GastosController::class, 'store'])->middleware('permiso:gastos.gastos');
+        Route::patch('/{id}', [GastosController::class, 'update'])->middleware('permiso:gastos.gastos');
+        Route::post('/{id}/adjuntos', [GastosController::class, 'subirAdjunto'])->middleware('permiso:gastos.gastos');
+        Route::post('/{id}/anular', [GastosController::class, 'anular'])->middleware('permiso:gastos_anular');
+        Route::post('/{id}/pagos', [GastosController::class, 'pagar'])->middleware('permiso:'.$pagarGastos);
+        Route::post('/{id}/aplicar-pago', [GastosController::class, 'aplicarPago'])->middleware('permiso:gastos_imputar,gastos.pagos_proveedor,compras.pagos');
+    });
+
+    Route::prefix('compromisos')->middleware('permiso:proveedores.ctasctes')->group(function () {
+        Route::get('/', [FinanzasProveedorController::class, 'compromisos']);
+        Route::get('/stats', [FinanzasProveedorController::class, 'statsCompromisos']);
+        Route::get('/{id}', [FinanzasProveedorController::class, 'compromiso'])->whereNumber('id');
+        Route::post('/', [FinanzasProveedorController::class, 'crearCompromiso']);
+        Route::patch('/{id}', [FinanzasProveedorController::class, 'editarCompromiso']);
+        Route::post('/{id}/pagar', [FinanzasProveedorController::class, 'pagarCompromiso']);
+        Route::delete('/{id}', [FinanzasProveedorController::class, 'borrarCompromiso']);
+    });
+
+    Route::prefix('echeqs')->middleware('permiso:proveedores.echeqs')->group(function () {
+        Route::get('/', [FinanzasProveedorController::class, 'echeqs']);
+        Route::get('/stats', [FinanzasProveedorController::class, 'statsEcheqs']);
+        Route::get('/{id}', [FinanzasProveedorController::class, 'echeq'])->whereNumber('id');
+        Route::post('/', [FinanzasProveedorController::class, 'crearEcheq']);
+        Route::patch('/{id}', [FinanzasProveedorController::class, 'editarEcheq']);
+        Route::post('/{id}/estado', [FinanzasProveedorController::class, 'estadoEcheq']);
+        Route::delete('/{id}', [FinanzasProveedorController::class, 'borrarEcheq']);
+    });
+
+    Route::prefix('proveedores-edoc')->middleware('permiso:proveedores.edoc')->group(function () {
+        Route::get('/', [FinanzasProveedorController::class, 'edocGlobal']);
+        Route::post('/ajustes', [FinanzasProveedorController::class, 'ajuste']);
+        Route::delete('/ajustes/{id}', [FinanzasProveedorController::class, 'borrarAjuste']);
+        Route::get('/{proveedorId}', [FinanzasProveedorController::class, 'edoc'])->whereNumber('proveedorId');
+        Route::post('/{proveedorId}/conciliar', [FinanzasProveedorController::class, 'conciliar']);
+        Route::delete('/{proveedorId}/conciliar', [FinanzasProveedorController::class, 'desconciliar']);
+    });
+
+    Route::prefix('pedidos-proveedor')->middleware('permiso:proveedores.pedidos')->group(function () {
+        Route::get('/', [PedidosProveedorController::class, 'kanban']);
+        Route::get('/stats', [PedidosProveedorController::class, 'stats']);
+        Route::get('/recibidos', [PedidosProveedorController::class, 'recibidos']);
+        Route::post('/', [PedidosProveedorController::class, 'alta']);
+        Route::post('/directo', [PedidosProveedorController::class, 'directo']);
+        Route::patch('/{id}', [PedidosProveedorController::class, 'editar']);
+        Route::patch('/{id}/estado', [PedidosProveedorController::class, 'estado']);
+        Route::post('/{id}/enviado', [PedidosProveedorController::class, 'enviado']);
+        Route::post('/{id}/revisado', [PedidosProveedorController::class, 'revisado']);
+        Route::delete('/{id}', [PedidosProveedorController::class, 'borrar']);
     });
 
     /* ---------------- Transversal ---------------- */

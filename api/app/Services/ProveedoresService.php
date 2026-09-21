@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\ErrorDeNegocio;
 use App\Models\Proveedor;
 use Illuminate\Support\Facades\DB;
 
@@ -90,5 +91,69 @@ class ProveedoresService
     public function borrar(Proveedor $p): void
     {
         $p->delete();
+    }
+
+    /* ---------------- Percepciones y cuentas (F3) ---------------- */
+
+    /** Las percepciones que cobra en el pie de su factura; al cargar el papel se ofrecen tildadas o no. */
+    public function percepciones(int $proveedorId): array
+    {
+        return DB::table('proveedor_percepciones')->where('proveedor_id', $proveedorId)->orderBy('id')->get()
+            ->map(fn ($p) => ['id' => $p->id, 'nombre' => $p->nombre, 'alicuota' => (float) $p->alicuota, 'base' => $p->base, 'activa' => (bool) $p->activa])->all();
+    }
+
+    /** Reemplaza la lista entera (es la ficha, no historia). */
+    public function setPercepciones(Proveedor $p, array $lista, ?int $usuarioId = null): array
+    {
+        $antes = collect($this->percepciones($p->id))->map(fn ($x) => $x['nombre'].' '.$x['alicuota'].'% s/'.$x['base'].($x['activa'] ? '' : ' (inactiva)'))->implode(', ');
+        $filas = [];
+        foreach ($lista as $x) {
+            $nombre = trim((string) ($x['nombre'] ?? ''));
+            if ($nombre === '') {
+                continue;
+            }
+            $alic = (float) ($x['alicuota'] ?? 0);
+            if ($alic < 0 || $alic > 100) {
+                throw new ErrorDeNegocio('La alícuota de "'.$nombre.'" tiene que estar entre 0 y 100.');
+            }
+            $filas[] = ['proveedor_id' => $p->id, 'nombre' => mb_substr($nombre, 0, 120), 'alicuota' => $alic, 'base' => ($x['base'] ?? 'neto') === 'total' ? 'total' : 'neto', 'activa' => ($x['activa'] ?? true) !== false];
+        }
+        DB::transaction(function () use ($p, $filas) {
+            DB::table('proveedor_percepciones')->where('proveedor_id', $p->id)->delete();
+            if ($filas) {
+                DB::table('proveedor_percepciones')->insert($filas);
+            }
+        });
+        $despues = collect($this->percepciones($p->id))->map(fn ($x) => $x['nombre'].' '.$x['alicuota'].'% s/'.$x['base'].($x['activa'] ? '' : ' (inactiva)'))->implode(', ');
+        $this->audit->registrar($this->audit->diferencias(['entidad' => 'proveedor', 'entidadId' => $p->id, 'ambito' => 'Percepciones', 'usuarioId' => $usuarioId],
+            ['percepciones' => $antes], ['percepciones' => $despues], ['percepciones' => 'Percepciones']));
+
+        return $this->percepciones($p->id);
+    }
+
+    public function cuentas(int $proveedorId): array
+    {
+        return DB::table('proveedor_cuentas')->where('proveedor_id', $proveedorId)->orderBy('id')->get()
+            ->map(fn ($c) => ['id' => $c->id, 'cbuAlias' => $c->cbu_alias, 'descripcion' => $c->descripcion])->all();
+    }
+
+    public function setCuentas(Proveedor $p, array $lista): array
+    {
+        $filas = [];
+        foreach ($lista as $x) {
+            $cbu = trim((string) ($x['cbuAlias'] ?? ''));
+            if ($cbu === '') {
+                continue;
+            }
+            $filas[] = ['proveedor_id' => $p->id, 'cbu_alias' => mb_substr($cbu, 0, 120), 'descripcion' => mb_substr(trim((string) ($x['descripcion'] ?? '')), 0, 120)];
+        }
+        DB::transaction(function () use ($p, $filas) {
+            DB::table('proveedor_cuentas')->where('proveedor_id', $p->id)->delete();
+            if ($filas) {
+                DB::table('proveedor_cuentas')->insert($filas);
+            }
+        });
+
+        return $this->cuentas($p->id);
     }
 }

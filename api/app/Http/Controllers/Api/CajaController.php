@@ -6,6 +6,7 @@ use App\Auth\Operador;
 use App\Auth\Sesion;
 use App\Http\Controllers\Controller;
 use App\Services\CajaService;
+use App\Support\Fila;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -29,7 +30,7 @@ class CajaController extends Controller
         $t = $this->svc->actual($sucursalId);
 
         // Envuelto: un JSON `null` pelado sale como `{}` y el panel lo tomaría por un turno.
-        return response()->json(['turno' => $t ? \App\Support\Fila::camel($t) : null]);
+        return response()->json(['turno' => $t ? Fila::camel($t) : null]);
     }
 
     public function index(Request $request, Sesion $sesion): JsonResponse
@@ -57,7 +58,7 @@ class CajaController extends Controller
     {
         $this->exigirMiTurno($id, $sesion);
 
-        return response()->json(\App\Support\Fila::camel($this->svc->get($id)));
+        return response()->json(Fila::camel($this->svc->get($id)));
     }
 
     public function arqueo(int $id, Sesion $sesion): JsonResponse

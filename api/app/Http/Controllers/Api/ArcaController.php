@@ -8,6 +8,7 @@ use App\Arca\Config;
 use App\Http\Controllers\Controller;
 use App\Precios\Pricing;
 use App\Services\ConfiguracionService;
+use App\Support\Fila;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -71,8 +72,8 @@ class ArcaController extends Controller
         $cantidad = (int) ($agg->cantidad ?? 0);
 
         return [
-            'cantidad' => $cantidad, 'plata' => Pricing::money((float) ($agg->plata ?? 0)), 'desde' => \App\Support\Fila::iso($agg->desde ?? null),
-            'filas' => \App\Support\Fila::camelTodos($filas), 'ocultas' => max(0, $cantidad - $filas->count()),
+            'cantidad' => $cantidad, 'plata' => Pricing::money((float) ($agg->plata ?? 0)), 'desde' => Fila::iso($agg->desde ?? null),
+            'filas' => Fila::camelTodos($filas), 'ocultas' => max(0, $cantidad - $filas->count()),
         ];
     }
 }

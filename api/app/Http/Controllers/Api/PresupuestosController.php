@@ -8,6 +8,7 @@ use App\Http\Requests\Ventas\GuardarPresupuestoRequest;
 use App\Ventas\PresupuestosService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 /** El jefe atraviesa sucursales; el vendedor no sale de la suya, ni para tocar ni para ver. */
 class PresupuestosController extends Controller
@@ -36,7 +37,7 @@ class PresupuestosController extends Controller
     {
         $p = $this->svc->get($id);
         if ($sesion->soloSuSucursal() !== null && (int) $p['sucursalId'] !== $sesion->soloSuSucursal()) {
-            throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('Ese presupuesto es de otra sucursal.');
+            throw new AccessDeniedHttpException('Ese presupuesto es de otra sucursal.');
         }
 
         return response()->json($p);
