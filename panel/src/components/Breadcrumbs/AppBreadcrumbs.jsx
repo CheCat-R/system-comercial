@@ -27,6 +27,7 @@ import Box from "@mui/material/Box";
 
 import { labelFor, isNamed } from "./routeLabels";
 import { useEntityLabel } from "./EntityLabelContext";
+import { NAV_DESTINATIONS } from "../../app/navigation";
 import "./AppBreadcrumbs.css";
 
 /**
@@ -58,6 +59,17 @@ const AppBreadcrumbs = () => {
 
   if (pathnames.length === 0) return null;
 
+  /*
+   * ⭐ Dos módulos pueden compartir el PREFIJO de una URL (p. ej.
+   * `/abastecimiento/compras` es de Compras y el resto de `/abastecimiento/*`
+   * es de Proveedores; `/finanzas/rentabilidad` es de Gerencia y
+   * `/finanzas/gastos` es de Gastos). El primer segmento no alcanza para
+   * saber de quién es — pero la URL COMPLETA sí, si el menú la conoce: se
+   * busca ahí una sola vez y se usa su padre para el segmento ambiguo.
+   */
+  const currentDest = NAV_DESTINATIONS.find((d) => d.path === location.pathname);
+  const fallbackParent = currentDest?.parent;
+
   return (
     <Box className="breadcrumbs-container">
       <Breadcrumbs
@@ -80,7 +92,7 @@ const AppBreadcrumbs = () => {
           // puente hasta que llegue.
           const nombrado = isNamed(value, to);
           if (!nombrado && !labelOf(value)) avisar(value);
-          const title = labelFor(value, to) || labelOf(value) || "Detalle";
+          const title = labelFor(value, to, fallbackParent) || labelOf(value) || "Detalle";
 
           return isLast ? (
             <Typography key={to} className="breadcrumb-current">{title}</Typography>

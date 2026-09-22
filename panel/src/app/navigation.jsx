@@ -8,246 +8,140 @@
  * **34 segmentos de ruta sin etiqueta** por exactamente esa razón.
  *
  * Acá está el árbol; quien lo necesite lo lee de acá.
+ *
+ * ── ⭐ La estructura calca la del CRM de referencia (crm-dashboard-main), no la
+ * del template de e-commerce genérico del que partió este panel ───────────
+ *
+ * Las secciones "MÓDULO" y sus submenús reproducen el árbol real del CRM
+ * (General: Dashboard/Info de sistema; Módulo: Compras → Proveedores → Ventas
+ * → Almacén → Gerencia → Sistema → Gastos, en ese orden). Lo que el CRM tiene
+ * pero acá no existe todavía (lectura de facturas, formato de venta como
+ * pantalla propia, carteles de góndola, vencimientos por lote, impresión,
+ * respaldos, valorización de stock) se dejó afuera del menú a propósito: un
+ * link a una pantalla que no existe es peor que no tenerlo. Lo que el CRM deja
+ * repartido en varias pantallas y acá ya vive junto en una (p. ej. Fraccionar
+ * e Incidencias son pestañas de la misma página de Ajustes) apunta las dos
+ * entradas del menú a esa misma pantalla — igual que hace el propio CRM con
+ * Compras puertas adentro. Marketing, Tienda y el módulo Web (sitio mayorista)
+ * quedan afuera por decisión del dueño: este negocio no vende online.
  */
 import GridViewOutlinedIcon from "@mui/icons-material/GridViewOutlined";
-import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
-import PeopleAltOutlinedIcon from "@mui/icons-material/PeopleAltOutlined";
-import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
-import ShoppingBagOutlinedIcon from "@mui/icons-material/ShoppingBagOutlined";
-import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
-import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
-import RouteOutlinedIcon from "@mui/icons-material/RouteOutlined";
-import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
-import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
-import CampaignOutlinedIcon from "@mui/icons-material/CampaignOutlined";
-import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
-import QueryStatsOutlinedIcon from "@mui/icons-material/QueryStatsOutlined";
-import AutoModeOutlinedIcon from "@mui/icons-material/AutoModeOutlined";
-import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
-import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
+import PointOfSaleOutlinedIcon from "@mui/icons-material/PointOfSaleOutlined";
+import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";
+import BusinessCenterOutlinedIcon from "@mui/icons-material/BusinessCenterOutlined";
+import SettingsSuggestOutlinedIcon from "@mui/icons-material/SettingsSuggestOutlined";
+import RequestQuoteOutlinedIcon from "@mui/icons-material/RequestQuoteOutlined";
 
 export const NAV_SECTIONS = [
   {
-    title: "MENÚ PRINCIPAL",
+    title: "GENERAL",
     items: [
       { text: "Dashboard", icon: <GridViewOutlinedIcon fontSize="small" />, path: "/" },
-      { text: "Info Sistema", icon: <InsightsOutlinedIcon fontSize="small" />, path: "/info-sistema" },
+      { text: "Info de sistema", icon: <InsightsOutlinedIcon fontSize="small" />, path: "/info-sistema" },
     ],
   },
   {
-    title: "GESTIÓN E-COMMERCE",
+    title: "MÓDULO",
     items: [
       {
-        text: "Productos",
+        text: "Compras",
         icon: <Inventory2OutlinedIcon fontSize="small" />,
         path: "/productos",
         children: [
-          { text: "Todos los productos", path: "/productos" },
-          { text: "Precios y márgenes", path: "/productos/precios" },
+          { text: "Productos", path: "/productos" },
           { text: "Marcas", path: "/productos/marcas" },
           { text: "Categorías", path: "/productos/categorias" },
           { text: "Etiquetas", path: "/productos/etiquetas" },
           { text: "Atributos", path: "/productos/atributos" },
           { text: "Valoraciones", path: "/productos/valoraciones" },
+          // "Costos y percepciones" + "Cambios de precio" del CRM: una sola
+          // pantalla acá, con la evolución de precios adentro.
+          { text: "Precios y costos", path: "/productos/precios" },
+          // El "Facturación" del Compras del CRM: los comprobantes del proveedor.
+          { text: "Facturación", path: "/abastecimiento/compras" },
         ],
       },
       {
-        text: "Clientes",
-        icon: <PeopleAltOutlinedIcon fontSize="small" />,
-        path: "/clientes",
+        text: "Proveedores",
+        icon: <LocalShippingOutlinedIcon fontSize="small" />,
+        path: "/abastecimiento/proveedores",
         children: [
-          { text: "Todos los clientes", path: "/clientes" },
-          { text: "Segmentos", path: "/clientes/segmentos" },
-          { text: "Etiquetas", path: "/clientes/etiquetas" },
+          { text: "Proveedores", path: "/abastecimiento/proveedores" },
+          { text: "Pedidos", path: "/abastecimiento/pedidos" },
+          // "Cuentas corrientes" + "Echeqs" del CRM: una sola pantalla con las
+          // dos carteras (mismo criterio que el propio CRM en varios lados).
+          { text: "Cuentas corrientes y echeqs", path: "/abastecimiento/vencimientos" },
+          { text: "Estados de cuenta", path: "/abastecimiento/cuentas" },
+          // Sin equivalente directo en el CRM: la bandeja de pagos sin aplicar.
+          { text: "Pagos a proveedores", path: "/abastecimiento/pagos" },
         ],
       },
-      { text: "Pedidos", icon: <ShoppingBagOutlinedIcon fontSize="small" />, path: "/pedidos" },
       {
         text: "Ventas",
-        icon: <ReceiptLongOutlinedIcon fontSize="small" />,
+        icon: <PointOfSaleOutlinedIcon fontSize="small" />,
         path: "/ventas",
         children: [
           { text: "Punto de venta", path: "/ventas/pos" },
           { text: "Ventas", path: "/ventas" },
           { text: "Caja", path: "/ventas/caja" },
-          { text: "Cobranzas", path: "/ventas/cobranzas" },
           { text: "Presupuestos", path: "/ventas/presupuestos" },
+          { text: "Clientes", path: "/clientes" },
+          { text: "Cobranzas", path: "/ventas/cobranzas" },
           { text: "Ofertas", path: "/ventas/ofertas" },
           { text: "Configuración", path: "/ventas/configuracion" },
         ],
       },
-    ],
-  },
-  {
-    title: "OPERACIONES",
-    items: [
       {
-        text: "Inventario",
+        text: "Almacén",
         icon: <WarehouseOutlinedIcon fontSize="small" />,
         path: "/inventario",
         children: [
-          { text: "Stock", path: "/inventario" },
-          { text: "Movimientos", path: "/inventario/movimientos" },
-          { text: "Ajustes", path: "/inventario/ajustes" },
+          { text: "Existencias", path: "/inventario" },
+          { text: "Control de stock", path: "/inventario/fisico" },
+          { text: "Operaciones", path: "/inventario/movimientos" },
+          // Fraccionamiento e Incidencias son pestañas de la misma pantalla.
+          { text: "Fraccionamiento", path: "/inventario/ajustes" },
+          { text: "Incidencias", path: "/inventario/ajustes" },
           { text: "Transferencias", path: "/inventario/transferencias" },
-          { text: "Inventario físico", path: "/inventario/fisico" },
-          { text: "Sucursales y Depósitos", path: "/inventario/sucursales" },
         ],
       },
       {
-        text: "Abastecimiento",
-        icon: <LocalShippingOutlinedIcon fontSize="small" />,
-        path: "/abastecimiento",
+        text: "Gerencia",
+        icon: <BusinessCenterOutlinedIcon fontSize="small" />,
+        path: "/finanzas/rentabilidad",
         children: [
-          { text: "Proveedores", path: "/abastecimiento/proveedores" },
-          { text: "Compras", path: "/abastecimiento/compras" },
-          { text: "Pagos a proveedores", path: "/abastecimiento/pagos" },
-          { text: "Pedidos", path: "/abastecimiento/pedidos" },
-          { text: "Vencimientos y echeqs", path: "/abastecimiento/vencimientos" },
-          { text: "Estados de cuenta", path: "/abastecimiento/cuentas" },
-          { text: "Reposición", path: "/abastecimiento/reposicion" },
-        ],
-      },
-      {
-        text: "Logística",
-        icon: <RouteOutlinedIcon fontSize="small" />,
-        path: "/logistica",
-        children: [
-          { text: "Envíos", path: "/logistica" },
-          { text: "Transportistas", path: "/logistica/transportistas" },
-          { text: "Zonas", path: "/logistica/zonas" },
-          { text: "Tarifas", path: "/logistica/tarifas" },
-          { text: "Incidencias", path: "/logistica/incidencias" },
-        ],
-      },
-    ],
-  },
-  {
-    title: "FINANZAS",
-    items: [
-      {
-        text: "Finanzas",
-        icon: <AccountBalanceWalletOutlinedIcon fontSize="small" />,
-        path: "/finanzas",
-        children: [
-          { text: "Resumen", path: "/finanzas" },
-          { text: "Rentabilidad", path: "/finanzas/rentabilidad" },
-          { text: "Gastos", path: "/finanzas/gastos" },
-          { text: "Comisiones", path: "/finanzas/comisiones" },
-          { text: "Reembolsos", path: "/finanzas/reembolsos" },
-        ],
-      },
-      {
-        text: "Facturación",
-        icon: <ReceiptOutlinedIcon fontSize="small" />,
-        path: "/facturacion",
-        children: [
-          { text: "Comprobantes", path: "/facturacion" },
-          { text: "Impuestos", path: "/facturacion/impuestos" },
-        ],
-      },
-    ],
-  },
-  {
-    title: "MARKETING",
-    items: [
-      {
-        text: "Marketing",
-        icon: <CampaignOutlinedIcon fontSize="small" />,
-        path: "/marketing",
-        children: [
-          { text: "Resumen", path: "/marketing" },
-          { text: "Campañas", path: "/marketing/campanas" },
-          { text: "Audiencias", path: "/marketing/audiencias" },
-          { text: "Promociones", path: "/marketing/promociones" },
-          { text: "Cupones", path: "/marketing/cupones" },
-          { text: "Comunicación", path: "/marketing/comunicacion" },
-          { text: "Carritos abandonados", path: "/marketing/carritos" },
-          { text: "Fidelización", path: "/marketing/fidelizacion" },
-        ],
-      },
-    ],
-  },
-  {
-    title: "TIENDA",
-    items: [
-      {
-        text: "Tienda",
-        icon: <StorefrontOutlinedIcon fontSize="small" />,
-        path: "/tienda",
-        children: [
-          { text: "Resumen", path: "/tienda" },
-          { text: "Páginas", path: "/tienda/paginas" },
-          { text: "Colecciones", path: "/tienda/colecciones" },
-          { text: "Banners", path: "/tienda/banners" },
-          { text: "Blog", path: "/tienda/blog" },
-          { text: "Menús", path: "/tienda/menus" },
-          { text: "Contenido", path: "/tienda/contenido" },
-          { text: "Apariencia", path: "/tienda/apariencia" },
-        ],
-      },
-    ],
-  },
-  {
-    title: "AUTOMATIZACIÓN",
-    items: [
-      {
-        text: "Automatizaciones",
-        icon: <AutoModeOutlinedIcon fontSize="small" />,
-        path: "/automatizaciones",
-        children: [
-          { text: "Reglas", path: "/automatizaciones" },
-          { text: "Historial de ejecuciones", path: "/automatizaciones/historial" },
-          { text: "Bandeja de eventos", path: "/automatizaciones/eventos" },
-          { text: "Aprobaciones", path: "/automatizaciones/aprobaciones" },
-        ],
-      },
-    ],
-  },
-  {
-    title: "ANÁLISIS",
-    items: [
-      {
-        text: "Analytics",
-        icon: <QueryStatsOutlinedIcon fontSize="small" />,
-        path: "/analytics",
-        children: [
-          { text: "Resumen ejecutivo", path: "/analytics" },
-          { text: "Diccionario de métricas", path: "/analytics/metricas" },
-          { text: "Explorador", path: "/analytics/explorador" },
-          { text: "Cohortes y retención", path: "/analytics/cohortes" },
-          { text: "Reportes", path: "/analytics/reportes" },
-          { text: "Dashboards", path: "/analytics/dashboards" },
-          { text: "Objetivos y alertas", path: "/analytics/objetivos" },
-        ],
-      },
-    ],
-  },
-  {
-    title: "ORGANIZACIÓN",
-    items: [
-      { text: "Usuarios", icon: <PeopleAltOutlinedIcon fontSize="small" />, path: "/seguridad/usuarios" },
-    ],
-  },
-  {
-    title: "SISTEMA",
-    items: [
-      {
-        text: "Seguridad",
-        icon: <ShieldOutlinedIcon fontSize="small" />,
-        submenu: [
-          { text: "Panel", path: "/seguridad" },
-          { text: "Usuarios", path: "/seguridad/usuarios" },
+          { text: "Usuarios y roles", path: "/seguridad/usuarios" },
           { text: "Roles y permisos", path: "/seguridad/roles" },
+          { text: "Rentabilidad", path: "/finanzas/rentabilidad" },
           { text: "Auditoría", path: "/seguridad/auditoria" },
-          { text: "Aprobaciones", path: "/seguridad/aprobaciones" },
           { text: "Actividad", path: "/seguridad/actividad" },
         ],
       },
-      { text: "Integraciones", icon: <HubOutlinedIcon fontSize="small" />, path: "/integraciones" },
-      { text: "Ajustes", icon: <SettingsOutlinedIcon fontSize="small" />, path: "/configuracion", disabled: true },
+      {
+        text: "Sistema",
+        icon: <SettingsSuggestOutlinedIcon fontSize="small" />,
+        path: "/inventario/sucursales",
+        children: [
+          // Empresa (sucursales, punto de venta de ARCA) y Este equipo
+          // (terminales) del CRM: una sola pantalla acá.
+          { text: "Sucursales y equipos", path: "/inventario/sucursales" },
+        ],
+      },
+      {
+        text: "Gastos",
+        icon: <RequestQuoteOutlinedIcon fontSize="small" />,
+        path: "/finanzas/gastos",
+        children: [
+          { text: "Gastos", path: "/finanzas/gastos" },
+          { text: "Cuentas a pagar", path: "/finanzas/gastos?tab=pagar" },
+          { text: "Gastos fijos", path: "/finanzas/gastos?tab=fijos" },
+          { text: "Rubros", path: "/finanzas/gastos?tab=rubros" },
+          { text: "Resumen", path: "/finanzas/gastos?tab=resumen" },
+        ],
+      },
     ],
   },
 ];

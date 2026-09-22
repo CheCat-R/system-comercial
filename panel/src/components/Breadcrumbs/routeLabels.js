@@ -59,7 +59,13 @@ const NAV_NAMES = (() => {
   return out;
 })();
 
-/** El nombre del módulo, para el primer segmento de la ruta. */
+/**
+ * El nombre del módulo, para el primer segmento de la ruta — GLOBAL y por lo
+ * tanto ambiguo cuando dos módulos comparten prefijo (p. ej. `/abastecimiento`
+ * es de Compras en una rama y de Proveedores en otra: acá gana el último que
+ * se declaró). Es solo el último recurso: `AppBreadcrumbs` primero intenta
+ * `fallbackParent`, el padre del destino EXACTO de la URL completa.
+ */
 const MODULE_NAMES = Object.fromEntries(
   NAV_DESTINATIONS.filter((d) => d.parent).map((d) => [d.path.split("/")[1], d.parent])
 );
@@ -70,10 +76,14 @@ const isId = (value) =>
 /**
  * @param {string} value  el segmento
  * @param {string} path   la ruta acumulada hasta ese segmento
+ * @param {string} [fallbackParent]  el padre del destino EXACTO de la URL
+ *   completa (si el menú lo conoce), para el prefijo compartido por dos
+ *   módulos — ver el comentario sobre `fallbackParent` en AppBreadcrumbs.
  */
-export const labelFor = (value, path) =>
+export const labelFor = (value, path, fallbackParent) =>
   (path && NAV_BY_PATH[path])
   || EXTRA_NAMES[value]
+  || fallbackParent
   || MODULE_NAMES[value]
   || NAV_NAMES[value]
   || (isId(value) ? null : value.charAt(0).toUpperCase() + value.slice(1));
