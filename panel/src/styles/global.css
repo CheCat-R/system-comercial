@@ -51,3 +51,52 @@ body {
 table {
   font-variant-numeric: tabular-nums;
 }
+
+/* --------------------------------------------------------------------------
+   Controles nativos sin clase propia.
+   reset.css solo hereda color/fuente — sin fondo ni borde propios, un
+   <input>/<select> crudo (filtros de fecha, tipo, etc. en varias pantallas)
+   cae en el cromado nativo del navegador: una caja gris clara fija que no
+   sigue el tema y queda casi ilegible en modo oscuro. Se excluyen los
+   controles de MUI (siempre llevan una clase `Mui*`): esos ya traen su
+   propio estilo y esto no debe pisarlo.
+   -------------------------------------------------------------------------- */
+input:not([class*='Mui']):not([type='checkbox']):not([type='radio']),
+select:not([class*='Mui']),
+textarea:not([class*='Mui']) {
+  padding: 8px 12px;
+  border: 1px solid var(--crm-color-border);
+  border-radius: var(--crm-radius-sm);
+  background: var(--crm-color-surface);
+  color: var(--crm-color-text);
+  font-size: var(--crm-font-size-sm);
+  font-family: inherit;
+}
+
+input:not([class*='Mui']):focus,
+select:not([class*='Mui']):focus,
+textarea:not([class*='Mui']):focus {
+  outline: none;
+  border-color: var(--crm-color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--crm-color-primary) 22%, transparent);
+}
+
+input:not([class*='Mui']):disabled,
+select:not([class*='Mui']):disabled,
+textarea:not([class*='Mui']):disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+input[type='checkbox']:not([class*='Mui']),
+input[type='radio']:not([class*='Mui']) {
+  accent-color: var(--crm-color-primary);
+}
+
+/* El ícono nativo del selector de fecha/hora es negro fijo (no sigue
+   `color`): invisible sobre el fondo oscuro si no se invierte. */
+[data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator,
+[data-theme='dark'] input[type='time']::-webkit-calendar-picker-indicator,
+[data-theme='dark'] input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
