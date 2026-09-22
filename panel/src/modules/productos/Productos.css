@@ -65,6 +65,17 @@
   font-weight: var(--weight-semibold);
 }
 
+/* El fraccionado: fila propia debajo de su producto madre, sin miniatura y
+   con la etiqueta un escalón más liviana — se nota que cuelga de la de arriba. */
+.producto-cell--fraccionado {
+  padding-left: calc(36px + var(--space-3));
+}
+
+.producto-cell--fraccionado .producto-cell__name {
+  font-weight: var(--weight-medium, 500) !important;
+  font-size: var(--text-sm) !important;
+}
+
 @media (max-width: 640px) {
   .table-toolbar__search {
     max-width: none;

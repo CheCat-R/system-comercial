@@ -33,7 +33,7 @@ import { useToast } from "../../components/Toast/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import useVistaGuardada from "../../hooks/useVistaGuardada";
 import { QK } from "../../app/api/queryClient";
-import { productosApi, money, num, ESTADOS_PRODUCTO, IVAS } from "./api/productosApi";
+import { productosApi, money, num, fmtTam, ESTADOS_PRODUCTO, IVAS } from "./api/productosApi";
 import "./Productos.css";
 
 /** El BOM hace que Excel abra el CSV en UTF-8 sin romper los acentos. */
@@ -57,14 +57,16 @@ const Productos = () => {
   const puedeEditar = check("compras.productos");
   const veCostos = can("precios", "compras.productos", "compras.proveedores");
 
-  const { filtros, setFiltros } = useVistaGuardada("productos", { search: "", categoria: "", marca: "", estado: "activo", tipo: "" });
-  const { search, categoria, marca, estado, tipo } = filtros;
+  // "vigentes" (activo + discontinuado, sin lo archivado) es el default: lo que
+  // está en juego. "" es TODOS, incluso lo archivado — el camino para reactivar uno.
+  const { filtros, setFiltros } = useVistaGuardada("productos", { search: "", categoria: "", marca: "", proveedor: "", estado: "vigentes", tipo: "" });
+  const { search, categoria, marca, proveedor, estado, tipo } = filtros;
   const [alta, setAlta] = useState(null);
 
   const productos = useQuery({ queryKey: QK.productos, queryFn: productosApi.listar });
   const catalogos = useQuery({ queryKey: QK.catalogos, queryFn: productosApi.catalogos });
   const stock = useQuery({ queryKey: QK.stock, queryFn: productosApi.stock });
-  const proveedores = useQuery({ queryKey: QK.proveedores, queryFn: () => productosApi.proveedores("mercaderia"), enabled: Boolean(alta) });
+  const proveedores = useQuery({ queryKey: QK.proveedores, queryFn: () => productosApi.proveedores("mercaderia") });
 
   const crear = useMutation({
     mutationFn: (body) => productosApi.crear(body),
@@ -77,27 +79,52 @@ const Productos = () => {
     onError: (err) => showToast(err?.message || "No se pudo crear.", "error"),
   });
 
-  /** Disponible total por producto (todas las sucursales, sólo el suelto). */
-  const disponible = useMemo(() => {
-    const m = {};
+  /** Disponible total (todas las sucursales), por producto y por presentación. */
+  const { disponible, disponiblePres } = useMemo(() => {
+    const m = {}; const mp = {};
     (stock.data || []).forEach((s) => {
-      if (s.estado !== "disponible" || s.presentacionId) return;
-      m[s.productoId] = (m[s.productoId] || 0) + Number(s.cantidad);
+      if (s.estado !== "disponible") return;
+      if (s.presentacionId) mp[s.presentacionId] = (mp[s.presentacionId] || 0) + Number(s.cantidad);
+      else m[s.productoId] = (m[s.productoId] || 0) + Number(s.cantidad);
     });
-    return m;
+    return { disponible: m, disponiblePres: mp };
   }, [stock.data]);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const provId = proveedor ? Number(proveedor) : null;
     return (productos.data || []).filter((p) => {
-      if (estado && p.estado !== estado) return false;
+      const est = p.estado || "activo";
+      if (estado === "vigentes" && est === "archivado") return false;
+      if (estado !== "vigentes" && estado && est !== estado) return false;
       if (tipo && p.tipo !== tipo) return false;
       if (categoria && String(p.categoriaId) !== String(categoria)) return false;
       if (marca && String(p.marcaId) !== String(marca)) return false;
-      if (q && ![p.nombre, p.codigoPropio, p.codigoBarras, p.marca].some((v) => String(v || "").toLowerCase().includes(q))) return false;
-      return true;
+      if (provId && !(p.formatosCompra || []).some((f) => f.proveedorId === provId)) return false;
+      if (!q) return true;
+      return [p.nombre, p.codigoPropio, p.codigoBarras, p.marca].some((v) => String(v || "").toLowerCase().includes(q))
+        // También por el código de barras de un fraccionado: cada tamaño lleva
+        // etiqueta propia y es lo que la balanza o la caja escanean.
+        || (p.presentaciones || []).some((pr) => pr.codigoBarras && pr.codigoBarras.toLowerCase().includes(q));
     }).map((p) => ({ ...p, disponible: disponible[p.id] || 0 }));
-  }, [productos.data, search, estado, tipo, categoria, marca, disponible]);
+  }, [productos.data, search, estado, tipo, categoria, marca, proveedor, disponible]);
+
+  /*
+   * CADA FRACCIONADO ES SU PROPIA FILA, debajo de su madre: se busca y se abre
+   * como un producto más — lo que se escanea en el mostrador existe en la tabla.
+   */
+  const filasLista = useMemo(() => {
+    const out = [];
+    for (const p of rows) {
+      out.push({ id: `p-${p.id}`, kind: "producto", p });
+      if (p.tipo === "granel") {
+        for (const pr of (p.presentaciones || [])) {
+          out.push({ id: `f-${pr.id}`, kind: "fraccionado", p, pr, disponible: disponiblePres[pr.id] || 0 });
+        }
+      }
+    }
+    return out;
+  }, [rows, disponiblePres]);
 
   const resumen = useMemo(() => {
     const todos = productos.data || [];
@@ -120,27 +147,58 @@ const Productos = () => {
   const columns = [
     {
       field: "nombre", headerName: "Producto", width: "34%",
-      renderCell: (p) => (
+      renderCell: (row) => (row.kind === "fraccionado" ? (
+        <Box className="producto-cell producto-cell--fraccionado">
+          <Typography className="producto-cell__name">
+            <span className="text-tertiary">↳ </span>{row.p.nombre} · {fmtTam(row.pr.tamKg)}
+          </Typography>
+          <Typography className="producto-cell__sku">{row.pr.codigoBarras || "sin código"}</Typography>
+        </Box>
+      ) : (
         <Box className="producto-cell">
-          <Avatar className="producto-cell__thumb" variant="rounded">{(p.nombre || "?")[0]}</Avatar>
+          <Avatar className="producto-cell__thumb" variant="rounded">{(row.p.nombre || "?")[0]}</Avatar>
           <Box>
-            <Typography className="producto-cell__name">{p.nombre}</Typography>
-            <Typography className="producto-cell__sku">{p.codigoPropio}{p.marca ? ` · ${p.marca}` : ""}{p.codigoBarras ? ` · ${p.codigoBarras}` : ""}</Typography>
+            <Typography className="producto-cell__name">{row.p.nombre}</Typography>
+            <Typography className="producto-cell__sku">{row.p.codigoPropio}{row.p.marca ? ` · ${row.p.marca}` : ""}{row.p.codigoBarras ? ` · ${row.p.codigoBarras}` : ""}</Typography>
           </Box>
         </Box>
-      ),
+      )),
     },
-    { field: "tipo", headerName: "Tipo", renderCell: (p) => <StatusBadge tone={p.tipo === "granel" ? "info" : "neutral"} label={p.tipo === "granel" ? "Granel" : "Entero"} showDot={false} /> },
-    { field: "categoria", headerName: "Categoría", renderCell: (p) => <span className="text-tertiary">{p.categoria || "—"}</span> },
-    ...(veCostos ? [{ field: "costoNeto", headerName: "Costo neto", align: "right", renderCell: (p) => <span className="nowrap">{money(p.costoNeto)}<span className="text-tertiary">/{p.tipo === "granel" ? "kg" : "u"}</span></span> }] : []),
+    {
+      field: "tipo", headerName: "Tipo",
+      renderCell: (row) => (row.kind === "fraccionado"
+        ? <StatusBadge tone="info" label="Fraccionado" showDot={false} />
+        : <StatusBadge tone={row.p.tipo === "granel" ? "info" : "neutral"} label={row.p.tipo === "granel" ? "Granel" : "Entero"} showDot={false} />),
+    },
+    { field: "categoria", headerName: "Categoría", renderCell: (row) => <span className="text-tertiary">{row.p.categoria || "—"}</span> },
+    ...(veCostos ? [{
+      field: "costoNeto", headerName: "Costo neto", align: "right",
+      renderCell: (row) => (row.kind === "fraccionado"
+        ? <span className="nowrap">{money(row.pr.costoNeto)}<span className="text-tertiary">/paq.</span></span>
+        : <span className="nowrap">{money(row.p.costoNeto)}<span className="text-tertiary">/{row.p.tipo === "granel" ? "kg" : "u"}</span></span>),
+    }] : []),
     {
       field: "precioFinal", headerName: "Precio mostrador", align: "right",
-      renderCell: (p) => (p.precioFinal == null
-        ? <Tooltip title="Sin formato de venta: no tiene precio y el POS lo bloquea."><span className="producto-cell__stock--zero">sin precio</span></Tooltip>
-        : <span className="producto-cell__price">{money(p.precioFinal)}</span>),
+      renderCell: (row) => {
+        const precio = row.kind === "fraccionado" ? row.pr.precioFinal : row.p.precioFinal;
+        return precio == null
+          ? <Tooltip title="Sin formato de venta: no tiene precio y el POS lo bloquea."><span className="producto-cell__stock--zero">sin precio</span></Tooltip>
+          : <span className="producto-cell__price">{money(precio)}</span>;
+      },
     },
-    { field: "disponible", headerName: "Disponible", align: "right", renderCell: (p) => <span className={p.disponible <= 0 ? "producto-cell__stock--zero" : "nowrap"}>{num(p.disponible)} {p.tipo === "granel" ? "kg" : "u"}</span> },
-    { field: "estado", headerName: "Estado", renderCell: (p) => <StatusBadge tone={ESTADOS_PRODUCTO[p.estado]?.tone} label={ESTADOS_PRODUCTO[p.estado]?.label || p.estado} /> },
+    {
+      field: "disponible", headerName: "Disponible", align: "right",
+      renderCell: (row) => {
+        const disp = row.kind === "fraccionado" ? row.disponible : row.p.disponible;
+        const unidad = row.kind === "fraccionado" ? "paq." : (row.p.tipo === "granel" ? "kg" : "u");
+        return <span className={disp <= 0 ? "producto-cell__stock--zero" : "nowrap"}>{num(disp)} {unidad}</span>;
+      },
+    },
+    {
+      field: "estado", headerName: "Estado",
+      renderCell: (row) => (row.kind === "fraccionado" ? null
+        : <StatusBadge tone={ESTADOS_PRODUCTO[row.p.estado]?.tone} label={ESTADOS_PRODUCTO[row.p.estado]?.label || row.p.estado} />),
+    },
   ];
 
   return (
@@ -173,9 +231,10 @@ const Productos = () => {
           slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
         />
         <Box className="table-toolbar__filters">
-          <TextField select size="small" label="Estado" value={estado} onChange={(e) => setFiltros({ estado: e.target.value })} sx={{ minWidth: 150 }}>
-            <MenuItem value="">Todos</MenuItem>
-            {Object.entries(ESTADOS_PRODUCTO).map(([k, v]) => <MenuItem key={k} value={k}>{v.label}</MenuItem>)}
+          <TextField select size="small" label="Estado" value={estado} onChange={(e) => setFiltros({ estado: e.target.value })} sx={{ minWidth: 190 }}>
+            <MenuItem value="vigentes">En juego (activos + discontinuados)</MenuItem>
+            {Object.entries(ESTADOS_PRODUCTO).map(([k, v]) => <MenuItem key={k} value={k}>Solo {v.label.toLowerCase()}</MenuItem>)}
+            <MenuItem value="">Todos, incluso archivados</MenuItem>
           </TextField>
           <TextField select size="small" label="Tipo" value={tipo} onChange={(e) => setFiltros({ tipo: e.target.value })} sx={{ minWidth: 130 }}>
             <MenuItem value="">Todos</MenuItem>
@@ -190,15 +249,19 @@ const Productos = () => {
             <MenuItem value="">Todas</MenuItem>
             {(catalogos.data?.marcas || []).map((m) => <MenuItem key={m.id} value={m.id}>{m.nombre}</MenuItem>)}
           </TextField>
+          <TextField select size="small" label="Proveedor" value={proveedor} onChange={(e) => setFiltros({ proveedor: e.target.value })} sx={{ minWidth: 190 }}>
+            <MenuItem value="">Todos</MenuItem>
+            {(proveedores.data || []).map((p) => <MenuItem key={p.id} value={p.id}>{p.nombre}</MenuItem>)}
+          </TextField>
         </Box>
       </Box>
 
       <DataTable
         columns={columns}
-        data={rows}
+        data={filasLista}
         loading={productos.isLoading}
         emptyMessage={productos.isError ? "No se pudo cargar el catálogo." : "Ningún producto coincide."}
-        onRowClick={(p) => navigate(`/productos/${p.id}`)}
+        onRowClick={(row) => navigate(`/productos/${row.p.id}`)}
         pagination={{ pageSize: 25 }}
       />
 
