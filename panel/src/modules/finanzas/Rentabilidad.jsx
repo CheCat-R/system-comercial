@@ -1,34 +1,58 @@
-import { useState } from "react";
+/**
+ * RENTABILIDAD — el margen de verdad. Separa lo que PARECE que se gana de lo
+ * que se gana: la diferencia es el IVA que el negocio absorbe por la
+ * mercadería comprada sin factura — al facturar la venta ese IVA se paga
+ * igual, y no hay crédito que lo compense.
+ *
+ * Todo el margen sale del costo CONGELADO en cada renglón al vender: los
+ * anteriores a esa fecha no lo tienen y acá no se inventa, se avisa cuántos
+ * quedaron afuera. La tabla agrupa por producto/marca/categoría/proveedor con
+ * el MISMO dato — no son cuatro reportes, es uno con cuatro lentes.
+ */
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
+import TextField from "@mui/material/TextField";
+import Alert from "@mui/material/Alert";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Checkbox from "@mui/material/Checkbox";
+import Typography from "@mui/material/Typography";
 
 import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
 import SavingsOutlinedIcon from "@mui/icons-material/SavingsOutlined";
-import PercentOutlinedIcon from "@mui/icons-material/PercentOutlined";
-import ShoppingBagOutlinedIcon from "@mui/icons-material/ShoppingBagOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import WarehouseOutlinedIcon from "@mui/icons-material/WarehouseOutlined";
+import AccountBalanceOutlinedIcon from "@mui/icons-material/AccountBalanceOutlined";
+import BalanceOutlinedIcon from "@mui/icons-material/BalanceOutlined";
 
 import PageHeader from "../../components/PageHeader/PageHeader";
 import StatCard from "../../components/Cards/StatCard/StatCard";
 import DataTable from "../../components/DataTable/DataTable";
-import PeriodPicker from "./components/PeriodPicker";
-import MarginBreakdown from "./components/MarginBreakdown";
-import { DIMENSIONS, getAvailableMonths, getProfitabilityBy, getPnlSummary } from "./api/financeApi";
-import { money, percent, formatDate } from "./lib/time";
+import { gerenciaApi, LENTES, agruparPorLente } from "./api/gerenciaApi";
+import { money, num } from "../abastecimiento/api/comprasApi";
 
-const marginCell = (v) => (
+const hoyISO = () => new Date().toISOString().slice(0, 10);
+const inicioMesISO = () => {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+};
+
+const margenCell = (v) => (v == null ? <span className="text-tertiary">—</span> : (
   <span className="mono" style={{ fontWeight: 600, color: v < 0 ? "var(--danger-text)" : "inherit" }}>{money(v)}</span>
-);
-const pctCell = (v) => <span className="mono" style={{ color: v < 0 ? "var(--danger-text)" : "var(--text-secondary)" }}>{percent(v)}</span>;
+));
 
 const Rentabilidad = () => {
   const [params, setParams] = useSearchParams();
-  const months = getAvailableMonths();
-  const month = params.get("period") || "";
-  const dimension = params.get("dim") || "pedido";
-  const [selected, setSelected] = useState(null);
+  const desde = params.get("desde") || inicioMesISO();
+  const hasta = params.get("hasta") || hoyISO();
+  const lente = params.get("lente") || "producto";
+  const [soloSinFactura, setSoloSinFactura] = useState(false);
 
   const setParam = (patch) => {
     const next = new URLSearchParams(params);
@@ -36,91 +60,140 @@ const Rentabilidad = () => {
     setParams(next);
   };
 
-  const summary = getPnlSummary({ month: month || undefined });
-  const rows = getProfitabilityBy(dimension, { month: month || undefined }).map((r) => ({ ...r, id: r.id || r.key }));
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["gerencia", "rentabilidad", desde, hasta],
+    queryFn: () => gerenciaApi.rentabilidad({ desde, hasta }),
+  });
 
-  const kpis = [
-    { title: "Ingresos netos", value: money(summary.revenueNet), icon: <PaymentsOutlinedIcon />, hint: `${summary.orders} pedidos concretados` },
-    { title: "Margen de contribución", value: money(summary.contributionMargin), icon: <SavingsOutlinedIcon /> },
-    { title: "Margen %", value: percent(summary.contributionMarginPct), icon: <PercentOutlinedIcon /> },
-    { title: "Ticket promedio", value: money(summary.avgTicket), icon: <ShoppingBagOutlinedIcon /> },
+  const filas = useMemo(() => {
+    const base = (data?.porProducto ?? []).filter((x) => !soloSinFactura || x.sinFactura);
+    return agruparPorLente(base, lente);
+  }, [data, lente, soloSinFactura]);
+
+  const t = data?.totales;
+  const f = data?.fiscal;
+  const sf = data?.sinFactura;
+  const stock = data?.stockSinFactura;
+  const cob = data?.cobertura;
+  const sinCosto = cob ? cob.renglones - cob.conCosto : 0;
+
+  const columns = [
+    { field: "nombre", headerName: LENTES[lente].label, renderCell: (r) => (
+      <span>
+        {r.nombre}
+        {lente === "producto" && r.sinFactura && (
+          <span className="text-tertiary" style={{ fontSize: "var(--text-xs)" }}> · sin factura{r.porcAhora ? ` (hoy ${num(r.porcAhora)}%)` : ""}</span>
+        )}
+      </span>
+    ) },
+    ...(lente !== "producto" ? [{ field: "productos", headerName: "Prod.", align: "right", renderCell: (r) => <span className="mono">{r.productos}</span> }] : []),
+    { field: "unidades", headerName: "Unid.", align: "right", renderCell: (r) => <span className="mono">{num(r.unidades)}</span> },
+    { field: "ventaNeta", headerName: "Venta neta", align: "right", renderCell: (r) => <span className="mono">{money(r.ventaNeta)}</span> },
+    { field: "costo", headerName: "Costo real", align: "right", renderCell: (r) => <span className="mono text-tertiary">{r.costo != null ? money(r.costo) : "—"}</span> },
+    { field: "margenReal", headerName: "Margen real", align: "right", renderCell: (r) => margenCell(r.margenReal) },
+    { field: "margenRealPct", headerName: "%", align: "right", renderCell: (r) => <span className="mono text-tertiary">{r.margenRealPct != null ? `${num(r.margenRealPct)}%` : ""}</span> },
+    { field: "ivaAbsorbido", headerName: "IVA absorbido", align: "right", renderCell: (r) => <span className="mono text-tertiary">{r.ivaAbsorbido > 0 ? money(r.ivaAbsorbido) : "—"}</span> },
   ];
 
-  const orderColumns = [
-    {
-      field: "orderId", headerName: "Pedido", renderCell: (r) => (
-        <Box sx={{ display: "flex", flexDirection: "column" }}>
-          <span className="mono" style={{ fontWeight: 600 }}>#{r.orderId}</span>
-          <span className="text-tertiary" style={{ fontSize: "var(--text-xs)" }}>{r.customerName}</span>
-        </Box>
-      ),
-    },
-    { field: "channel", headerName: "Canal", renderCell: (r) => <span className="text-tertiary nowrap">{r.channel}</span> },
-    { field: "date", headerName: "Fecha", renderCell: (r) => <span className="text-tertiary nowrap">{formatDate(r.date)}</span> },
-    { field: "revenueNet", headerName: "Ingreso neto", align: "right", renderCell: (r) => <span className="mono">{money(r.revenueNet)}</span> },
-    { field: "cogs", headerName: "COGS", align: "right", renderCell: (r) => <span className="mono text-tertiary">{money(-r.cogs)}</span> },
-    { field: "shippingCost", headerName: "Envío", align: "right", renderCell: (r) => <span className="mono text-tertiary">{money(-r.shippingCost)}</span> },
-    { field: "gatewayFee", headerName: "Comisiones", align: "right", renderCell: (r) => <span className="mono text-tertiary">{money(-r.gatewayFee)}</span> },
-    { field: "contributionMargin", headerName: "Margen", align: "right", renderCell: (r) => marginCell(r.contributionMargin) },
-    { field: "marginPct", headerName: "%", align: "right", renderCell: (r) => pctCell(r.marginPct) },
+  const columnsProveedor = [
+    { field: "nombre", headerName: "Proveedor" },
+    { field: "facturadoNeto", headerName: "Facturado (neto)", align: "right", renderCell: (r) => <span className="mono">{money(r.facturadoNeto)}</span> },
+    { field: "liquidado", headerName: "Liquidación", align: "right", renderCell: (r) => <span className="mono">{money(r.liquidado)}</span> },
+    { field: "porcReal", headerName: "% real", align: "right", renderCell: (r) => <span className="mono">{num(r.porcReal)}%</span> },
+    { field: "porcDeclarado", headerName: "% declarado", align: "right", renderCell: (r) => <span className="mono">{num(r.porcDeclarado)}%</span> },
+    { field: "desvio", headerName: "", renderCell: (r) => r.desvio && <span style={{ color: "var(--danger-text)", fontWeight: 700 }}>⚠ revisar el % de sus formatos</span> },
   ];
-
-  const productColumns = [
-    { field: "label", headerName: dimension === "categoria" ? "Categoría" : "Producto" },
-    { field: "units", headerName: "Unidades", align: "right", renderCell: (r) => <span className="mono">{r.units}</span> },
-    { field: "revenueNet", headerName: "Ingreso", align: "right", renderCell: (r) => <span className="mono">{money(r.revenueNet)}</span> },
-    { field: "cogs", headerName: "COGS", align: "right", renderCell: (r) => <span className="mono text-tertiary">{money(-r.cogs)}</span> },
-    { field: "allocatedCost", headerName: "Costo asignado", align: "right", renderCell: (r) => <span className="mono text-tertiary">{money(-r.allocatedCost)}</span> },
-    { field: "contributionMargin", headerName: "Margen", align: "right", renderCell: (r) => marginCell(r.contributionMargin) },
-    { field: "marginPct", headerName: "%", align: "right", renderCell: (r) => pctCell(r.marginPct) },
-  ];
-
-  const groupColumns = [
-    { field: "label", headerName: DIMENSIONS.find((d) => d.key === dimension)?.label.replace("Por ", "") || "Grupo" },
-    { field: "orders", headerName: "Pedidos", align: "right", renderCell: (r) => <span className="mono">{r.orders}</span> },
-    { field: "revenueNet", headerName: "Ingreso neto", align: "right", renderCell: (r) => <span className="mono">{money(r.revenueNet)}</span> },
-    { field: "contributionMargin", headerName: "Margen", align: "right", renderCell: (r) => marginCell(r.contributionMargin) },
-    { field: "marginPct", headerName: "%", align: "right", renderCell: (r) => pctCell(r.marginPct) },
-    { field: "avgTicket", headerName: "Ticket prom.", align: "right", renderCell: (r) => <span className="mono text-tertiary">{money(r.avgTicket)}</span> },
-  ];
-
-  const columns =
-    dimension === "pedido" ? orderColumns :
-    dimension === "producto" || dimension === "categoria" ? productColumns :
-    groupColumns;
 
   return (
     <Box className="page fade-in">
       <PageHeader
         title="Rentabilidad"
-        subtitle="P&L calculado en vivo — nada de esto se edita a mano."
-        actions={<PeriodPicker value={month} onChange={(v) => setParam({ period: v })} months={months} />}
+        subtitle="Margen real contra margen aparente: la diferencia es el IVA que el negocio absorbe por la mercadería sin factura. Todo sale del costo congelado en cada venta."
+        actions={(
+          <Box sx={{ display: "flex", gap: 1.5 }}>
+            <TextField size="small" type="date" label="Desde" value={desde} onChange={(e) => setParam({ desde: e.target.value })} slotProps={{ inputLabel: { shrink: true } }} />
+            <TextField size="small" type="date" label="Hasta" value={hasta} onChange={(e) => setParam({ hasta: e.target.value })} slotProps={{ inputLabel: { shrink: true } }} />
+          </Box>
+        )}
       />
 
-      <Grid container spacing={2.5}>
-        {kpis.map((k) => (
-          <Grid key={k.title} size={{ xs: 12, sm: 6, lg: 3 }}>
-            <StatCard {...k} />
+      {isError && (
+        <Alert severity="error">No se pudo cargar la rentabilidad: {error?.message || "error desconocido"}.</Alert>
+      )}
+
+      {data && (
+        <>
+          {sinCosto > 0 && (
+            <Alert severity="info">
+              <strong>{sinCosto}</strong> de {cob.renglones} renglones del período son anteriores al costo congelado y quedan <strong>fuera del margen</strong> (la venta sí se cuenta). A medida que se venda, este aviso desaparece solo.
+            </Alert>
+          )}
+
+          <Grid container spacing={2.5}>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+              <StatCard title="Venta neta" value={money(t.ventaNeta)} icon={<PaymentsOutlinedIcon />} hint="Sin IVA ni cargos extra. Anuladas afuera." />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+              <StatCard title="Margen real" value={money(t.margenReal)} icon={<SavingsOutlinedIcon />} hint={t.ventaCosteada > 0 ? `${num((t.margenReal / t.ventaCosteada) * 100)}% sobre la venta costeada` : "Sin renglones con costo"} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+              <StatCard title="Margen aparente" value={money(t.margenAparente)} icon={<VisibilityOutlinedIcon />} hint="El que se ve si solo se mira el markup." />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+              <StatCard title="IVA absorbido" value={money(t.ivaAbsorbido)} icon={<BalanceOutlinedIcon />} hint="La diferencia entre los dos márgenes: sale del bolsillo al facturar." />
+            </Grid>
           </Grid>
-        ))}
-      </Grid>
 
-      <ToggleButtonGroup
-        size="small" exclusive value={dimension}
-        onChange={(_, v) => v && setParam({ dim: v === "pedido" ? "" : v })}
-        sx={{ flexWrap: "wrap" }}
-      >
-        {DIMENSIONS.map((d) => <ToggleButton key={d.key} value={d.key}>{d.label}</ToggleButton>)}
-      </ToggleButtonGroup>
+          <Grid container spacing={2.5}>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+              <StatCard title="Venta sin factura" value={money(sf.ventaNeta)} icon={<ReceiptLongOutlinedIcon />} hint={`${sf.productos} producto(s) · ${num(sf.participacion)}% de la venta del período`} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+              <StatCard title="Stock sin factura hoy" value={money(stock.valorReal)} icon={<WarehouseOutlinedIcon />} hint={`${stock.productos} producto(s) · si se vende todo, se absorben ${money(stock.ivaAbsorber)} más`} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+              <StatCard title="IVA débito (ventas facturadas)" value={money(f.debitoVentas)} icon={<Inventory2OutlinedIcon />} hint={`${f.ventasFacturadas} factura(s) de venta en el período`} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+              <StatCard title="Crédito vs. débito" value={money(f.posicion)} icon={<AccountBalanceOutlinedIcon />} hint={`Crédito: ${money(f.creditoCompras)} compras + ${money(f.creditoGastos)} gastos. ${f.posicion > 0 ? "El crédito NO alcanza: esto queda por pagar." : "El crédito cubre el débito del período."}`} />
+            </Grid>
+          </Grid>
 
-      <DataTable
-        columns={columns}
-        data={rows}
-        onRowClick={dimension === "pedido" ? (r) => setSelected(r) : undefined}
-        emptyMessage="Sin ventas concretadas en este período."
-      />
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+            <ToggleButtonGroup size="small" exclusive value={lente} onChange={(_, v) => v && setParam({ lente: v === "producto" ? "" : v })}>
+              {Object.entries(LENTES).map(([k, v]) => <ToggleButton key={k} value={k}>{v.label}</ToggleButton>)}
+            </ToggleButtonGroup>
+            <FormControlLabel
+              sx={{ ml: "auto" }}
+              control={<Checkbox size="small" checked={soloSinFactura} onChange={(e) => setSoloSinFactura(e.target.checked)} />}
+              label="Solo mercadería sin factura"
+            />
+          </Box>
 
-      <MarginBreakdown row={selected} onClose={() => setSelected(null)} />
+          <DataTable
+            columns={columns}
+            data={filas}
+            emptyMessage={soloSinFactura ? "Nada vendido como sin factura en el período." : "Sin ventas en el período."}
+          />
+          {data.productosRecortados > 0 && (
+            <Typography variant="body2" className="text-tertiary">
+              La tabla muestra los 500 productos con más venta; quedaron {data.productosRecortados} afuera. Achicá el período para verlos.
+            </Typography>
+          )}
+
+          {data.porProveedor.length > 0 && (
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>Compras sin factura por proveedor</Typography>
+              <Typography variant="body2" className="text-tertiary" sx={{ mb: 1 }}>
+                Lo que cada proveedor facturó de verdad en el período contra el % declarado en su ficha. Si difieren en serio, el costo de sus productos está mal partido — y el precio también.
+              </Typography>
+              <DataTable columns={columnsProveedor} data={data.porProveedor.map((p) => ({ ...p, id: p.proveedorId }))} emptyMessage="Sin compras con liquidación en el período." />
+            </Box>
+          )}
+        </>
+      )}
+
+      {isLoading && !data && <Typography className="text-tertiary">Cargando el período…</Typography>}
     </Box>
   );
 };

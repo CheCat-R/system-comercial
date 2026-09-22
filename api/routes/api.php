@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\ConfiguracionController;
 use App\Http\Controllers\Api\ConteosController;
 use App\Http\Controllers\Api\FinanzasProveedorController;
 use App\Http\Controllers\Api\GastosController;
+use App\Http\Controllers\Api\GerenciaController;
 use App\Http\Controllers\Api\IncidenciasController;
 use App\Http\Controllers\Api\InventarioController;
 use App\Http\Controllers\Api\ListasController;
@@ -446,6 +447,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/revisado', [PedidosProveedorController::class, 'revisado']);
         Route::delete('/{id}', [PedidosProveedorController::class, 'borrar']);
     });
+
+    Route::get('/gerencia/rentabilidad', [GerenciaController::class, 'rentabilidad'])->middleware('permiso:gerencia.rentabilidad');
 
     /* ---------------- Transversal ---------------- */
 

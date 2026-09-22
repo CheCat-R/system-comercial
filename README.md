@@ -57,4 +57,16 @@ pago (cuotas), cartera de echeqs, estados de cuenta (mayor DEBE/HABER, antigüed
 conciliación) y el kanban de pedidos. Panel: Abastecimiento › Compras / Pagos / Pedidos /
 Vencimientos / Estados de cuenta y Finanzas › Gastos.
 
-Siguiente: **F4** el resto (marketing, tienda, analytics reales, lectura de facturas PDF).
+**Fase 4 (rentabilidad real) — lista.** Se descartaron del alcance la tienda, el marketing, la
+lectura de facturas PDF y todo el circuito de e-commerce (pedidos de carrito, logística de envíos,
+facturación atada a esos pedidos): el negocio es de mostrador/distribución, no de venta online.
+Lo que sí manda el CRM de referencia es Gerencia › Rentabilidad, y eso es lo que se construyó:
+margen real (venta neta − costo congelado en cada renglón de venta) contra margen aparente (+ el
+IVA que el negocio absorbe por mercadería sin factura), posición fiscal del período (débito de lo
+facturado contra crédito de compras y gastos), compras por proveedor con control de desvío entre
+el % de sin factura declarado y el real, y el valor del stock sin factura parado en depósito. Se
+agrupa por producto, marca, categoría o proveedor — un solo reporte, cuatro lentes. Panel:
+Finanzas › Rentabilidad. El resto de los módulos del template (Analytics genérico, Automatizaciones,
+Integraciones, Finanzas › Resumen/Comisiones/Reembolsos, Pedidos/Logística/Facturación de
+e-commerce, Marketing, Tienda) sin equivalente en el CRM quedan con datos de muestra y fuera de
+alcance salvo que el negocio los necesite más adelante.
