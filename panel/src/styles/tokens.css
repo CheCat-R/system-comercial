@@ -99,10 +99,19 @@
   --crm-color-error: var(--crm-color-danger);
   --crm-color-info: #2563eb;
 
-  /* Fondos claros y neutros — "premium sobrio", sin tinte de marca. */
-  --crm-color-bg: #f6f8fb;
+  /*
+   * Fondos claros y neutros — "premium sobrio", sin tinte de marca.
+   *
+   * ⭐ `bg` y `surface` portados de panel-dashboard eran #f6f8fb vs #ffffff:
+   * 9 puntos de diferencia en un canal de 255, invisible en la mayoría de
+   * los monitores — de ahí que las tarjetas parecieran flotar sobre nada.
+   * `bg` baja un escalón entero en la rampa de grises (gray-100) y
+   * `surface-2` baja otro (gray-200), así los tres fondos se distinguen a
+   * simple vista sin salirse de la escala neutra de la marca.
+   */
+  --crm-color-bg: #f1f5f9;
   --crm-color-surface: #ffffff;
-  --crm-color-surface-2: #f1f5f9;
+  --crm-color-surface-2: #e2e8f0;
 
   /* Navegación: rail oscuro y neutro (no un tono de marca) — el mismo
      criterio que panel-dashboard usa en su propio modo oscuro, así que sale
@@ -115,11 +124,17 @@
   --crm-color-text: #0f172a;
   --crm-color-text-secondary: #475569;
   --crm-color-text-muted: #64748b;
-  --crm-color-border: #e9edf2;
+  /* Un escalón más oscuro que el `border-subtle` portado (#e9edf2): ese
+     valor casi no se distinguía del blanco de la tarjeta que bordea. */
+  --crm-color-border: #dbe1e8;
 
-  --crm-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --crm-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
-  --crm-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12), 0 4px 8px rgba(15, 23, 42, 0.06);
+  /* Alpha más alto que el original portado (0.04-0.06): con `border` solo
+     la tarjeta ya se notaba poco; con las dos cosas débiles a la vez, nada
+     se despegaba de nada. Sigue siendo una sombra de verdad, no un glow: gris
+     neutro, sin color, difuminado, nunca un halo saturado alrededor del borde. */
+  --crm-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
+  --crm-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.12), 0 2px 4px rgba(15, 23, 42, 0.07);
+  --crm-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.16), 0 4px 8px rgba(15, 23, 42, 0.09);
 }
 
 /* -------------------------------------------------------------------------
