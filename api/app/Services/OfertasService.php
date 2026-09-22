@@ -180,9 +180,10 @@ class OfertasService
         $n = $this->normalizar($d);
 
         return DB::transaction(function () use ($id, $n) {
-            if (! DB::table('ofertas')->where('id', $id)->update($n['fila'])) {
+            if (! DB::table('ofertas')->where('id', $id)->exists()) {
                 throw new NotFoundHttpException('Oferta inexistente.');
             }
+            DB::table('ofertas')->where('id', $id)->update($n['fila']);
             $this->escribirHijas($id, $n['alcances'], $n['componentes']);
 
             return $this->una($id);

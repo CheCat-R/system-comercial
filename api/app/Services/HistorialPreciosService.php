@@ -61,6 +61,9 @@ class HistorialPreciosService
             $ultimo[$r->producto_id.':'.$r->lista_id] = (float) $r->precio;
         }
         $filas = [];
+        // Una sola fecha para todo el lote: `ultimoCambio()` agrupa por igualdad
+        // exacta de `fecha` para contar cuántos productos cambiaron en esta tanda.
+        $fecha = now();
         foreach ($actuales as $a) {
             $k = $a['productoId'].':'.$a['listaId'];
             $prev = $ultimo[$k] ?? null;
@@ -68,7 +71,7 @@ class HistorialPreciosService
                 continue;
             }
             $filas[] = [
-                'producto_id' => $a['productoId'], 'lista_id' => $a['listaId'], 'fecha' => now(),
+                'producto_id' => $a['productoId'], 'lista_id' => $a['listaId'], 'fecha' => $fecha,
                 'precio_anterior' => $prev, 'precio' => Pricing::money($a['precio']),
                 'origen' => $prev === null ? 'inicial' : $origen,
                 'detalle' => $opts['detalle'] ?? '', 'usuario_id' => $opts['usuarioId'] ?? null,

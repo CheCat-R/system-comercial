@@ -150,6 +150,9 @@ class ProveedoresService
             }
             $filas[] = ['proveedor_id' => $p->id, 'cbu_alias' => mb_substr($cbu, 0, 120), 'descripcion' => mb_substr(trim((string) ($x['descripcion'] ?? '')), 0, 120)];
         }
+        if (count($filas) > 5) {
+            throw new ErrorDeNegocio('Hasta 5 cuentas bancarias por proveedor.');
+        }
         DB::transaction(function () use ($p, $filas) {
             DB::table('proveedor_cuentas')->where('proveedor_id', $p->id)->delete();
             if ($filas) {

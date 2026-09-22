@@ -61,7 +61,7 @@ class ProveedoresController extends Controller
 
     public function setCuentas(Request $request, Proveedor $proveedor): JsonResponse
     {
-        $d = $request->validate(['cuentas' => ['present', 'array', 'max:10'], 'cuentas.*.cbuAlias' => ['required', 'string', 'max:120'], 'cuentas.*.descripcion' => ['nullable', 'string', 'max:120']]);
+        $d = $request->validate(['cuentas' => ['present', 'array', 'max:5'], 'cuentas.*.cbuAlias' => ['required', 'string', 'max:120'], 'cuentas.*.descripcion' => ['nullable', 'string', 'max:120']]);
 
         return response()->json($this->svc->setCuentas($proveedor, $d['cuentas']));
     }

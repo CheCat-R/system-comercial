@@ -92,8 +92,9 @@ class RentabilidadService
             ];
         }
         usort($porProductoOut, fn ($a, $b) => $b['ventaNeta'] <=> $a['ventaNeta']);
+        // Los totales y sinFactura se calculan sobre TODOS los productos: el
+        // recorte a 500 es solo para lo que se devuelve, no puede achicar el dashboard.
         $productosRecortados = max(0, count($porProductoOut) - 500);
-        $porProductoOut = array_slice($porProductoOut, 0, 500);
 
         $sum = fn (callable $fn) => array_sum(array_map($fn, $porProductoOut));
         $totales = [
@@ -163,7 +164,7 @@ class RentabilidadService
             'compras' => $compras,
             'porProveedor' => $porProveedor,
             'stockSinFactura' => $stockSinFactura,
-            'porProducto' => $porProductoOut,
+            'porProducto' => array_slice($porProductoOut, 0, 500),
             'productosRecortados' => $productosRecortados,
         ];
     }

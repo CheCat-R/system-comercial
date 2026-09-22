@@ -173,7 +173,9 @@ class ListasService
         return DB::table('cliente_listas')
             ->join('listas_venta', 'listas_venta.id', '=', 'cliente_listas.lista_id')
             ->where('cliente_listas.cliente_id', $clienteId)
+            ->where('listas_venta.activa', true)
             ->orderBy('listas_venta.orden')
+            ->orderBy('listas_venta.id')
             ->get([
                 'cliente_listas.lista_id as listaId', 'listas_venta.numero', 'listas_venta.nombre',
                 'listas_venta.modalidad_id as modalidadId', 'listas_venta.orden',

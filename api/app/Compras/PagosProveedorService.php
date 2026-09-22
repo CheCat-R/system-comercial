@@ -321,7 +321,9 @@ class PagosProveedorService
         if ($importe <= 0) {
             throw new ErrorDeNegocio('El importe del pago tiene que ser mayor a 0.');
         }
-        $usuarioId = ! empty($dto['usuarioId']) ? Operador::resolver($dto['operadorId'] ?? null, (int) $dto['usuarioId']) : null;
+        // Se resuelve siempre, no solo cuando viene usuarioId: un pago armado con
+        // solo operadorId (ej. desde Comprobantes) igual tiene que validar al relevo.
+        $usuarioId = Operador::resolver($dto['operadorId'] ?? null, (int) ($dto['usuarioId'] ?? 0)) ?: null;
 
         $prov = null;
         if (! empty($dto['proveedorId'])) {

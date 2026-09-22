@@ -135,15 +135,18 @@ class ChatService
         return $this->fila($this->visibles($sucursalId, $u->id)->where('m.id', $id)->first());
     }
 
+    /**
+     * Upsert atómico: dos pestañas del mismo usuario pueden marcar en desorden
+     * y la más vieja no debe pisar a la nueva, por eso el máximo se resuelve
+     * en la propia sentencia (`GREATEST`) en vez de leer-y-luego-escribir.
+     */
     public function marcarLeido(int $sucursalId, int $usuarioId, int $canalUsuarioId, int $ultimoMensajeId): array
     {
-        $claves = ['sucursal_id' => $sucursalId, 'usuario_id' => $usuarioId, 'canal_usuario_id' => $canalUsuarioId];
-        $actual = DB::table('chat_lecturas')->where($claves)->first();
-        if (! $actual) {
-            DB::table('chat_lecturas')->insert([...$claves, 'ultimo_mensaje_id' => $ultimoMensajeId]);
-        } elseif ($ultimoMensajeId > (int) $actual->ultimo_mensaje_id) {
-            DB::table('chat_lecturas')->where('id', $actual->id)->update(['ultimo_mensaje_id' => $ultimoMensajeId]);
-        }
+        DB::statement(
+            'insert into chat_lecturas (sucursal_id, usuario_id, canal_usuario_id, ultimo_mensaje_id) values (?, ?, ?, ?)
+             on duplicate key update ultimo_mensaje_id = greatest(ultimo_mensaje_id, values(ultimo_mensaje_id))',
+            [$sucursalId, $usuarioId, $canalUsuarioId, $ultimoMensajeId],
+        );
 
         return ['ok' => true];
     }
