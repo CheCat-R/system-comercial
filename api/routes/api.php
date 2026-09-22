@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\PresupuestosController;
 use App\Http\Controllers\Api\ProductosController;
 use App\Http\Controllers\Api\ProveedoresController;
 use App\Http\Controllers\Api\RelevosController;
+use App\Http\Controllers\Api\RespaldosController;
 use App\Http\Controllers\Api\RolesController;
 use App\Http\Controllers\Api\SucursalesController;
 use App\Http\Controllers\Api\TerminalesController;
@@ -96,6 +97,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/terminales', [TerminalesController::class, 'store']);
         Route::patch('/terminales/{terminal}', [TerminalesController::class, 'update']);
         Route::delete('/terminales/{terminal}', [TerminalesController::class, 'destroy']);
+    });
+
+    Route::prefix('sistema/respaldos')->middleware('permiso:sistema.respaldos')->group(function () {
+        Route::get('/info', [RespaldosController::class, 'info']);
+        Route::get('/descargar', [RespaldosController::class, 'descargar']);
+        Route::get('/limpieza/ensayo', [RespaldosController::class, 'ensayoLimpieza']);
+        Route::post('/limpieza', [RespaldosController::class, 'limpiar']);
     });
 
     Route::get('/auditoria', [AuditoriaController::class, 'index'])
