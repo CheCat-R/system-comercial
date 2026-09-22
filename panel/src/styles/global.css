@@ -100,3 +100,24 @@ input[type='radio']:not([class*='Mui']) {
 [data-theme='dark'] input[type='datetime-local']::-webkit-calendar-picker-indicator {
   filter: invert(1);
 }
+
+/* El botón «Seleccionar archivo» de un <input type="file"> es un elemento
+   propio del navegador (::file-selector-button), no un <button> normal:
+   reset.css no lo toca y queda con su chrome nativo (gris claro, texto
+   negro, borde en relieve) — desentona al lado de cualquier tarjeta oscura. */
+input[type='file']:not([class*='Mui'])::file-selector-button {
+  margin-right: var(--crm-space-3);
+  padding: 7px 13px;
+  border: 1px solid var(--crm-color-border);
+  border-radius: var(--crm-radius-sm);
+  background: var(--crm-color-surface-2);
+  color: var(--crm-color-text);
+  font-family: inherit;
+  font-size: var(--crm-font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+input[type='file']:not([class*='Mui'])::file-selector-button:hover {
+  background: var(--crm-color-border);
+}
