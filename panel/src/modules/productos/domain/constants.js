@@ -22,7 +22,6 @@ export const TIPOS_MOV = {
   vencido:           { label: 'Producto vencido',    tag: 'tag-baja',    dir: -1 },
   defectuoso:        { label: 'Producto defectuoso', tag: 'tag-baja',    dir: -1 },
   transferencia:     { label: 'Transferencia',       tag: 'tag-transf',  dir: 0 },
-  envio_cafeteria:   { label: 'Envío a Cafetería',   tag: 'tag-venta',   dir: -1 },
 };
 
 /**
@@ -60,22 +59,6 @@ export const ESTADOS_TRANSFER = {
   transito:  { label: 'En tránsito', pill: 'est-transito',  orden: 2 },
   recibida:  { label: 'Recibida',    pill: 'est-recibida',  orden: 3 },
   cancelada: { label: 'Cancelada',   pill: 'est-cancelada', orden: 9 },
-};
-
-// ---- Estados del envío a Cafetería (el stock acompaña cada uno) ----
-/* Dos estados: con el envío ya se da por hecho que coffit recibió — el "viaje"
- * es cruzar la calle. La corrección es EDITAR el envío, no una etapa más. */
-export const ESTADOS_ENVIO_CAFE = {
-  enviado: { label: 'Enviado', pill: 'est-recibida' },
-  anulado: { label: 'Anulado', pill: 'est-cancelada' },
-};
-
-/* El pedido del café: demanda, no envío. pendiente → armando → enviado · anulado. */
-export const ESTADOS_PEDIDO_CAFE = {
-  pendiente: { label: 'Pendiente', pill: 'est-pendiente' },
-  armando:   { label: 'Armando',   pill: 'est-transito' },
-  enviado:   { label: 'Enviado',   pill: 'est-recibida' },
-  anulado:   { label: 'Anulado',   pill: 'est-cancelada' },
 };
 
 /**
@@ -116,13 +99,6 @@ export const RANGOS_VENC = {
 export const rangoVenc = (dias) => (
   dias < 0 ? 'vencido' : dias <= 7 ? 'd7' : dias <= 15 ? 'd15' : dias <= 30 ? 'd30' : 'vigente'
 );
-
-/** En qué unidad habla la cantidad de cada renglón del envío. */
-export const MODOS_ENVIO_CAFE = {
-  granel:  { label: 'Granel (kg)' },
-  paquete: { label: 'Paquetes' },
-  unidad:  { label: 'Unidades' },
-};
 
 /* ---- Estados de una factura de papel subida a la bandeja ----
  * `pendiente` espera que alguien la cargue · `cargada` ya se convirtió en un

@@ -29,9 +29,8 @@ import { money, num, fmtFechaHora, fmtFechaVenc } from '../domain/format.js';
 import { RANGOS_VENC, rangoVenc } from '../domain/constants.js';
 import { motivoSinCamara } from '../domain/leerCodigoBarras.js';
 import { EscanerCamara } from '../components/EscanerCamara.jsx';
-import { BuscadorCatalogo } from '../components/modals/CafeteriaModals.jsx';
 import { sucursalOptions } from '../components/selectOptions.jsx';
-import { Table, PanelHead, Btn, Pill, usePaginado, s } from '../components/ui.jsx';
+import { BuscadorCatalogo, Table, PanelHead, Btn, Pill, usePaginado, s } from '../components/ui.jsx';
 
 const PESTANAS = [
   { id: 'panel', label: 'Panel' },

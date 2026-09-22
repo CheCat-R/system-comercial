@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { cx } from '@shared/utils/classNames.js';
+import { appConfig } from '@core/config/app.config.js';
 import { useVentas } from '../context/VentasContext.jsx';
 import { useResource } from '../hooks/useResource.js';
 import { ventasApi } from '../services/ventas.api.js';
@@ -168,7 +169,9 @@ export function ClientesPanel() {
       <div className={s.stats}>
         <Stat label="Clientes activos" value={stats.total} />
         <Stat label="Con cuenta corriente" value={stats.ctaCte} accent="accent-amber" />
-        <Stat label="Compran por la web" value={stats.compranWeb} accent={stats.compranWeb ? 'accent-green' : undefined} />
+        {appConfig.features.webHabilitado && (
+          <Stat label="Compran por la web" value={stats.compranWeb} accent={stats.compranWeb ? 'accent-green' : undefined} />
+        )}
         <Stat label="Dados de baja" value={stats.inactivos} />
       </div>
 

@@ -1613,7 +1613,7 @@ export const MANUAL = [
             filas: [
               ['**Activo**', 'Aparece', 'Aparece', 'Todo normal.'],
               ['**Discontinuado**', '**No aparece** (ni en la carga de facturas ni en la reposición por stock mínimo)', '**Sigue vendiéndose**', 'El caso más común: el proveedor lo bajó o se decidió no reponerlo, pero lo que quedó en góndola se termina de vender. Apagar todo de golpe sería tirar esa plata.'],
-              ['**Archivado**', 'No', '**No** (tampoco pedidos de cafetería ni control de vencimientos)', 'Fuera de catálogo. Exige que NO quede stock: si queda, el sistema dice cuánto y dónde, y ofrece dejarlo discontinuado.'],
+              ['**Archivado**', 'No', '**No** (tampoco control de vencimientos)', 'Fuera de catálogo. Exige que NO quede stock: si queda, el sistema dice cuánto y dónde, y ofrece dejarlo discontinuado.'],
             ],
           },
           {
@@ -1672,7 +1672,7 @@ export const MANUAL = [
             filas: [
               ['**Panel**', 'Las alertas por rango **EXCLUYENTE** — vencidos sin procesar / 0-7 / 8-15 / 16-30 días — con plata al costo congelado. Un registro vive en UNA tarjeta, jamás en dos. Clic en la tarjeta = ir filtrado a Registros. Los días se calculan SIEMPRE contra el calendario argentino, nunca contra el reloj UTC del server (a la noche UTC ya es "mañana" y adelantaría los vencidos un día).'],
               ['**Control**', 'La sesión de góndola, en el ORDEN FÍSICO del acto: **1· el producto** (botón 📷 **Escanear** con la cámara del celular, lector USB, o buscándolo por nombre/código/barras — también el de las presentaciones fraccionadas) → **2· la fecha** impresa en el paquete → **3· cuántos hay** → Agregar. El producto elegido queda a la vista ("en la mano") con su código de barras, y **la fecha y la cantidad se conservan** al agregar: cuando toda una tanda vence igual, el siguiente es escanear y agregar, nada más. Enter en fecha, cantidad u observaciones también agrega. Todo cae a una lista editable que se guarda de un saque; mismo producto + misma fecha se suman. La fecha pasada avisa pero DEJA: es la forma de asentar lo encontrado tarde. Cada control queda en el historial con usuario y sucursal.'],
-              ['**Registros**', 'Todo lo anotado con chips por rango, filtros y exportación CSV. El **costo viaja CONGELADO** al registrar (lección de cafetería): la pérdida de marzo no cambia en julio porque subió el catálogo. Editar no re-valúa. El botón **"Oferta"** lleva al motor de ofertas de Ventas con el formulario ya lleno (ver abajo).'],
+              ['**Registros**', 'Todo lo anotado con chips por rango, filtros y exportación CSV. El **costo viaja CONGELADO** al registrar: la pérdida de marzo no cambia en julio porque subió el catálogo. Editar no re-valúa. El botón **"Oferta"** lleva al motor de ofertas de Ventas con el formulario ya lleno (ver abajo).'],
               ['**Ofertas**', 'El **cruce con Ventas**: qué mercadería vigilada está —o debería estar— en oferta, y qué se desalineó. No mira solo las ofertas nacidas acá: resuelve el alcance REAL de cada oferta (producto, marca, categoría, etiqueta, componentes de un combo) contra los registros abiertos, así también aparece la promo que alguien armó en Ventas sobre algo que además está por vencer. Filtros por aviso y por sucursal, exportación CSV, y el globito rojo de la pestaña cuenta lo URGENTE.'],
               ['**Vencidos**', 'El cierre del ciclo: procesar = contar cuántas se **vendieron antes de vencer** y cuántas se tiran. Separa pérdida ESTIMADA (todo lo registrado) de pérdida **REAL** (lo que de verdad se perdió). Con "bajar del stock" tildado genera el movimiento «vencido» (disponible → estado vencido) EN LA MISMA transacción: o pasa todo, o no pasó nada — sin stock suficiente, no procesa ni a medias. Dos personas procesando lo mismo: una sola gana (FOR UPDATE). Lo procesado no se edita ni se borra: es pérdida asentada.'],
               ['**Mermas**', 'La baja de siempre (merma / vencido / defectuoso) **se mudó acá**: registrar abre el modal de movimiento con el producto precargado, y el listado muestra todas las bajas con su costo congelado y su origen ("De vencimiento" si nació de procesar). El modal existía registrado pero SIN botón que lo abriera — quedó huérfano en alguna refactor; ahora tiene casa.'],
@@ -2621,125 +2621,6 @@ export const MANUAL = [
 
   /* ================================================================== */
   {
-    id: 'cafeteria',
-    titulo: 'Cafetería (coffit)',
-    resumen: 'El puente con el otro negocio del dueño: envíos a costo hacia coffit, que es el dueño del stock del café.',
-    temas: [
-      {
-        id: 'cafeteria-como-funciona',
-        actualizado: '2026-08-09 03:30',
-        titulo: 'Cómo funciona',
-        bloques: [
-          {
-            t: 'p',
-            texto: 'El dueño tiene DOS negocios con el **mismo CUIT**: la distribuidora (este sistema) y una cafetería cuyo stock maneja **otro sistema, coffit**. El envío de mercadería hacia el café NO es una venta (no hay factura ni IVA entre partes) ni una transferencia entre sucursales (no hay receptor en el CRM): es un **punto de salida**. La mercadería egresa del stock valorizada **a costo congelado**, y del otro lado coffit la ingresa en su almacén **“Sabor y Aroma”**, donde ELLA le da el tratamiento que corresponda.',
-          },
-          {
-            t: 'nota',
-            tono: 'warn',
-            texto: '**El 9/8/2026 el circuito se simplificó por decisión del dueño.** Se fueron TRES cosas: el **destino por renglón** (venta/uso — es una clasificación DE COFFIT, que la decide al recibir; el CRM la pedía, la guardaba y jamás la leía), las **etapas** (pedido → tránsito → recibido eran el teatro de un viaje que es cruzar la calle, y cada etapa era un lugar más donde los dos sistemas podían divergir) y las **devoluciones** (no van a existir: la corrección de un envío es EDITARLO).',
-          },
-          {
-            t: 'tabla',
-            cols: ['Regla', 'Por qué'],
-            filas: [
-              ['**El CRM nunca muestra existencias de Cafetería**', 'Coffit es el dueño del stock. Dos sistemas contando la misma leche siempre terminan descuadrando, y el que mira el número equivocado decide mal'],
-              ['**El envío nace ENVIADO: egresa stock y congela costo en el acto**', 'Con el envío ya se da por hecho que el café lo recibió. Congelado con el costo del día: el remito dice lo mismo dentro de seis meses aunque cambien los proveedores'],
-              ['**La clasificación es de coffit**', 'Qué es góndola y qué es insumo lo decide quien es dueño del stock, al recibirlo en su almacén “Sabor y Aroma". El CRM manda el detalle completo y ahí termina su responsabilidad'],
-              ['**La corrección es EDITAR el envío**', 'Se revierte el egreso viejo y se aplica el nuevo, en una transacción. El renglón que ya estaba CONSERVA su costo congelado (re-valuar cambiaría retroactivamente un período ya mirado); el renglón nuevo entra al costo de hoy. Cada cambio sube la **versión**'],
-              ['**Coffit se entera de todo por sincronización**', 'Editar o anular después de que coffit ya ingresó el envío dejaría los dos sistemas divergentes en silencio. Por eso cada cambio toca `version`/`actualizadoEn`, y coffit pregunta "¿qué cambió desde la última vez?" (GET /cafeteria/sync)'],
-              ['**El precio del café lo pone coffit, siempre**', 'Una Coca en el mostrador del café no vale lo de la góndola de la distribuidora. El costo del remito es su costo de reposición, jamás su lista de venta'],
-            ],
-          },
-          {
-            t: 'pasos',
-            items: [
-              '**Enviar.** "+ Nuevo envío": se buscan los productos de a uno (nombre, código o barras) o en lote, cantidad por renglón, y **Enviar**. El stock egresa ya y el costo queda congelado. Cada renglón viaja con su **modo de unidad explícito** — granel (kg), paquete o unidad — más el equivalente en kg, para que del lado de coffit 10 paquetes de 500 g jamás se conviertan en 10 kg.',
-              '**Corregir.** En el detalle, **Editar**: el formulario abre con los renglones cargados, los costos dicen "congelado" o "costo de hoy" según corresponda, y guardar revierte-y-reaplica con el stock acompañando. Si el stock no alcanza para la corrección, no pasa NADA (ni a medias). La versión sube.',
-              '**Anular.** Reversión completa: todo reingresa al stock. También sube la versión — coffit tiene que deshacer su ingreso y se entera por sincronización. Pide motivo y queda en el libro.',
-              '**Imprimir el remito.** Producto, código, cantidad con su unidad, equivalente en kg y costo congelado. Si el envío se corrigió, el remito dice la versión.',
-              '**Mirar la MÉTRICA.** La segunda pestaña del panel: qué se le mandó al café en el período, agregado por artículo, con filtros de fechas y buscador. Suma solo lo enviado (lo anulado no existió) al costo congelado, ordenado por plata: lo de arriba es lo que más cuesta.',
-              '**Imputar los gastos del café.** La cafetería también gasta cosas que no pasan por la distribuidora (el panadero, la luz del local). Se cargan en Gastos con **Negocio: Cafetería** — mismo CUIT, mismo libro de IVA, imputación separada.',
-            ],
-          },
-          {
-            t: 'p',
-            texto: '**La foto de gestión**: el panel suma el período — mercadería enviada + gastos imputados = **cuánto le costó la cafetería al negocio**. Las ventas las tiene coffit: la rentabilidad del café es la resta entre los dos sistemas. Y cuando exista Gerencia › Rentabilidad, estos envíos se EXCLUYEN de las ventas de la distribuidora (margen cero: inflarían volumen).',
-          },
-          { t: 'ruta', texto: 'Almacén › Cafetería (permiso almacen.cafeteria, de fábrica solo administración) · pestañas Envíos y Métrica · Gastos › Cargar gasto › Negocio' },
-        ],
-      },
-      {
-        id: 'cafeteria-pedidos',
-        actualizado: '2026-08-09 22:10',
-        titulo: 'El pedido de la cafetería: el rol que solo ve una pantalla',
-        bloques: [
-          {
-            t: 'p',
-            texto: 'La cafetería también **pide**: arma su pedido de mercadería y la distribuidora lo recibe para armarlo. El pedido nace **en el CRM** (no en coffit) por una razón concreta: necesita el **catálogo completo con disponibilidad a la vista** — coffit solo conoce los artículos que alguna vez le mandaron, que es justo lo contrario de lo que un pedido necesita. Para eso existe el **rol Cafetería**: un usuario que entra al CRM y ve UNA sola sección (Almacén › Pedido a la distribuidora) — sin ninguna otra clave de permiso, el resto del sistema es invisible.',
-          },
-          {
-            t: 'tabla',
-            cols: ['Pieza', 'Cómo funciona'],
-            filas: [
-              ['**El pedido es DEMANDA, no envío**', 'No toca stock ni congela costo (la vieja lección: la realidad entra con el envío). Ciclo: **pendiente** → **armando** (el admin lo tomó) → **enviado** (se convirtió en envío) · **anulado** con motivo. La cafetería puede anular lo pendiente; el admin, todo lo abierto.'],
-              ['**El admin se entera al toque**', 'Aviso flotante con campanita en cualquier pantalla ("☕ La cafetería armó un pedido" — dos notas más graves que las de órdenes web, para distinguirlas de oído), globito en el menú Almacén › Cafetería, y contador en la pestaña **Pedidos** de esa pantalla, que ahora es la primera. Solo lo ve la administración con la sección habilitada; el primer tick no alerta (lo viejo se ve en los globitos, la campanita es para lo que ENTRA).'],
-              ['**Convertir en envío**', 'Abre el alta del envío con lo pedido **precargado** — "lo pedido es la propuesta": el que arma corrige a lo que de verdad va (faltantes, reemplazos) y al enviar el pedido queda **cerrado** (reclamo atómico: dos conversiones del mismo pedido, solo una gana). El envío viaja con `pedidoId` en el sync, así coffit cruza "esto que llegó responde a aquello que pedí".'],
-              ['**El estado vuelve a la cafetería**', 'En su misma pantalla: la fila pasa de Pendiente a Armando a Enviado, con el código del envío que la cumplió. Sin llamar por teléfono a preguntar "¿ya sale?".'],
-              ['**Esa pantalla NO la ve administración**', 'La sección `almacen.cafeteria-pedidos` es EXCLUSIVA del rol Cafetería (la migración 0049 se la quitó a admin y superadmin, que la habían heredado de la 0048). Es el café pidiendo, no la distribuidora mandando: tenerla en el menú de Almacén invitaba a cargar un pedido que nadie pidió y confundía de qué lado del mostrador nace cada cosa. El candado no es cosmético: entrar por URL cae en la primera sección permitida.'],
-              ['**Mandar sin que hayan pedido**', 'Ese es el camino normal de administración: **"+ Nuevo envío"** en Almacén › Cafetería. El envío nace con `pedidoId` en null (envío espontáneo) y coffit lo recibe igual por sincronización. El pedido es un pedido; el envío no necesita ninguno detrás.'],
-            ],
-          },
-          {
-            t: 'nota',
-            tono: 'warn',
-            texto: '**El usuario "Cafetería" ya existe** (rol cafeteria, creado por la migración 0048) con contraseña inicial **1234 — cambiala en Gerencia › Usuarios y roles** antes de dársela al café. El candado de visibilidad es del sistema de permisos (pantalla): como todo el CRM, la API misma sigue abierta en la red local hasta que llegue la autenticación — el bloqueante conocido del deploy.',
-          },
-          {
-            t: 'nota',
-            texto: 'La clave `almacen.cafeteria-pedidos` **sigue en el catálogo** de Gerencia › Usuarios y roles, listada como "SOLO para el rol Cafetería": es la que arma ese rol, y el editor muestra el catálogo completo aunque quien edita no tenga la sección. Deja de venir otorgada, no de existir.',
-          },
-          { t: 'ruta', texto: 'Rol Cafetería → Almacén › Pedido a la distribuidora · Admin → Almacén › Cafetería › pestaña Pedidos (+ aviso flotante) y "+ Nuevo envío" · migraciones 0048 y 0049' },
-        ],
-      },
-      {
-        id: 'cafeteria-conectar-coffit',
-        actualizado: '2026-08-09 03:30',
-        titulo: 'El contrato para coffit: sync, forma del envío y reglas',
-        bloques: [
-          {
-            t: 'p',
-            texto: 'El mapa para el desarrollador de coffit. La versión completa, con ejemplos de respuesta reales, está en **`crm-api/docs/contrato-coffit.md`** — esta ficha es el resumen. El modelo del lado de coffit: un almacén **“Sabor y Aroma”** donde entran todos los envíos del CRM, y ahí coffit clasifica y trata cada artículo como quiera.',
-          },
-          {
-            t: 'tabla',
-            cols: ['Pieza', 'Detalle'],
-            filas: [
-              ['**GET /api/cafeteria/sync?desde=…**', 'TODO lo que cambió desde el cursor: creados, editados y **anulados** (el anulado viaja — coffit tiene que deshacer su ingreso). La respuesta trae `ahora`: coffit lo guarda y lo manda como próximo `desde`. El cursor lo pone el reloj del CRM, así relojes desfasados no abren agujeros'],
-              ['**La clave estable es `productoId` + `presentacionId`**', 'Seriales inmutables. Coffit matchea a mano UNA vez contra su catálogo y el vínculo no se rompe aunque acá se renombre o recodifique el producto. `codigoBarras`, `codigoPropio` y `nombre` viajan solo como legibles para la pantalla de matcheo'],
-              ['**El modo de unidad es explícito**', 'Cada renglón dice `modo`: granel (cantidad en KG), paquete (cantidad en PAQUETES, con `tamKg` = kg por paquete) o unidad (producto entero). Además viaja `totalKg` ya calculado, para contrastar. La trampa de deducir la unidad quedó cerrada'],
-              ['**`version` detecta la corrección**', 'Coffit guarda (id, version) de lo que procesó. Si el sync trae un id conocido con versión mayor: deshacer el ingreso anterior y aplicar el nuevo. Si trae `estado: "anulado"`: deshacer y punto. Reprocesar la MISMA versión no debe duplicar (idempotencia)'],
-              ['**El costo del remito es el costo de reposición del café**', 'Congelado al enviar. Sirve para que coffit calcule su propio margen — el precio de venta del café lo decide coffit, jamás la lista de la distribuidora'],
-            ],
-          },
-          {
-            t: 'nota',
-            tono: 'warn',
-            texto: '**El endpoint funciona en la red local.** Exponerlo a coffit por internet está atado al bloqueante de autenticación de la API: cuando se resuelva, coffit recibe un token que SOLO puede leer `/cafeteria/sync` — nunca el resto del CRM (precedente reusable: el guard por ruta del módulo Tienda). Para desarrollar el importador contra la red local, no hace falta nada.',
-          },
-          {
-            t: 'nota',
-            tono: 'warn',
-            texto: 'Decisiones ya tomadas que el desarrollo de coffit NO debe rediscutir: coffit es el dueño del stock del café (el CRM no lo espeja); el envío va a costo; la clasificación de la mercadería es de coffit; el precio de venta del café es de coffit. Están fundamentadas en la memoria del proyecto y en esta guía.',
-          },
-          { t: 'ruta', texto: 'crm-api/docs/contrato-coffit.md · GET /api/cafeteria/sync · GET /api/cafeteria/envios/:id' },
-        ],
-      },
-    ],
-  },
-
-  /* ================================================================== */
-  {
     id: 'decisiones',
     titulo: 'Decisiones de diseño',
     resumen: 'Por qué las cosas son como son. Leer antes de "arreglar" algo.',
@@ -3146,7 +3027,6 @@ export const MANUAL = [
               ['**Conciliar con "Mis Comprobantes" de ARCA**', 'ARCA deja bajar en CSV todas las facturas que cualquier proveedor emitió contra el CUIT de la empresa. Sirve para **encontrar facturas que existen y nunca se cargaron** — cada una es crédito fiscal de IVA no computado y deuda que no figura en la cuenta del proveedor. Es el mismo patrón de "subir un archivo y previsualizar" que ya está construido dos veces'],
               ['**Sesiones con token — HECHO**', 'Era el bloqueante del deploy: la API quedaba abierta y cualquiera que la alcanzara podía llamar cualquier endpoint. Ya exige sesión: verificado el 20/8/2026 contra `/ventas/catalogo`, `/configuracion/ventas`, `/usuarios`, `/productos` y `/arca/estado` — los cinco devuelven **401** sin token. Siguen públicos, a propósito, los 4 endpoints de la tienda (catálogo, pedidos, eventos, imágenes)'],
               ['**Anular un comprobante de compra**', 'No hay endpoint todavía. Cuando se haga, tiene que **liberar las imputaciones**: los pagos tomados vuelven a la bandeja con su saldo — anular por arriba dejaría plata aplicada a un documento que ya no existe'],
-              ['**Cafetería, fases 2 y 3 (lado coffit)**', 'La fase 1 ya funciona (Almacén › Cafetería, ver su guía). Falta el **importador de remitos en coffit** (fase 2, por archivo, sin API) y la **conexión directa** (fase 3: token con permisos acotados — activa el bloqueante de auth — más el endpoint de confirmación de recepción en el CRM, que le da dueño formal a la merma del viaje)'],
               ['**Re-cotización asistida**', 'Al reabrir un presupuesto vencido, traerlo a precios de hoy mostrando el antes/después por renglón'],
               ['**Foto del comprobante de gasto**', 'La tabla y el endpoint están; falta el botón en el detalle del gasto para adjuntar la foto del papel por el estándar de imágenes del sistema'],
               ['**Costo fijo mensualizado**', 'Prorratear las frecuencias largas en el resumen (un seguro anual de $960.000 cuenta $80.000 por mes): es cuánto tiene que facturar el negocio antes de empezar a ganar'],

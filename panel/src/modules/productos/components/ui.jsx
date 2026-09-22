@@ -2,7 +2,7 @@
  * Componentes de presentación compartidos del módulo Producto.
  * Puros: reciben props y pintan. Consumen el CSS Module del módulo (tokens).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cx } from '@shared/utils/classNames.js';
 import {
   ESTADOS_STOCK,
@@ -12,6 +12,7 @@ import {
   TIPOS_MOV,
   labelTipoMov,
 } from '../domain/constants.js';
+import { money } from '../domain/format.js';
 import styles from '../styles/Productos.module.css';
 
 export { styles as s };
@@ -217,11 +218,6 @@ export function TipoBadge({ prod }) {
       ) : (
         <span className={cx(styles.badge, styles['badge-entero'])}>Entero</span>
       )}
-      {/* Uso exclusivo de Cafetería (0089): se canta en TODOS los listados que
-          ya muestran el tipo — es la marca de "esto no va al mostrador". */}
-      {prod.soloCafeteria && (
-        <span className={cx(styles.badge, styles['badge-granel'])} style={{ marginLeft: 4 }}>Cafetería</span>
-      )}
     </>
   );
 }
@@ -252,5 +248,94 @@ export function Btn({ variant = 'btn-ghost', small, className, ...rest }) {
       className={cx(styles.btn, styles[variant], small && styles['btn-sm'], className)}
       {...rest}
     />
+  );
+}
+
+const normBuscador = (v) => (v || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+
+/**
+ * Buscador sobre TODO el catálogo (nombre, código interno o barras — también
+ * el de las presentaciones fraccionadas, que llevan etiqueta propia).
+ */
+export function BuscadorCatalogo({ store, onElegir, autoFocus }) {
+  const [texto, setTexto] = useState('');
+  const [abierto, setAbierto] = useState(false);
+  const blurTimer = useRef(null);
+
+  const matches = useMemo(() => {
+    const ql = normBuscador(texto);
+    const digitos = texto.replace(/\D/g, '');
+    /* Sin ARCHIVADOS: no se piden y no se les controla el vencimiento (la API
+     * además los rechaza). El discontinuado SÍ aparece: mientras quede stock,
+     * sigue circulando. */
+    const todos = store.state.productos.filter((p) => (p.estado || 'activo') !== 'archivado');
+    if (!ql) return todos.slice(0, 12).map((p) => ({ prod: p, presId: null }));
+    const out = [];
+    for (const p of todos) {
+      if (normBuscador(p.nombre).includes(ql) || (p.codigoPropio && normBuscador(p.codigoPropio).includes(ql))
+        || (digitos.length >= 4 && p.codigoBarras && p.codigoBarras.includes(digitos))) {
+        out.push({ prod: p, presId: null });
+      } else if (digitos.length >= 4) {
+        const pres = (p.presentaciones || []).find((x) => x.codigoBarras && x.codigoBarras.includes(digitos));
+        if (pres) out.push({ prod: p, presId: pres.id });
+      }
+      if (out.length >= 12) break;
+    }
+    return out;
+  }, [store, texto]);
+
+  const elegir = (m) => {
+    clearTimeout(blurTimer.current);
+    setTexto('');
+    setAbierto(false);
+    onElegir(m.prod, m.presId);
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type="search"
+        autoFocus={autoFocus}
+        placeholder="Nombre, código o barras…"
+        value={texto}
+        onChange={(e) => { setTexto(e.target.value); setAbierto(true); }}
+        onFocus={() => setAbierto(true)}
+        onBlur={() => { blurTimer.current = setTimeout(() => setAbierto(false), 150); }}
+        onKeyDown={(e) => {
+          if ((e.key === 'Enter' || e.key === 'Return') && matches.length) { e.preventDefault(); elegir(matches[0]); }
+        }}
+      />
+      {abierto && (
+        <div
+          style={{
+            position: 'absolute', zIndex: 30, top: '100%', left: 0, minWidth: '130%',
+            maxHeight: 300, overflowY: 'auto',
+            background: 'var(--crm-color-surface)', border: '1px solid var(--crm-color-border)',
+            borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.18)',
+          }}
+        >
+          {matches.length === 0 ? (
+            <div className={styles.hint} style={{ margin: 0, padding: '10px 12px' }}>Sin coincidencias.</div>
+          ) : matches.map((m) => (
+            <button
+              key={`${m.prod.id}-${m.presId ?? 0}`}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); elegir(m); }}
+              onClick={() => elegir(m)}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '7px 12px', border: 'none', background: 'none', cursor: 'pointer',
+              }}
+            >
+              {m.prod.nombre}{m.presId ? ` · ${store.presLabel(m.prod, m.presId)}` : ''}
+              <span className={styles.hint} style={{ margin: 0, display: 'block' }}>
+                {m.prod.codigoPropio ? `#${m.prod.codigoPropio}` : ''}
+                {' · '}{money(store.costoNeto(m.prod))}/{store.unidadDe(m.prod, null) === 'kg' ? 'kg' : 'u'} de costo
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

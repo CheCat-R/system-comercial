@@ -60,7 +60,6 @@ function nuevoEstado() {
     // Cuántas facturas de papel esperan que alguien las cargue (para el globito
     // del menú). Es solo el número: la bandeja la pide su panel.
     lecturasPendientes: 0,
-    pedidosCafeteriaPendientes: 0,
     // Lo que apura del vigía de fechas (vencidos sin procesar + vence en ≤7 días).
     vencimientosUrgentes: 0,
     ctx: _loadCtx(),
@@ -444,7 +443,6 @@ function mergeState(data) {
   }));
   state.incidencias = (data.incidencias || []).map((i) => ({ ...i, presId: i.presentacionId ?? null }));
   state.lecturasPendientes = Number(data.lecturasPendientes) || 0;
-  state.pedidosCafeteriaPendientes = Number(data.pedidosCafeteriaPendientes) || 0;
   state.vencimientosUrgentes = Number(data.vencimientosUrgentes) || 0;
 }
 
@@ -931,31 +929,6 @@ const moverDestinoPago = (id, destino) => _mutate(() => httpClient.patch(`/pagos
  *  el flete con el camión en la puerta y el remito lo tiene el administrativo. */
 const actualizarPapelPago = (id, datos) => _mutate(() => httpClient.patch(`/pagos-proveedor/${id}/papel`, datos));
 
-/* ---- Cafetería (coffit) ----
- * El envío es un PUNTO DE SALIDA a costo: el CRM no lleva el stock del café
- * (coffit es el dueño). Crear/anular pasan por `_mutate` porque mueven stock. */
-const enviosCafeteria = (filtros) => httpClient.get('/cafeteria/envios' + _qsPagos(filtros || {}));
-const envioCafeteria = (id) => httpClient.get('/cafeteria/envios/' + id);
-const resumenCafeteria = (filtros) => httpClient.get('/cafeteria/resumen' + _qsPagos(filtros || {}));
-/** Lo enviado a coffit en el período, agregado por artículo (con filtros). */
-const metricaCafeteria = (filtros) => httpClient.get('/cafeteria/metrica' + _qsPagos(filtros || {}));
-const crearEnvioCafeteria = (o) => _mutate(() => httpClient.post('/cafeteria/envios', { usuarioId: state.ctx.usuarioId ?? undefined, ...o }));
-/**
- * Editar un envío YA ENVIADO: la API revierte el egreso viejo y aplica el
- * nuevo en una transacción. `version` viaja para que dos pantallas abiertas no
- * se pisen en silencio: la que quedó vieja recibe un error claro.
- */
-const editarEnvioCafeteria = (id, o) => _mutate(() => httpClient.put(`/cafeteria/envios/${id}`, { usuarioId: state.ctx.usuarioId ?? undefined, ...o }));
-
-/* ---- Pedidos de la cafetería (la demanda; el envío los cumple y los cierra) ---- */
-const pedidosCafeteria = (filtros) => httpClient.get('/cafeteria/pedidos' + _qsPagos(filtros || {}));
-const pedidoCafeteria = (id) => httpClient.get('/cafeteria/pedidos/' + id);
-const crearPedidoCafeteria = (o) => _mutate(() => httpClient.post('/cafeteria/pedidos', { usuarioId: state.ctx.usuarioId ?? undefined, ...o }));
-const tomarPedidoCafeteria = (id) => _mutate(() => httpClient.post(`/cafeteria/pedidos/${id}/tomar`, {}));
-const anularPedidoCafeteria = (id, motivo) => _mutate(() => httpClient.post(`/cafeteria/pedidos/${id}/anular`, { motivo, usuarioId: state.ctx.usuarioId ?? undefined }));
-/** Anular = reversión completa del egreso; sube la versión y coffit lo deshace. */
-const anularEnvioCafeteria = (id, motivo) => _mutate(() => httpClient.post(`/cafeteria/envios/${id}/anular`, { motivo, usuarioId: state.ctx.usuarioId ?? undefined }));
-
 /* ---- Vencimientos (el vigía de fechas, sin lote) ----
  *
  * Los registros NO son stock: lecturas directas, fuera del snapshot (crecen
@@ -1066,9 +1039,6 @@ export const inventoryStore = {
   guardarLecturaFactura, descartarLecturaFactura, recuperarLecturaFactura, vincularLecturaFactura,
   papelFactura, leerRenglonesLectura,
   pagosSucursal, pagoSucursal, pagosDisponibles, pagosDocsPendientes, cajaAbierta,
-  enviosCafeteria, envioCafeteria, resumenCafeteria, metricaCafeteria,
-  crearEnvioCafeteria, editarEnvioCafeteria, anularEnvioCafeteria,
-  pedidosCafeteria, pedidoCafeteria, crearPedidoCafeteria, tomarPedidoCafeteria, anularPedidoCafeteria,
   vencimientos, resumenVencimientos, reportesVencimientos, crearSesionVencimientos,
   editarVencimiento, eliminarVencimiento, procesarVencimiento, ofertasVencimientos,
   imputarPago, quitarImputacionPago, anularPago, moverDestinoPago, actualizarPapelPago,

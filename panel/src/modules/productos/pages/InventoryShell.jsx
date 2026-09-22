@@ -20,8 +20,6 @@ import { HistorialPanel } from '../panels/HistorialPanel.jsx';
 import { TransferenciasPanel } from '../panels/TransferenciasPanel.jsx';
 import { OperacionesPanel } from '../panels/OperacionesPanel.jsx';
 import { IncidenciasPanel } from '../panels/IncidenciasPanel.jsx';
-import { CafeteriaPanel } from '../panels/CafeteriaPanel.jsx';
-import { CafeteriaPedidosPanel } from '../panels/CafeteriaPedidosPanel.jsx';
 import { VencimientosPanel } from '../panels/VencimientosPanel.jsx';
 import { ConteosPanel } from '../panels/ConteosPanel.jsx';
 
@@ -46,9 +44,6 @@ const PANEL_COMPONENTS = {
   transferencias: TransferenciasPanel,
   operaciones: OperacionesPanel,
   incidencias: IncidenciasPanel,
-  cafeteria: CafeteriaPanel,
-  // La pantalla del rol Cafetería: armar el pedido a la distribuidora.
-  'cafeteria-pedidos': CafeteriaPedidosPanel,
   // El vigía de fechas: lógica de la app externa, datos 100% del sistema.
   vencimientos: VencimientosPanel,
   // El físico contra el virtual (0066): sesiones de conteo por diferencia.
@@ -71,8 +66,6 @@ export function InventoryShell({ title, subtitle }) {
     // Facturas de papel esperando que alguien las cargue: sin el aviso, el papel
     // se queda en la bandeja como se quedaba en el cajón.
     lecturas: store.state.lecturasPendientes || 0,
-    // La demanda del café que espera: pedidos pendientes o armándose.
-    pedidosCafe: store.state.pedidosCafeteriaPendientes || 0,
     // Lo que apura del vigía de fechas: vencidos sin procesar + vencen en ≤7 días.
     vencimientos: store.state.vencimientosUrgentes || 0,
   };

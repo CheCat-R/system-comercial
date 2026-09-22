@@ -19,7 +19,6 @@ import CallSplitIcon from '@mui/icons-material/CallSplit';
 import HistoryIcon from '@mui/icons-material/History';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
-import LocalCafeIcon from '@mui/icons-material/LocalCafe';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 
@@ -78,12 +77,4 @@ export const ALMACEN_PANELS = [
    * El globito son los que APURAN: vencidos sin procesar + vencen en ≤7 días.
    */
   { id: 'vencimientos',   label: 'Vencimientos',   icon: EventBusyIcon,      permiso: 'almacen.vencimientos', badge: 'vencimientos' },
-  // Punto de SALIDA hacia coffit: el CRM no lleva el stock del café. El globito
-  // avisa la demanda del café que espera (pedidos pendientes o armándose).
-  { id: 'cafeteria',      label: 'Cafetería',      icon: LocalCafeIcon,      permiso: 'almacen.cafeteria', badge: 'pedidosCafe' },
-  /*
-   * La pantalla DE la cafetería: armar el pedido a la distribuidora. Es la
-   * única sección del rol Cafetería — ese usuario entra al CRM y ve SOLO esto.
-   */
-  { id: 'cafeteria-pedidos', label: 'Pedido a la distribuidora', icon: LocalCafeIcon, permiso: 'almacen.cafeteria-pedidos' },
 ];
