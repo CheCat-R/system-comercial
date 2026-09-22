@@ -264,8 +264,17 @@
 .muted { color: var(--crm-color-text-secondary); }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
 
-/* ---- Badges / pills ---- */
-.badge { display: inline-block; padding: 2px 9px; border-radius: var(--crm-radius-pill); font-size: var(--crm-font-size-xs); font-weight: 600; }
+/* ---- Badges / pills ----
+   ⭐ `.badge` sin modificador (`.badge-granel`, `.badge-entero`) se usa en ~14
+   pantallas como botón de filtro (`<button className={cx(s.badge)}>`), con el
+   estado SELECCIONADO puesto a mano por `style` inline en cada pantalla y el
+   NO seleccionado sin nada — ni fondo ni color propios. Sin esto, un
+   `<button>` desnudo cae en el cromado nativo del navegador (gris claro) con
+   `color: inherit`, y si ese heredado no es el que se espera, el texto
+   desaparece contra el fondo. Iba a arreglarse en las 14 pantallas; se
+   arregla acá una vez y alcanza a todas — los modificadores de color siguen
+   pisando esto sin problema porque van después en la cascada. */
+.badge { display: inline-block; padding: 2px 9px; border-radius: var(--crm-radius-pill); font-size: var(--crm-font-size-xs); font-weight: 600; background: var(--crm-color-surface-2); color: var(--crm-color-text-secondary); }
 .badge-granel { background: color-mix(in srgb, var(--crm-color-accent) 16%, transparent); color: var(--crm-color-accent); }
 .badge-entero { background: color-mix(in srgb, var(--crm-color-info) 16%, transparent); color: var(--crm-color-info); }
 .pill { display: inline-block; padding: 2px 9px; border-radius: var(--crm-radius-sm); font-size: 11.5px; font-weight: 600; }
