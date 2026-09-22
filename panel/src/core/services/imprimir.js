@@ -168,7 +168,7 @@ export function htmlDocumento({ empresa, formato, titulo, cuerpo, pie = '', esTi
   // La etiqueta no es un documento chico: no lleva membrete, ni pie, ni bordes,
   // y cada una es una página del rollo. Sale por su propio camino.
   if (f.etiqueta) return htmlEtiquetas({ f, titulo, cuerpo });
-  const color = f.rollo ? '#000' : colorSeguro(empresa.colorMarca, '#166534');
+  const color = f.rollo ? '#000' : colorSeguro(empresa.colorMarca, '#4f46e5');
   /* El nombre GRANDE es el de fantasía, que es con el que el cliente conoce al
    * negocio. La razón social va abajo, en la línea de datos, y SOLO si es otra:
    * repetirla cuando coinciden es ruido en un rollo de 58 mm. En la factura la

@@ -92,7 +92,7 @@ export function DisenadorEtiquetaFraccionado({
     cursor: 'grab',
     userSelect: 'none',
     touchAction: 'none',
-    outline: sel === key ? '2px dashed var(--crm-color-primary, #166534)' : '1px dashed transparent',
+    outline: sel === key ? '2px dashed var(--crm-color-primary, #4f46e5)' : '1px dashed transparent',
     outlineOffset: 1,
   });
   const props = (key) => ({

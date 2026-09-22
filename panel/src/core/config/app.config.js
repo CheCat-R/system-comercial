@@ -10,7 +10,7 @@ import { env } from './env.js';
 export const appConfig = Object.freeze({
   name: env.appName,
   version: '0.1.0',
-  company: 'Sabor y Aroma',
+  company: 'CheCAT',
 
   api: {
     baseUrl: env.apiBaseUrl,

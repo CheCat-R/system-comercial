@@ -21,7 +21,7 @@ export function SidebarContent({ collapsed = false, onNavigate }) {
   return (
     <nav className={styles.nav} aria-label="Navegación principal">
       <div className={styles.brand}>
-        <span className={styles.brandMark}>SA</span>
+        <span className={styles.brandMark}>C</span>
         {!collapsed && <span className={styles.brandName}>{appConfig.name}</span>}
       </div>
 

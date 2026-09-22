@@ -39,9 +39,9 @@ export function createAppTheme(mode = 'light', brandOverrides = {}) {
         },
       },
       /**
-       * El detalle naranja de la identidad: el indicador de pestañas. La
-       * pestaña activa queda en verde (texto) con la barrita naranja abajo —
-       * los dos colores de la marca en un solo componente.
+       * El indicador de pestañas usa `secondary` (índigo 500), un escalón más
+       * claro que el `primary` (índigo 600) del texto activo — mismo acento,
+       * dos tonos, para que el indicador se distinga sin salirse de la marca.
        */
       MuiTabs: {
         defaultProps: { indicatorColor: 'secondary' },

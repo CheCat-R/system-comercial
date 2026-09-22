@@ -5,33 +5,35 @@
  * MUI theme. Keeping both in one mental model (same names/values) is what makes
  * MUI components and custom CSS look like one product.
  *
- * Identidad: VERDE OSCURO como primario (siempre con blanco encima) y NARANJA
- * como secundario de detalle — es el color del indicador de tabs, badges y
- * resaltados, nunca de superficies grandes.
+ * Identidad: ÍNDIGO como único acento (siempre con blanco encima sobre
+ * superficie sólida) — "premium sobrio", sin gradientes, sin glow. `secondary`
+ * es una variación tonal del mismo índigo (500 en vez de 600), no un color de
+ * marca aparte: existe porque MUI necesita un segundo slot para el indicador
+ * de tabs, pero se queda en la misma familia.
  */
 
 export const lightPalette = {
   mode: 'light',
-  primary: { main: '#166534', dark: '#14532d', light: '#2f9e5f', contrastText: '#ffffff' },
-  secondary: { main: '#ea580c', dark: '#c2410c', contrastText: '#ffffff' },
-  success: { main: '#16a34a' },
+  primary: { main: '#4f46e5', dark: '#4338ca', light: '#818cf8', contrastText: '#ffffff' },
+  secondary: { main: '#6366f1', dark: '#4f46e5', contrastText: '#ffffff' },
+  success: { main: '#059669' },
   warning: { main: '#b45309' },
   error: { main: '#dc2626' },
-  info: { main: '#0f766e' },
-  background: { default: '#f3f6f3', paper: '#ffffff' },
-  text: { primary: '#16211a', secondary: '#56655c' },
-  divider: '#dde6de',
+  info: { main: '#2563eb' },
+  background: { default: '#f6f8fb', paper: '#ffffff' },
+  text: { primary: '#0f172a', secondary: '#475569' },
+  divider: '#e9edf2',
 };
 
 export const darkPalette = {
   mode: 'dark',
-  primary: { main: '#2f9e5f', dark: '#3cb571', light: '#4ade80', contrastText: '#06170d' },
-  secondary: { main: '#fb923c', dark: '#f97316', contrastText: '#1a1108' },
-  success: { main: '#22c55e' },
-  warning: { main: '#d97706' },
+  primary: { main: '#6366f1', dark: '#4f46e5', light: '#818cf8', contrastText: '#ffffff' },
+  secondary: { main: '#818cf8', dark: '#6366f1', contrastText: '#06070f' },
+  success: { main: '#10b981' },
+  warning: { main: '#f59e0b' },
   error: { main: '#ef4444' },
-  info: { main: '#2dd4bf' },
-  background: { default: '#0c1310', paper: '#131c16' },
-  text: { primary: '#e9f0ea', secondary: '#a4b5aa' },
-  divider: '#233129',
+  info: { main: '#3b82f6' },
+  background: { default: '#0a0e17', paper: '#121826' },
+  text: { primary: '#eef2f8', secondary: '#9aa7b8' },
+  divider: 'rgba(255, 255, 255, 0.11)',
 };

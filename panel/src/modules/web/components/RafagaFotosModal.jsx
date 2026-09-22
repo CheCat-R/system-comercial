@@ -95,7 +95,7 @@ export function RafagaFotosModal({ productos, onCerrar, onListo, avisar }) {
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); procesarArchivo(e.dataTransfer?.files?.[0]); }}
             style={{
-              border: '2px dashed var(--crm-color-primary, #166534)',
+              border: '2px dashed var(--crm-color-primary, #4f46e5)',
               borderRadius: 'var(--crm-radius-md)',
               padding: '34px 18px',
               textAlign: 'center',

@@ -11,18 +11,19 @@
 
    Convention: --crm-<category>-<name>. Never hard-code a raw hex in a module.
 
-   IDENTIDAD DE MARCA (Sabor y Aroma)
-   ----------------------------------
-   Dos colores y sus tonalidades, con papeles fijos:
+   IDENTIDAD DE MARCA (CheCAT) — "premium sobrio", un solo acento (índigo),
+   sin gradientes, sin glow. Portados 1:1 desde panel-dashboard/src/assets/
+   styles/variables.css, que es la fuente real de la marca.
+   ----------------------------------------------------------------------
+   ÍNDIGO      el único acento: navegación activa, botones primarios, foco,
+               selección, badges, tabs. Siempre con letra blanca encima
+               sobre superficie sólida.
 
-     VERDE OSCURO  el color PRINCIPAL: navegación, botones primarios, foco,
-                   selección, totales. Siempre con letra blanca encima.
-     NARANJA       el color de DETALLE: indicadores activos, badges, tabs,
-                   resaltados. Señala "acá", nunca superficies grandes.
-
-   Regla para elegir: si es una superficie o una acción → verde; si es un
-   acento chico que tiene que saltar a la vista → naranja. El resto de la
-   pantalla se mantiene CLARA y neutra con un tinte verde apenas perceptible.
+   A diferencia del esquema anterior (dos colores con roles fijos), acá NO
+   hay un segundo acento "de detalle": `accent-2` existe porque varios
+   componentes ya lo consumen (el indicador de tabs, el degradé del logo),
+   pero apunta a una variación tonal del MISMO índigo — no a un color nuevo.
+   El resto de la pantalla se mantiene neutro, sin tinte de marca.
    ========================================================================== */
 
 :root {
@@ -75,84 +76,88 @@
    ------------------------------------------------------------------------- */
 :root,
 [data-theme='light'] {
-  /* Verde principal: oscuro, siempre con blanco encima. */
-  --crm-color-primary: #166534;
-  --crm-color-primary-hover: #14532d;
+  /* Índigo 600, siempre con blanco encima. */
+  --crm-color-primary: #4f46e5;
+  --crm-color-primary-hover: #4338ca;
   --crm-color-primary-contrast: #ffffff;
   /* Tinte del primario para fondos de selección/hover (superficie, no letra). */
-  --crm-color-primary-soft: #e7f2ea;
+  --crm-color-primary-soft: #eef2ff;
 
-  /* El accent interactivo de los módulos ES el verde: foco, selección, activo. */
-  --crm-color-accent: #166534;
-  /* Naranja: el detalle que salta a la vista. Nunca superficies grandes. */
-  --crm-color-accent-2: #ea580c;
-  --crm-color-accent-2-soft: #fff1e6;
+  /* El accent interactivo de los módulos ES el índigo: foco, selección, activo. */
+  --crm-color-accent: #4f46e5;
+  /* Variación tonal del mismo índigo (500, un escalón más claro) para lo que
+     necesita distinguirse del primario sin salirse de la familia — el
+     indicador de tabs, el detalle del logo. No es un color nuevo. */
+  --crm-color-accent-2: #6366f1;
+  --crm-color-accent-2-soft: #e0e7ff;
 
-  --crm-color-success: #16a34a;
+  --crm-color-success: #059669;
   --crm-color-warning: #b45309;
   --crm-color-danger: #dc2626;
   /* Alias: hay módulos escritos con `error` y otros con `danger`. Uno solo
      de verdad; el otro apunta acá. */
   --crm-color-error: var(--crm-color-danger);
-  --crm-color-info: #0f766e;
+  --crm-color-info: #2563eb;
 
-  /* Fondos claros con un tinte verde apenas perceptible: es lo que hace que
-     el blanco de las tarjetas se despegue sin necesitar bordes gruesos. */
-  --crm-color-bg: #f3f6f3;
+  /* Fondos claros y neutros — "premium sobrio", sin tinte de marca. */
+  --crm-color-bg: #f6f8fb;
   --crm-color-surface: #ffffff;
-  --crm-color-surface-2: #f7faf7;
+  --crm-color-surface-2: #f1f5f9;
 
-  /* Navegación: verde profundo, más oscuro que el primario para que los
-     botones verdes del contenido no compitan con el marco. */
-  --crm-color-sidebar-bg: #0c3b22;
-  --crm-color-sidebar-text: #a9c6b3;
+  /* Navegación: rail oscuro y neutro (no un tono de marca) — el mismo
+     criterio que panel-dashboard usa en su propio modo oscuro, así que sale
+     de ahí en vez de inventar un gris nuevo. */
+  --crm-color-sidebar-bg: #121826;
+  --crm-color-sidebar-text: #9aa7b8;
   --crm-color-sidebar-text-active: #ffffff;
-  --crm-color-sidebar-active: #155232;
+  --crm-color-sidebar-active: rgba(99, 102, 241, 0.18);
 
-  --crm-color-text: #16211a;
-  --crm-color-text-secondary: #56655c;
-  --crm-color-text-muted: #85948b;
-  --crm-color-border: #dde6de;
+  --crm-color-text: #0f172a;
+  --crm-color-text-secondary: #475569;
+  --crm-color-text-muted: #64748b;
+  --crm-color-border: #e9edf2;
 
-  --crm-shadow-sm: 0 1px 2px rgba(12, 45, 26, 0.06);
-  --crm-shadow-md: 0 4px 14px rgba(12, 45, 26, 0.08);
-  --crm-shadow-lg: 0 12px 36px rgba(12, 45, 26, 0.14);
+  --crm-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --crm-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --crm-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12), 0 4px 8px rgba(15, 23, 42, 0.06);
 }
 
 /* -------------------------------------------------------------------------
-   DARK THEME — misma identidad (verde + naranja), invertida con criterio:
-   el primario se aclara para que siga contrastando, el naranja se calienta.
+   DARK THEME — mismo índigo, más claro para seguir contrastando sobre fondo
+   oscuro (600 → 500 → 300 para primary/accent/accent-text, el mismo criterio
+   que usa panel-dashboard). El rail de navegación baja un escalón más de
+   oscuro que el fondo del contenido, para que se lo distinga como marco.
    ------------------------------------------------------------------------- */
 [data-theme='dark'] {
-  --crm-color-primary: #2f9e5f;
-  --crm-color-primary-hover: #3cb571;
-  --crm-color-primary-contrast: #06170d;
-  --crm-color-primary-soft: #12301e;
+  --crm-color-primary: #6366f1;
+  --crm-color-primary-hover: #818cf8;
+  --crm-color-primary-contrast: #ffffff;
+  --crm-color-primary-soft: rgba(99, 102, 241, 0.14);
 
-  --crm-color-accent: #3fae6e;
-  --crm-color-accent-2: #fb923c;
-  --crm-color-accent-2-soft: #3a2312;
+  --crm-color-accent: #6366f1;
+  --crm-color-accent-2: #818cf8;
+  --crm-color-accent-2-soft: rgba(99, 102, 241, 0.14);
 
-  --crm-color-success: #22c55e;
-  --crm-color-warning: #d97706;
+  --crm-color-success: #10b981;
+  --crm-color-warning: #f59e0b;
   --crm-color-danger: #ef4444;
   --crm-color-error: var(--crm-color-danger);
-  --crm-color-info: #2dd4bf;
+  --crm-color-info: #3b82f6;
 
-  --crm-color-bg: #0c1310;
-  --crm-color-surface: #131c16;
-  --crm-color-surface-2: #1a2620;
-  --crm-color-sidebar-bg: #081209;
-  --crm-color-sidebar-text: #8dab97;
+  --crm-color-bg: #0a0e17;
+  --crm-color-surface: #121826;
+  --crm-color-surface-2: #1a2233;
+  --crm-color-sidebar-bg: #0a0e17;
+  --crm-color-sidebar-text: #9aa7b8;
   --crm-color-sidebar-text-active: #ffffff;
-  --crm-color-sidebar-active: #14532d;
+  --crm-color-sidebar-active: rgba(99, 102, 241, 0.16);
 
-  --crm-color-text: #e9f0ea;
-  --crm-color-text-secondary: #a4b5aa;
-  --crm-color-text-muted: #6e8074;
-  --crm-color-border: #233129;
+  --crm-color-text: #eef2f8;
+  --crm-color-text-secondary: #9aa7b8;
+  --crm-color-text-muted: #6b7789;
+  --crm-color-border: rgba(255, 255, 255, 0.11);
 
-  --crm-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --crm-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
-  --crm-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --crm-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --crm-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.4);
+  --crm-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6), 0 4px 10px rgba(0, 0, 0, 0.45);
 }

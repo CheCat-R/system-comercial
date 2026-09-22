@@ -117,7 +117,7 @@ function ElegirClienteModal({ clientes, actualId, onElegir, onCerrar }) {
               padding: '8px 12px', textAlign: 'left', cursor: 'pointer', width: '100%',
               border: '1px solid var(--crm-color-border)', borderRadius: 'var(--crm-radius-sm)',
               background: c.id === actualId
-                ? 'color-mix(in srgb, var(--crm-color-primary, #166534) 10%, transparent)'
+                ? 'color-mix(in srgb, var(--crm-color-primary, #4f46e5) 10%, transparent)'
                 : 'transparent',
             }}
           >

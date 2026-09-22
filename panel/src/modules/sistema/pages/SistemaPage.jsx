@@ -372,7 +372,7 @@ export function SistemaPage() {
                 </div>
                 <div className={s.field}>
                   <label>Color de la marca (documentos A4 — los rollos son B/N)</label>
-                  <input type="color" value={empresa.colorMarca || '#166534'} style={{ width: 64, height: 38, padding: 2 }} onChange={(e) => setEmpresa((x) => ({ ...x, colorMarca: e.target.value }))} />
+                  <input type="color" value={empresa.colorMarca || '#4f46e5'} style={{ width: 64, height: 38, padding: 2 }} onChange={(e) => setEmpresa((x) => ({ ...x, colorMarca: e.target.value }))} />
                 </div>
               </div>
             </div>
