@@ -34,9 +34,6 @@ const Sidebar = ({ mobileOpen, onClose }) => {
     setUserToggles((prev) => ({ ...prev, [text]: !prev[text] }));
   };
 
-  const isSubmenuActiveByRoute = (item) =>
-    Boolean(item.children) && location.pathname.startsWith(item.path) && item.path !== "/";
-
   const drawerContent = (
     <Box className="sidebar-container">
       <Box className="sidebar-brand-toolbar">
@@ -61,10 +58,6 @@ const Sidebar = ({ mobileOpen, onClose }) => {
               <div className="sidebar-section-header">{section.title}</div>
               {section.items.map((item) => {
                 const hasChildren = item.children && item.children.length > 0;
-                const isSubmenuOpen =
-                  item.text in userToggles
-                    ? Boolean(userToggles[item.text])
-                    : isSubmenuActiveByRoute(item);
 
                 // Un hijo "índice" (misma ruta que el padre) coincide exacto;
                 // el resto por prefijo.
@@ -75,6 +68,16 @@ const Sidebar = ({ mobileOpen, onClose }) => {
 
                 const isParentActive =
                   !item.disabled && hasChildren && item.children.some((c) => childMatches(c.path));
+
+                // ⭐ Se abre solo cuando la ruta activa es de ALGUNO de sus
+                // hijos — no del propio `item.path` del padre, que es apenas
+                // el primero de la lista. Un módulo como Compras o Gerencia
+                // junta hijos de dos prefijos de URL distintos (p. ej.
+                // `/productos/*` y `/abastecimiento/compras`); comparar solo
+                // contra `item.path` dejaba la mayoría de esos hijos sin
+                // poder abrir su propio submenú al navegar directo o recargar.
+                const isSubmenuOpen =
+                  item.text in userToggles ? Boolean(userToggles[item.text]) : isParentActive;
 
                 const isItemActive =
                   !item.disabled &&
