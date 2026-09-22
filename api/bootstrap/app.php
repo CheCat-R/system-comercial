@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\CamelizarJson;
 use App\Http\Middleware\ExigirPermiso;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -25,6 +26,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         // Un cliente sin sesión recibe 401 en JSON, nunca una redirección a una pantalla de login.
         $middleware->redirectGuestsTo(fn () => null);
+        // Red de seguridad: el panel espera camelCase (contrato heredado de crm-api/
+        // Drizzle); acá no hay mapeo automático, así que esto lo garantiza al salir.
+        $middleware->append(CamelizarJson::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Un cliente de API nunca tiene que recibir HTML, pida lo que pida en `Accept`.
