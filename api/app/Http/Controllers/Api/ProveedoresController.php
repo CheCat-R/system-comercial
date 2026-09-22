@@ -65,4 +65,18 @@ class ProveedoresController extends Controller
 
         return response()->json($this->svc->setCuentas($proveedor, $d['cuentas']));
     }
+
+    public function importar(Request $request, Sesion $sesion): JsonResponse
+    {
+        $d = $request->validate(['filas' => ['required', 'array', 'max:500']]);
+
+        return response()->json($this->svc->importar($d['filas'], $sesion->usuarioId));
+    }
+
+    public function migracion(Request $request, Proveedor $proveedor): JsonResponse
+    {
+        $d = $request->validate(['lista' => ['nullable', 'boolean']]);
+
+        return response()->json($this->svc->publica($this->svc->setMigracionLista($proveedor, (bool) ($d['lista'] ?? true))));
+    }
 }

@@ -48,6 +48,16 @@ class ProductosController extends Controller
         return response()->json($this->svc->crear($request->validated()), 201);
     }
 
+    public function importar(Request $request): JsonResponse
+    {
+        $d = $request->validate([
+            'proveedorId' => ['required', 'integer'],
+            'items' => ['required', 'array', 'max:3000'],
+        ]);
+
+        return response()->json($this->svc->importar($d['items'], (int) $d['proveedorId']));
+    }
+
     public function update(GuardarProductoRequest $request, Producto $producto): JsonResponse
     {
         return response()->json($this->svc->editar($producto, $request->validated()));

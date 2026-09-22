@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Exceptions\ErrorDeNegocio;
+use App\Models\Cliente;
+use App\Models\ClienteLista;
 use App\Models\ListaVenta;
 use App\Models\ModalidadVenta;
 use App\Models\Presentacion;
@@ -162,6 +164,48 @@ class ListasService
         ]);
 
         return $r;
+    }
+
+    /* ---------------- Listas predeterminadas de un cliente ---------------- */
+
+    public function listasDeCliente(int $clienteId): array
+    {
+        return DB::table('cliente_listas')
+            ->join('listas_venta', 'listas_venta.id', '=', 'cliente_listas.lista_id')
+            ->where('cliente_listas.cliente_id', $clienteId)
+            ->orderBy('listas_venta.orden')
+            ->get([
+                'cliente_listas.lista_id as listaId', 'listas_venta.numero', 'listas_venta.nombre',
+                'listas_venta.modalidad_id as modalidadId', 'listas_venta.orden',
+            ])
+            ->all();
+    }
+
+    /** Reemplaza el conjunto completo de listas predeterminadas de un cliente. */
+    public function setListasDeCliente(int $clienteId, array $listaIds): array
+    {
+        $cliente = Cliente::query()->find($clienteId);
+        if (! $cliente) {
+            throw new NotFoundHttpException('Cliente inexistente.');
+        }
+        if ($cliente->es_consumidor_final && count($listaIds)) {
+            throw new ErrorDeNegocio(
+                $cliente->nombre.' es el cliente genérico del mostrador: no lleva listas asignadas. '
+                .'Si querés que un cliente pague mayorista, cargalo como cliente propio.'
+            );
+        }
+        $ids = array_values(array_unique(array_filter(array_map('intval', $listaIds))));
+        DB::transaction(function () use ($clienteId, $ids) {
+            ClienteLista::query()->where('cliente_id', $clienteId)->delete();
+            if ($ids) {
+                ClienteLista::query()->insert(array_map(
+                    fn ($listaId) => ['cliente_id' => $clienteId, 'lista_id' => $listaId],
+                    $ids,
+                ));
+            }
+        });
+
+        return $this->listasDeCliente($clienteId);
     }
 
     /* ---------------- Formato de venta (filas producto×lista) ---------------- */

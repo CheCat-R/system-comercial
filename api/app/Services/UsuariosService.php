@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Auth\FrenoPin;
 use App\Auth\Permisos;
 use App\Auth\Sesion;
 use App\Models\Rol;
 use App\Models\Usuario;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -19,6 +21,7 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  */
 class UsuariosService
 {
+    public function __construct(private readonly AuditoriaService $auditoria) {}
     /* ---------------- Roles ---------------- */
 
     public function listarRoles()
@@ -226,6 +229,74 @@ class UsuariosService
         }
 
         return $usuario->refresh()->load('rol');
+    }
+
+    /* ---------------- Relevo de caja (0088) ---------------- */
+
+    /** Los usuarios que pueden tomar la caja: activos, con la marca y con PIN. */
+    public function listarRelevos()
+    {
+        return Usuario::query()
+            ->where('activo', true)
+            ->where('relevo_caja', true)
+            ->whereNotNull('pin')
+            ->orderBy('nombre')
+            ->get(['id', 'nombre']);
+    }
+
+    /**
+     * EL RELEVO ENTRA: verifica el PIN y deja el rastro en la auditoría. La
+     * sesión no cambia — de acá en más el POS firma las operaciones con el
+     * `operadorId` que cada endpoint valida aparte. `relevoId` y no
+     * `usuarioId`: éste último es el de la sesión (la cajera titular), no el
+     * del relevo que se está identificando.
+     */
+    public function verificarRelevo(array $datos, Sesion $sesion): array
+    {
+        $id = (int) ($datos['relevoId'] ?? 0);
+        $usuario = Usuario::query()->find($id);
+        if (! $usuario || ! $usuario->activo || ! $usuario->relevo_caja || ! $usuario->tienePin()) {
+            throw ValidationException::withMessages(['relevoId' => 'Ese usuario no está habilitado para relevar en caja.']);
+        }
+
+        FrenoPin::revisar($usuario->id);
+        if (! Hash::check((string) ($datos['pin'] ?? ''), $usuario->pin)) {
+            FrenoPin::fallo($usuario->id);
+            throw ValidationException::withMessages(['pin' => 'PIN incorrecto.']);
+        }
+        FrenoPin::exito($usuario->id);
+
+        $turno = (int) ($datos['cajaSesionId'] ?? 0);
+        $this->auditoria->registrar([[
+            'entidad' => 'caja',
+            'entidadId' => $turno,
+            'ambito' => 'Relevo de caja',
+            'detalle' => $turno ? "Turno #{$turno}" : 'Sin turno abierto',
+            'campo' => 'Quién está en la caja',
+            'antes' => $sesion->nombre,
+            'despues' => $usuario->nombre,
+            'usuarioId' => $sesion->usuarioId,
+        ]]);
+
+        return ['ok' => true, 'usuario' => ['id' => $usuario->id, 'nombre' => $usuario->nombre]];
+    }
+
+    /** El titular vuelve: sin PIN (la sesión ES suya), pero con rastro igual. */
+    public function volverDeRelevo(array $datos, Sesion $sesion): array
+    {
+        $turno = (int) ($datos['cajaSesionId'] ?? 0);
+        $this->auditoria->registrar([[
+            'entidad' => 'caja',
+            'entidadId' => $turno,
+            'ambito' => 'Relevo de caja',
+            'detalle' => $turno ? "Turno #{$turno}" : 'Sin turno abierto',
+            'campo' => 'Quién está en la caja',
+            'antes' => Str::limit((string) ($datos['operadorNombre'] ?? ''), 120, ''),
+            'despues' => $sesion->nombre,
+            'usuarioId' => $sesion->usuarioId,
+        ]]);
+
+        return ['ok' => true];
     }
 
     /** Nunca puede quedar el sistema sin UN superadmin activo: sería quedarse afuera. */

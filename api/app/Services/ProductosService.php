@@ -3,7 +3,11 @@
 namespace App\Services;
 
 use App\Exceptions\ErrorDeNegocio;
+use App\Models\Categoria;
+use App\Models\Marca;
+use App\Models\Presentacion;
 use App\Models\Producto;
+use App\Models\Subcategoria;
 use App\Precios\CostoEntry;
 use App\Precios\FilaVenta;
 use App\Precios\OpcionesPrecio;
@@ -429,6 +433,323 @@ class ProductosService
                 DB::table('producto_etiquetas')->insert(array_map(fn ($e) => ['producto_id' => $id, 'etiqueta_id' => $e], $limpios));
             }
         });
+    }
+
+    /* ============================ IMPORTACIÓN MASIVA ============================ *
+     * Un catálogo entero (un proveedor, cientos de productos) en UNA transacción:
+     * o entra todo o no entra nada. Sin esto, un choque de código en el producto
+     * 60 dejaba 59 a medias y el segundo intento duplicaba.
+     *
+     * El PLAN llega armado desde el navegador (que ya mostró la vista previa):
+     * acá se valida contra la base, se resuelven marcas y rubros por NOMBRE
+     * —creando los que falten— y se escribe. Es IDEMPOTENTE por código interno:
+     * lo que ya existe se saltea y se informa, nunca se sobreescribe (actualizar
+     * costos es trabajo de la factura, no de una importación).
+     */
+    public function importar(array $items, int $proveedorId): array
+    {
+        if (! $items) {
+            throw new ErrorDeNegocio('No hay nada para importar.');
+        }
+        $prov = DB::table('proveedores')->find($proveedorId);
+        if (! $prov) {
+            throw new ErrorDeNegocio('El proveedor elegido no existe.');
+        }
+
+        $listasActivas = $this->listas->listasActivas()->pluck('id')->flip();
+
+        /* ---- Qué NO se puede crear: se descarta antes de abrir la transacción ---- */
+        $codigosPropios = array_values(array_filter(array_map(fn ($x) => trim((string) ($x['producto']['codigoPropio'] ?? '')), $items)));
+        $yaEnBase = $codigosPropios
+            ? DB::table('productos')->whereIn('codigo_propio', $codigosPropios)->get(['id', 'codigo_propio', 'nombre', 'estado'])
+            : collect();
+        $existentes = $yaEnBase->keyBy('codigo_propio');
+
+        /* Qué productos ya tienen formato de compra, y de qué proveedores: decide
+         * el destino de un producto que YA EXISTE — un mismo producto puede venir
+         * en el catálogo de VARIOS proveedores; el existente se VINCULA (se le
+         * agrega el formato de compra de este proveedor, sin tocar el precio). */
+        $idsExistentes = $yaEnBase->pluck('id')->all();
+        $provsDeProducto = [];
+        if ($idsExistentes) {
+            foreach (DB::table('producto_proveedores')->whereIn('producto_id', $idsExistentes)->get(['producto_id', 'proveedor_id']) as $f) {
+                $provsDeProducto[$f->producto_id][$f->proveedor_id] = true;
+            }
+        }
+
+        // Todos los códigos de barras que ya usa el sistema (producto, presentación
+        // o formato de venta): uno no puede identificar dos cosas distintas.
+        $barrasUsadas = collect()
+            ->merge(DB::table('productos')->pluck('codigo_barras'))
+            ->merge(DB::table('productos')->pluck('dun'))
+            ->merge(DB::table('presentaciones')->pluck('codigo_barras'))
+            ->merge(DB::table('producto_listas')->pluck('codigo_barras'))
+            ->filter()
+            ->flip();
+
+        $saltados = [];
+        $aCrear = [];
+        $aVincular = [];
+        $vistosCodigo = [];
+        $vistosBarras = [];
+
+        foreach ($items as $it) {
+            $p = $it['producto'] ?? [];
+            $codigo = trim((string) ($p['codigoPropio'] ?? ''));
+            $nombre = trim((string) ($p['nombre'] ?? ''));
+            if ($nombre === '') {
+                $saltados[] = ['codigo' => $codigo, 'nombre' => $nombre, 'motivo' => 'sin nombre'];
+
+                continue;
+            }
+            if ($codigo === '') {
+                $saltados[] = ['codigo' => $codigo, 'nombre' => $nombre, 'motivo' => 'sin código interno'];
+
+                continue;
+            }
+            $existente = $existentes->get($codigo);
+            if ($existente) {
+                /* Un archivado no se vincula en silencio: primero hay que decidir si
+                 * revive. Y el que ya tiene el formato de ESTE proveedor no tiene nada
+                 * que agregar — la actualización de costos es trabajo de la factura. */
+                if ($existente->estado === 'archivado') {
+                    $saltados[] = ['codigo' => $codigo, 'nombre' => $nombre, 'motivo' => "ya existe como \"{$existente->nombre}\" — archivado, hay que reactivarlo"];
+                } elseif (isset($provsDeProducto[$existente->id][$proveedorId])) {
+                    $saltados[] = ['codigo' => $codigo, 'nombre' => $nombre, 'motivo' => "ya existe como \"{$existente->nombre}\" y ya tiene el formato de este proveedor"];
+                } elseif (isset($vistosCodigo[$codigo])) {
+                    $saltados[] = ['codigo' => $codigo, 'nombre' => $nombre, 'motivo' => 'código repetido en el archivo'];
+                } else {
+                    $vistosCodigo[$codigo] = true;
+                    $aVincular[] = [
+                        'productoId' => $existente->id,
+                        'nombre' => $existente->nombre,
+                        'codigo' => $codigo,
+                        // Sin ningún formato previo no hay quién fije el precio: este pasa a fijarlo.
+                        'esPrimero' => empty($provsDeProducto[$existente->id]),
+                        'it' => $it,
+                    ];
+                }
+
+                continue;
+            }
+            if (isset($vistosCodigo[$codigo])) {
+                $saltados[] = ['codigo' => $codigo, 'nombre' => $nombre, 'motivo' => 'código repetido en el archivo'];
+
+                continue;
+            }
+            if (! Iva::esValida($p['iva'] ?? null)) {
+                $saltados[] = ['codigo' => $codigo, 'nombre' => $nombre, 'motivo' => "IVA inválido ({$p['iva']}%)"];
+
+                continue;
+            }
+            // Los códigos de barras del producto y de sus presentaciones, juntos.
+            $barras = collect([$p['codigoBarras'] ?? null])
+                ->merge(collect($it['presentaciones'] ?? [])->pluck('codigoBarras'))
+                ->map(fn ($c) => trim((string) ($c ?? '')))
+                ->filter();
+            $choca = $barras->first(fn ($c) => $barrasUsadas->has($c) || isset($vistosBarras[$c]));
+            if ($choca) {
+                $saltados[] = ['codigo' => $codigo, 'nombre' => $nombre, 'motivo' => "el código de barras {$choca} ya está en uso"];
+
+                continue;
+            }
+
+            $vistosCodigo[$codigo] = true;
+            foreach ($barras as $c) {
+                $vistosBarras[$c] = true;
+            }
+            $aCrear[] = $it;
+        }
+
+        if (! $aCrear && ! $aVincular) {
+            return ['ok' => true, 'creados' => 0, 'vinculados' => [], 'saltados' => $saltados, 'marcasCreadas' => [], 'rubrosCreados' => []];
+        }
+
+        /* ---- Marcas y rubros por nombre: se reusa lo que hay, se crea lo que falta ---- */
+        $marcasCreadas = [];
+        $rubrosCreados = [];
+        $ids = [];
+
+        DB::transaction(function () use ($aCrear, $aVincular, $proveedorId, $listasActivas, &$marcasCreadas, &$rubrosCreados, &$ids) {
+            $clave = fn (string $s) => mb_strtolower(trim($s));
+            $marcaPorNombre = Marca::query()->pluck('id', 'nombre')->mapWithKeys(fn ($id, $n) => [$clave($n) => $id]);
+            $catPorNombre = Categoria::query()->pluck('id', 'nombre')->mapWithKeys(fn ($id, $n) => [$clave($n) => $id]);
+            $subPorNombre = Subcategoria::query()->pluck('id', 'nombre')->mapWithKeys(fn ($id, $n) => [$clave($n) => $id]);
+
+            $idMarca = function (?string $nombre) use (&$marcaPorNombre, &$marcasCreadas, $clave) {
+                $n = trim((string) $nombre);
+                if ($n === '') {
+                    return null;
+                }
+                if ($marcaPorNombre->has($clave($n))) {
+                    return $marcaPorNombre->get($clave($n));
+                }
+                $m = Marca::query()->create(['nombre' => $n]);
+                $marcaPorNombre->put($clave($n), $m->id);
+                $marcasCreadas[] = $n;
+
+                return $m->id;
+            };
+            $idCategoria = function (?string $nombre) use (&$catPorNombre, &$rubrosCreados, $clave) {
+                $n = trim((string) $nombre) ?: 'Alimentos';
+                if ($catPorNombre->has($clave($n))) {
+                    return $catPorNombre->get($clave($n));
+                }
+                $c = Categoria::query()->create(['nombre' => $n]);
+                $catPorNombre->put($clave($n), $c->id);
+                $rubrosCreados[] = $n;
+
+                return $c->id;
+            };
+            $idSub = function (?string $nombre, int $categoriaId) use (&$subPorNombre, &$rubrosCreados, $clave) {
+                $n = trim((string) $nombre);
+                if ($n === '') {
+                    return null;
+                }
+                if ($subPorNombre->has($clave($n))) {
+                    return $subPorNombre->get($clave($n));
+                }
+                $s = Subcategoria::query()->create(['nombre' => $n, 'categoria_id' => $categoriaId]);
+                $subPorNombre->put($clave($n), $s->id);
+                $rubrosCreados[] = $n;
+
+                return $s->id;
+            };
+
+            $filasVenta = function (array $crudas, ?int $productoId, ?int $presId) use ($listasActivas) {
+                $vistas = [];
+                $out = [];
+                foreach ($crudas as $l) {
+                    $listaId = (int) ($l['listaId'] ?? 0);
+                    if (! $listasActivas->has($listaId)) {
+                        continue;
+                    }
+                    if (($l['modoPrecio'] ?? '') === 'precio' && ! ((float) ($l['precioFijo'] ?? 0) > 0)) {
+                        continue;
+                    }
+                    if (isset($vistas[$listaId])) {
+                        continue;
+                    }
+                    $vistas[$listaId] = true;
+                    $out[] = [
+                        'producto_id' => $productoId, 'presentacion_id' => $presId, 'lista_id' => $listaId,
+                        'modo_precio' => ($l['modoPrecio'] ?? '') === 'precio' ? 'precio' : 'markup',
+                        'markup' => (float) ($l['markup'] ?? 0), 'precio_fijo' => (float) ($l['precioFijo'] ?? 0),
+                        'unidades' => max(1, (float) ($l['unidades'] ?? 1)), 'codigo_barras' => '',
+                        'unidades_minimas' => max(0, (float) ($l['unidadesMinimas'] ?? 0)),
+                        'created_at' => now(), 'updated_at' => now(),
+                    ];
+                }
+
+                return $out;
+            };
+
+            foreach ($aCrear as $it) {
+                $p = $it['producto'];
+                $categoriaId = $idCategoria($p['categoriaNombre'] ?? null);
+                $creado = Producto::query()->create([
+                    'nombre' => trim($p['nombre']),
+                    'descripcion' => trim((string) ($p['descripcion'] ?? '')),
+                    'codigo_propio' => trim($p['codigoPropio']),
+                    'codigo_barras' => trim((string) ($p['codigoBarras'] ?? '')),
+                    'dun' => '',
+                    'unidades_por_bulto' => max(1, (float) ($p['unidadesPorBulto'] ?? 1)),
+                    'marca_id' => $idMarca($p['marcaNombre'] ?? null),
+                    'categoria_id' => $categoriaId,
+                    'subcategoria_id' => $idSub($p['subcategoriaNombre'] ?? null, $categoriaId),
+                    'iva' => (float) $p['iva'],
+                    'tipo' => ! empty($p['esGranel']) ? 'granel' : 'entero',
+                    'publicado' => ! empty($p['publicado']),
+                    'id_externo' => trim((string) ($p['idExterno'] ?? '')),
+                ]);
+                $ids[] = $creado->id;
+
+                $f = $it['formatoCompra'] ?? [];
+                DB::table('producto_proveedores')->insert([
+                    'producto_id' => $creado->id, 'proveedor_id' => $proveedorId,
+                    'cantidad' => (float) ($f['cantidad'] ?? 0) > 0 ? (float) $f['cantidad'] : 1,
+                    'costo' => (float) ($f['costo'] ?? 0), 'descuento' => (float) ($f['descuento'] ?? 0),
+                    'descuento2' => (float) ($f['descuento2'] ?? 0), 'descuento3' => (float) ($f['descuento3'] ?? 0), 'descuento4' => (float) ($f['descuento4'] ?? 0),
+                    'flete' => (float) ($f['flete'] ?? 0), 'modo_costo' => ($f['modoCosto'] ?? '') === 'final' ? 'final' : 'lista',
+                    'costo_final' => (float) ($f['costoFinal'] ?? 0),
+                    'usar_para_precio' => true, // es el único formato del producto recién creado
+                    'codigo_proveedor' => trim((string) ($f['codigoProveedor'] ?? '')),
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+
+                /*
+                 * El formato de venta se escribe con ESTA transacción y no con
+                 * `ListasService::setFormato` (esa abre la suya propia y las filas
+                 * quedarían fuera del "todo o nada"). Los formatos importados no
+                 * llevan código de barras propio — los códigos viven en el
+                 * producto y en sus presentaciones —, así que no hay nada más
+                 * que validar acá.
+                 */
+                $delProducto = $filasVenta($it['listas'] ?? [], $creado->id, null);
+                if ($delProducto) {
+                    DB::table('producto_listas')->insert($delProducto);
+                }
+
+                /*
+                 * Las presentaciones son del granel: en un producto entero no
+                 * existen. Cada una entra con SU formato de venta, que el
+                 * archivo del sistema viejo ya trae. Se insertan de a una para
+                 * usar el id que devuelve cada una.
+                 */
+                if (! empty($p['esGranel'])) {
+                    foreach ($it['presentaciones'] ?? [] as $x) {
+                        if (! ((float) ($x['tamKg'] ?? 0) > 0)) {
+                            continue;
+                        }
+                        $pres = Presentacion::query()->create([
+                            'producto_id' => $creado->id,
+                            'tam_kg' => (float) $x['tamKg'],
+                            'codigo_barras' => trim((string) ($x['codigoBarras'] ?? '')),
+                        ]);
+                        $suyas = $filasVenta($x['listas'] ?? [], $creado->id, $pres->id);
+                        if ($suyas) {
+                            DB::table('producto_listas')->insert($suyas);
+                        }
+                    }
+                }
+            }
+
+            /* ---- Los EXISTENTES que este proveedor también vende ----
+             * Solo se les agrega el formato de compra de este proveedor: ni la
+             * ficha ni el precio de venta se tocan — eso ya lo administra quien
+             * lo cargó primero. `usarParaPrecio` solo si el producto no tenía
+             * ningún formato (huérfano de costo): ahí este pasa a fijar el
+             * precio porque no hay alternativa. */
+            foreach ($aVincular as $v) {
+                $f = $v['it']['formatoCompra'] ?? [];
+                DB::table('producto_proveedores')->insert([
+                    'producto_id' => $v['productoId'], 'proveedor_id' => $proveedorId,
+                    'cantidad' => (float) ($f['cantidad'] ?? 0) > 0 ? (float) $f['cantidad'] : 1,
+                    'costo' => (float) ($f['costo'] ?? 0), 'descuento' => (float) ($f['descuento'] ?? 0),
+                    'descuento2' => (float) ($f['descuento2'] ?? 0), 'descuento3' => (float) ($f['descuento3'] ?? 0), 'descuento4' => (float) ($f['descuento4'] ?? 0),
+                    'flete' => (float) ($f['flete'] ?? 0), 'modo_costo' => ($f['modoCosto'] ?? '') === 'final' ? 'final' : 'lista',
+                    'costo_final' => (float) ($f['costoFinal'] ?? 0),
+                    'usar_para_precio' => $v['esPrimero'],
+                    'codigo_proveedor' => trim((string) ($f['codigoProveedor'] ?? '')),
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+            }
+        });
+
+        // El primer precio de cada producto queda en la evolución: un solo snapshot
+        // para todos, no uno por producto (son cientos).
+        if ($ids) {
+            $this->evolucion->snapshot($ids, 'inicial');
+        }
+
+        return [
+            'ok' => true,
+            'creados' => count($ids),
+            'vinculados' => array_map(fn ($v) => ['codigo' => $v['codigo'], 'nombre' => $v['nombre'], 'fijaPrecio' => $v['esPrimero']], $aVincular),
+            'saltados' => $saltados,
+            'marcasCreadas' => $marcasCreadas,
+            'rubrosCreados' => $rubrosCreados,
+        ];
     }
 
     /** Documentos que referencian al producto: con historia no se borra, se da de baja. */

@@ -66,6 +66,14 @@ class ListasController extends Controller
         return response()->json($this->svc->catalogo()['reglasMarca']);
     }
 
+    /** Listas predeterminadas de un cliente (reemplaza el conjunto completo). */
+    public function setCliente(Request $request, int $clienteId): JsonResponse
+    {
+        $d = $request->validate(['listas' => ['nullable', 'array'], 'listas.*' => ['integer']]);
+
+        return response()->json($this->svc->setListasDeCliente($clienteId, $d['listas'] ?? []));
+    }
+
     private function reglasRegla(): array
     {
         return ['marcaId' => ['required', 'integer'], 'unidadesMinimas' => ['required', 'numeric'], 'modalidadId' => ['required', 'integer'], 'activa' => ['nullable', 'boolean']];

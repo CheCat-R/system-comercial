@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\PreciosController;
 use App\Http\Controllers\Api\PresupuestosController;
 use App\Http\Controllers\Api\ProductosController;
 use App\Http\Controllers\Api\ProveedoresController;
+use App\Http\Controllers\Api\RelevosController;
 use App\Http\Controllers\Api\RolesController;
 use App\Http\Controllers\Api\SucursalesController;
 use App\Http\Controllers\Api\TerminalesController;
@@ -111,6 +112,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('permiso:compras.productos')->group(function () {
         Route::post('/productos', [ProductosController::class, 'store']);
         Route::post('/productos/archivar-lote', [ProductosController::class, 'archivarLote']);
+        Route::post('/productos/importar', [ProductosController::class, 'importar']);
         Route::patch('/productos/{producto}', [ProductosController::class, 'update']);
         Route::delete('/productos/{producto}', [ProductosController::class, 'destroy']);
         Route::post('/productos/{producto}/estado', [ProductosController::class, 'cambiarEstado']);
@@ -134,6 +136,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/proveedores', [ProveedoresController::class, 'index']);
     Route::get('/proveedores/{proveedor}', [ProveedoresController::class, 'show']);
     Route::middleware('permiso:compras.proveedores,gastos.proveedores,proveedores.padron')->group(function () {
+        Route::post('/proveedores/importar', [ProveedoresController::class, 'importar']);
+        Route::post('/proveedores/{proveedor}/migracion', [ProveedoresController::class, 'migracion']);
         Route::post('/proveedores', [ProveedoresController::class, 'store']);
         Route::patch('/proveedores/{proveedor}', [ProveedoresController::class, 'update']);
         Route::delete('/proveedores/{proveedor}', [ProveedoresController::class, 'destroy']);
@@ -143,6 +147,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/listas', [ListasController::class, 'catalogo']);
     Route::get('/listas/reglas-marca', [ListasController::class, 'reglas']);
+    Route::put('/listas/cliente/{clienteId}', [ListasController::class, 'setCliente'])
+        ->whereNumber('clienteId')->middleware('permiso:ventas.listas,ventas.clientes');
     Route::middleware('permiso:ventas.listas,precios')->group(function () {
         Route::post('/listas/modalidades', [ListasController::class, 'crearModalidad']);
         Route::patch('/listas/modalidades/{modalidad}', [ListasController::class, 'editarModalidad']);
@@ -236,6 +242,12 @@ Route::middleware('auth:sanctum')->group(function () {
         });
         // El atajo del crédito: acá la llave gatea el endpoint entero.
         Route::patch('/{id}/credito', [ClientesController::class, 'credito'])->middleware('permiso:cta_cte');
+    });
+
+    Route::prefix('relevos')->middleware('permiso:ventas.pos,ventas.caja,ventas.cobranzas')->group(function () {
+        Route::get('/', [RelevosController::class, 'index']);
+        Route::post('/verificar', [RelevosController::class, 'verificar']);
+        Route::post('/volver', [RelevosController::class, 'volver']);
     });
 
     Route::prefix('caja')->group(function () {
