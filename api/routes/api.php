@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\SucursalesController;
 use App\Http\Controllers\Api\TerminalesController;
 use App\Http\Controllers\Api\TransferenciasController;
 use App\Http\Controllers\Api\UsuariosController;
+use App\Http\Controllers\Api\VencimientosController;
 use App\Http\Controllers\Api\VentasController;
 use Illuminate\Support\Facades\Route;
 
@@ -223,6 +224,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/items/{itemId}/recontar', [ConteosController::class, 'recontar'])->middleware('permiso:conteos_aplicar');
         Route::post('/{id}/aplicar', [ConteosController::class, 'aplicar'])->middleware('permiso:conteos_aplicar');
         Route::delete('/{id}', [ConteosController::class, 'destroy']);
+    });
+
+    Route::prefix('vencimientos')->middleware('permiso:almacen.vencimientos')->group(function () {
+        // Las rutas fijas van ANTES de las de {id}: 'ofertas'/'resumen'/'reportes' no son un id.
+        Route::get('/', [VencimientosController::class, 'index']);
+        Route::get('/resumen', [VencimientosController::class, 'resumen']);
+        Route::get('/reportes', [VencimientosController::class, 'reportes']);
+        Route::get('/ofertas', [VencimientosController::class, 'ofertas']);
+        Route::post('/sesiones', [VencimientosController::class, 'crearSesion']);
+        Route::get('/{id}/borrador-oferta', [VencimientosController::class, 'borradorOferta'])->whereNumber('id');
+        Route::put('/{id}', [VencimientosController::class, 'update'])->whereNumber('id');
+        Route::delete('/{id}', [VencimientosController::class, 'destroy'])->whereNumber('id');
+        Route::post('/{id}/procesar', [VencimientosController::class, 'procesar'])->whereNumber('id')->middleware('permiso:inventario');
+        Route::post('/{id}/vincular-oferta', [VencimientosController::class, 'vincularOferta'])->whereNumber('id');
     });
 
     /* ---------------- Ventas (F2) ---------------- */
