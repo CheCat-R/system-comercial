@@ -1,0 +1,20 @@
+/* ==========================================================================
+   DASHBOARD — estilos del módulo (CSS Module, con alcance propio).
+   La pantalla es el resumen del inventario: sus tarjetas y tablas vienen del
+   subsistema de inventario y traen su propio CSS. Acá queda solo el armado de
+   la página, que es lo único que le pertenece.
+   ========================================================================== */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--crm-space-6);
+}
+
+/* Para el usuario cuyo rol no llega al inventario: el Dashboard existe, pero
+   no tiene nada que mostrarle. */
+.sinAcceso {
+  margin: 0;
+  color: var(--crm-color-text-secondary);
+  font-size: var(--crm-font-size-sm);
+}

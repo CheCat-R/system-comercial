@@ -1,8 +1,0 @@
-.search-bar .MuiOutlinedInput-root {
-  background-color: var(--bg-surface);
-}
-
-.search-bar input::placeholder {
-  color: var(--text-disabled);
-  opacity: 1;
-}

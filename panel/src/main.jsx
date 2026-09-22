@@ -1,25 +1,20 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { QueryClientProvider } from '@tanstack/react-query'
-import CssBaseline from '@mui/material/CssBaseline'
-import { CustomThemeProvider } from './theme/ThemeContext'
-import { ToastProvider } from './components/Toast/ToastContext'
-import { AuthProvider } from './context/AuthContext'
-import { queryClient } from './app/api/queryClient'
-import './index.css'
-import App from './App.jsx'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import { registerModules } from './modules';
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <CustomThemeProvider>
-        <CssBaseline />
-        <ToastProvider>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </ToastProvider>
-      </CustomThemeProvider>
-    </QueryClientProvider>
-  </StrictMode>,
-)
+// Global stylesheets. Order matters: reset -> design tokens -> base -> utilities.
+import '@styles/reset.css';
+import '@styles/tokens.css';
+import '@styles/global.css';
+import '@styles/utilities.css';
+
+// Composition root: register every feature module BEFORE the router reads the
+// registry to build routes and navigation. This is the app's bootstrap step.
+registerModules();
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);

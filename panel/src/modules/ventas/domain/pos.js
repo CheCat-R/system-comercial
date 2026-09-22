@@ -8,7 +8,7 @@
  * Criterio de importes, igual que en el backend: los precios son NETOS y el
  * IVA se suma aparte.
  */
-import { norm } from '../api/ventasApi';
+import { norm } from './constants.js';
 import { contextoResolucion, resolverRenglon } from './listas.js';
 import { resolverOfertas } from './ofertas.js';
 
@@ -46,9 +46,17 @@ export function parseEtiquetaBalanza(codigo, config) {
     : { codigoItem, cantidad: r2(bruto / 1000) }; // gramos → kg
 }
 
-/** Motivo por el que un ítem no puede ir al ticket, o null. Hoy: sin formato de venta cargado. */
+/**
+ * USO EXCLUSIVO DE CAFETERÍA (0089): el motivo por el que este ítem no puede ir
+ * al ticket, o null si puede. El ítem SE MUESTRA en los buscadores con su
+ * marca — esconderlo haría que un código escaneado "no exista", que parece un
+ * error — y se bloquea al agregarlo, siempre con el mismo texto. La API lo
+ * revalida en el confirm (el catálogo se cachea al abrir la caja).
+ */
 export function motivoBloqueo(item) {
-  if (item?.sinFormato) return `${item.nombre} no tiene formato de venta cargado: no se puede vender hasta que tenga precio.`;
+  if (item?.soloCafeteria) {
+    return `${item.nombre} es de uso exclusivo de la Cafetería: no se vende en el mostrador. Sale por el envío de Almacén › Cafetería.`;
+  }
   return null;
 }
 

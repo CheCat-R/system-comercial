@@ -1,36 +1,41 @@
 {
-  "name": "panel-dashboard",
+  "name": "crm-dashboard",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Modular, scalable CRM/ERP framework for retail businesses. Feature-based architecture ready for enterprise growth and TypeScript migration.",
   "type": "module",
+  "engines": {
+    "node": ">=18.18.0"
+  },
   "scripts": {
     "dev": "vite",
-    "check:arch": "node scripts/verificar-arquitectura.mjs",
-    "build": "npm run check:arch && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "dev:https": "node scripts/dev-https.mjs",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "test": "node --test \"src/**/*.test.js\""
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/icons-material": "^9.0.0",
-    "@mui/lab": "^9.0.0-beta.9",
-    "@mui/material": "^9.0.0",
-    "@tanstack/react-query": "^5.103.1",
-    "clsx": "^2.1.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "react-router-dom": "^7.14.1"
+    "@emotion/react": "^11.13.3",
+    "@emotion/styled": "^11.13.0",
+    "@mui/icons-material": "^6.1.6",
+    "@mui/material": "^6.1.6",
+    "@zxing/library": "^0.23.0",
+    "jsqr": "^1.4.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
-    "eslint": "^9.39.4",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "globals": "^17.4.0",
-    "vite": "^8.0.4"
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-basic-ssl": "^1.2.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.14",
+    "vite": "^5.4.10"
   }
 }

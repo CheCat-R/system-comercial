@@ -1,135 +1,549 @@
-# Arquitectura Funcional y Modelo de Dominio - CheCAT Panel
+# Arquitectura — CRM Dashboard (framework modular)
 
-Este documento define las reglas fundacionales, la arquitectura conceptual y el modelo de dominio de la plataforma. **Debe ser consultado antes de desarrollar cualquier nuevo módulo o funcionalidad** para mantener la coherencia y escalabilidad hacia un ERP.
+Este documento describe el diseño de la base del CRM/ERP: por qué está armado
+así, cómo escala y cómo se agregan módulos sin tocar el núcleo. Está pensado
+como la referencia viva del proyecto para los próximos años.
 
-**Especificaciones de módulo:**
-* [`docs/MODULO-CRM.md`](docs/MODULO-CRM.md) — Clientes / CRM (Customer 360°): modelo Cuenta+Contactos, RFM + segmentos, relaciones con Pedidos/Ventas/Marketing/Analytics, UX y plan por fases.
-* [`docs/MODULO-INVENTARIO-ABASTECIMIENTO.md`](docs/MODULO-INVENTARIO-ABASTECIMIENTO.md) — Inventario (stock, movimientos, ajustes, transferencias, conteo físico) y Abastecimiento (proveedores, órdenes de compra, recepción, reposición): modelo de dominio, flujos y reglas de negocio.
-* [`docs/MODULO-LOGISTICA-FULFILLMENT.md`](docs/MODULO-LOGISTICA-FULFILLMENT.md) — Logística & Fulfillment (preparación, picking, packing, despacho, envíos, transportistas, tarifas, tracking, incidencias): modelo de dominio, procesos/estados y relación con Pedidos/Inventario/Clientes/Finanzas/Automatizaciones.
-* [`docs/MODULO-FINANZAS-FACTURACION.md`](docs/MODULO-FINANZAS-FACTURACION.md) — Capa financiera **implementada** (modelo funcional + UX + 3 fases), en dos módulos separados: **Facturación** (`facturacion/`) — comprobantes AFIP simulados (Factura A/B/C, Nota de Crédito, Nota de Débito, CAE, Libro IVA Ventas); la factura se emite sola al pagarse el pedido. **Finanzas** (`finanzas/`) — capa de **derivación**: P&L calculado sobre Pedidos + `SKU.cost` + costo de envío real de Logística, rentabilidad por 6 cortes; + entidades propias acotadas (Gastos operativos, Comisiones de pasarela/vendedor con liquidación, cola de Reembolsos con aprobación). Sin partida doble. Regla de oro: *facturar ≠ cobrar; nota de crédito ≠ reembolsar.*
-* [`docs/MODULO-MARKETING.md`](docs/MODULO-MARKETING.md) — Marketing (Campañas, Promociones, Cupones, Descuentos, Audiencias, Carritos abandonados, Fidelización por puntos, Comunicación). Es **dueño del motor de descuentos** (`priceCart` / `validateCoupon`) — el `Order` gana `discount`/`couponCode` pasivos. **No** redefine la segmentación (Audiencia = segmento del CRM + filtros de marketing). Comunicación y automatizaciones **simuladas**. Arquitectura funcional + UX; relación con Clientes/Productos/Ventas/Pedidos/Analytics y eventos hacia Clientes/Pedidos/Analytics/Automatizaciones.
-* [`docs/MODULO-TIENDA-CMS.md`](docs/MODULO-TIENDA-CMS.md) — Tienda / CMS (Home, Banners, Secciones, Colecciones, Productos destacados, Landing pages, Páginas, Blog, Contenido, Store Builder). **No** es un constructor libre tipo Elementor: catálogo cerrado de bloques tipados por schema, con la Sección como único nivel de layout (set cerrado de tokens). Modelo, catálogo de bloques, UX del Store Builder y plan por fases.
-* [`docs/MODULO-ANALYTICS.md`](docs/MODULO-ANALYTICS.md) — Analytics & Reportes (KPIs, métricas, dimensiones, filtros, comparaciones, períodos, reportes y dashboards). Capa de **sólo lectura** sobre todo el sistema. Regla central: *ninguna métrica existe sin declarar fórmula, origen por módulo y exclusiones* — el motor no calcula una métrica sin contrato completo. Documenta también **lo que no se puede medir** (conversión de sitio, CAC por canal: no hay tráfico ni atribución de adquisición).
-* [`docs/MODULO-AUTOMATIZACIONES.md`](docs/MODULO-AUTOMATIZACIONES.md) — Automatizaciones (Evento → Condición → Acción). Capa **transversal** que no es dueña de ningún dato: escucha a toda la plataforma y actúa llamando a los `api/` existentes. Regla central: *una automatización no puede hacer nada que un usuario no pueda hacer a mano, por el mismo camino*. Resuelve la transversalidad sin ciclos con un **bus que es una hoja sin dependencias** (los módulos importan el bus; el motor importa el bus y los módulos). Distingue **eventos** (algo cambió, vía bus) de **condiciones observadas** (algo es cierto ahora, vía escáner **por flanco**). Cuatro salvaguardas contra bucles y duplicados; las acciones **sensibles pasan por aprobación**, como los reembolsos de Finanzas. Documenta también **lo que no se puede disparar** (no hay «pago rechazado» en el modelo de Pedidos, ni eventos de navegación).
-* [`docs/MODULO-INTEGRACIONES.md`](docs/MODULO-INTEGRACIONES.md) — Integraciones (Pagos · Facturación · Logística · Marketing · Analytics · Comunicación · ERP · APIs externas). Capa de **frontera**: conecta servicios externos sin acoplarlos al núcleo. Regla central: *Integraciones no agrega capacidades, reemplaza el proveedor de una capacidad que el panel ya tiene* — por eso **desconectar nunca rompe nada**. Separa **puerto** (capacidad que declara el panel) de **proveedor** (quién la cumple); el núcleo llama al puerto y pasa **su propia implementación local como `fallback`**, así que el módulo podría no existir. Salida por `lib/ports.js` (hoja sin dependencias, igual que el bus); entrada por webhooks **traducidos a eventos de dominio** y publicados en el bus de Automatizaciones — no se crea un segundo bus. Contrato de proveedor obligatorio con los 7 puntos (entra · sale · eventos · configuración · estado · errores · logs). **El panel no guarda secretos.**
-* [`docs/MODULO-SEGURIDAD.md`](docs/MODULO-SEGURIDAD.md) — Seguridad, Auditoría y Control (autenticación · autorización · roles · permisos · sesiones · seguridad de cuentas · auditoría · activity log · registro de cambios · acciones sensibles). Capa **transversal** que contesta *¿quién sos?*, *¿qué podés hacer?* y *¿quién hizo esto y qué cambió?*. Regla central: *el permiso se aplica en el `api/`, y sin actor no hay escritura sensible*. Tercera hoja sin dependencias del panel (`lib/audit.js`, junto al bus y al registro de puertos), separada del bus a propósito: la traza del bus se recorta sola y una evidencia que se borra para hacer lugar no es evidencia. **El rol es un paquete de permisos**, no una cadena que cada módulo interpreta con su propia expresión regular. **Un actor puede ser una persona, una automatización o una integración.** Cuatro grados de control (libre · registrada · con motivo · con aprobación) declarados en el catálogo de permisos, no en cada pantalla, y aplicados por **el portón** (`lib/gate.js`): el control está en la operación, no en el botón. **Estado: COMPLETO (F1+F2+F3).**
+Índice:
 
-**Auditorías:**
-* [`docs/AUDITORIA-PLATAFORMA.md`](docs/AUDITORIA-PLATAFORMA.md) — Auditoría transversal de UX, UI, funcional, arquitectura y experiencia premium (2026-09-09). Todo medido sobre el código y verificado en pantalla. Veredicto: **el motor es de nivel SaaS premium; la carrocería, a tramos, es una plantilla de admin** — y casi todo lo que le falta al panel para sentirse premium **ya está construido y sin conectar** (el Dashboard no importa ningún `api/` y publica una métrica que Analytics declara no medible; ⌘K no busca; ninguna tabla ordena; 1 de 82 pantallas consulta permisos en la UI). Incluye plan por fases donde ninguna propuesta agrega capacidades: sólo conecta, unifica o cumple lo ya prometido. **Fase A ejecutada y verificada (2026-09-09)**: el Dashboard lee cinco `api/` y ya no publica la conversión (que Analytics declara no medible); `/productos`, `/productos/:id` y `/ventas` sobre datos reales; **⌘K busca** sobre 72 destinos y sobre pedidos/clientes/productos, con la navegación unificada en `app/navigation.jsx`; **las 52 tablas ordenan** por columna (`DataTable` deduce qué se puede ordenar mirando el valor crudo, no el `renderCell`); `ErrorBoundary` por ruta dentro del layout y pantalla 404 real; **0 botones sin acción** (de 18); `/proyectos` borrado. Hallazgo de paso: `clientsApi` conservaba un actor escrito a mano en tres lugares — el `createdBy = "Vos"` sobreviviendo con otro nombre. **Fase B ejecutada y verificada (2026-09-10)**: ⭐ había **dos fuentes de color** (`variables.css` y `theme/palette.js`, con un comentario que pedía "mantenerlas alineadas") y **cinco de los ocho colores de estado ya habían divergido** — ahora `palette.js` los lee del documento con `getComputedStyle` y el CSS es la única fuente, con `assertPalette()` avisando si falta alguno; tokens muertos de 87/192 a 28/135 (los 28 son tonos de rampa a propósito) y disciplina de espaciado del 33 % al 73 % (la escala ganó los medios pasos de 6 y 10 px, que el diseño ya usaba 191 veces a mano); **los permisos se ven antes de hacer clic** con `<Permitido>` —de 1 a 19 pantallas, cubriendo los 11 módulos de negocio— y el tooltip también adelanta lo que la operación va a pedir cuando SÍ se puede; los breadcrumbs sacan la etiqueta del menú (34 segmentos sin nombre → 0) y muestran el nombre de la entidad; `:focus-visible` global usando el `--focus-ring` que estaba declarado y sin usar. **Fase C ejecutada y verificada (2026-09-10)**: `React.lazy` por ruta baja el bundle de entrada de **1.936 KB a 306 KB** (86 pantallas diferidas; el shell, el login y el dashboard NO se difieren, y el fallback reserva altura en vez de tapar con un spinner un panel que sigue ahí); **cola de toasts** de hasta 3 con acción **"Deshacer"** en las operaciones reversibles (*un diálogo de confirmación interrumpe siempre, incluidas las 99 veces que sí querías hacerlo*); `useVistaGuardada` pone **los filtros en la URL** para que el estado de una pantalla se pueda pasar por link; ⭐ **la tabla se vuelve lista de tarjetas en mobile sin tocar ninguna de las 52 pantallas** (el nombre de la columna viaja en `data-label`); movimiento con **cero duraciones a mano** y **dos** microinteracciones elegidas; `aria-current` en el menú y `aria-live` en los avisos. **Fase D ejecutada y verificada (2026-09-10)**: el contrato de arquitectura deja de ser un comentario y pasa a ser `npm run check:arch`, encadenado al build (3 reglas, 7 hojas marcadas, 0 ciclos sobre 1.447 imports internos) — y se probó que falla, no sólo que pasa. Con ella se cerró lo pendiente de B y C: `.line-table` vive una sola vez (40 reglas en 5 archivos → 12 en 1), `EntityHeader` está en **las 9** pantallas de detalle (queda **cero** `entity-header` a mano, gracias a una prop `below` para los pipelines de estado) y `useVistaGuardada` pasó de 2 a **8** pantallas, con los parámetros de URL nombrados en castellano y del dominio (`?rol=admin&estado=activo`) porque esa URL la lee una persona. Se dejó afuera a propósito `an-table` (Analytics): es una tabla de resultados con orden y deltas, no una tabla de líneas, y unificarlas por parecido visual habría contaminado la primitiva compartida.
+1. [Principios de diseño](#1-principios-de-diseño)
+2. [Estructura completa de carpetas](#2-estructura-completa-de-carpetas)
+3. [Explicación de la arquitectura por capas](#3-explicación-de-la-arquitectura-por-capas)
+4. [Flujo de escalabilidad](#4-flujo-de-escalabilidad)
+5. [Sistema de registro de módulos](#5-sistema-de-registro-de-módulos)
+6. [Layout principal](#6-layout-principal)
+7. [Configuración de rutas](#7-configuración-de-rutas)
+8. [El módulo Dashboard como referencia](#8-el-módulo-dashboard-como-referencia)
+9. [Buenas prácticas para agregar módulos](#9-buenas-prácticas-para-agregar-módulos)
+10. [Convenciones de nombres](#10-convenciones-de-nombres)
+11. [Sistema de temas (claro/oscuro/por comercio)](#11-sistema-de-temas)
+12. [Responsive design](#12-responsive-design)
+13. [Recomendaciones para una plataforma CRM empresarial](#13-recomendaciones-empresariales)
+14. [Camino de migración a TypeScript](#14-migración-a-typescript)
 
-## 1. Principios de Arquitectura
+> **Estado real al 1/9/2026.** Este documento nació como diseño de la base y
+> se actualizó ese día para que describa lo que HAY, no lo que iba a haber.
+> Lo que ya está implementado y funcionando: autenticación real contra la API
+> (`core/auth`, sesión por pestaña con token), permisos por rol en dos niveles
+> (`core/permissions`), guards de ruta (`ProtectedRoute` + `ModuleGuard`),
+> 10 módulos de negocio, y 9 servicios de núcleo (cliente HTTP, impresión,
+> códigos de barras, pollers de avisos, chat). Lo que sigue siendo aspiración
+> está marcado como tal en cada sección.
 
-1. **Separación de Catálogo e Inventario:** El Catálogo (Producto) es comercial y de marketing. El Inventario (Stock físico) pertenece a los depósitos. Se vinculan a través de la **Variante (SKU)**.
-2. **Separación de Ventas y Pedidos:** Los Pedidos son las transacciones ejecutadas (B2C/B2B). Las Ventas incluyen los canales, cotizaciones y fuerza de venta.
-3. **Multi-sucursal Nativo:** Toda entidad operativa (Stock, Pedido, Usuario) debe contemplar el contexto de la Sucursal o Depósito al que pertenece.
-4. **Arquitectura Orientada a Eventos (Conceptual):** Los módulos no deben acoplarse estrictamente. Un evento como `Pedido_Pagado` debe ser capaz de disparar acciones asíncronas en Inventario (reserva), Logística (Fulfillment) y Finanzas (Ingreso).
-   *Realización en el panel mock:* no hay un bus de eventos real. El acoplamiento se resuelve por **materialización perezosa** — el Envío, la Factura, la Nota de Crédito y el Reembolso se **derivan en la primera lectura** posterior al evento (`ensureShipment`, `ensureDocsForOrder`, `ensureRefunds`), sin que el módulo origen tenga que importar al de destino. Las escrituras cruzadas se hacen por import directo entre archivos `api/` y son **unidireccionales** (Logística → Pedidos/Inventario; Facturación → Pedidos/Inventario/CRM; Finanzas → Pedidos/Inventario/Logística/Facturación/CRM — nadie vuelve).
+---
 
-5. **El contrato de arquitectura se verifica solo:** `npm run check:arch` (encadenado al `build`) corre `scripts/verificar-arquitectura.mjs`, que comprueba tres reglas sobre el grafo real de imports: **(1)** los archivos marcados `@sin-dependencias` no tienen ni un `import` — hoy 7: `automatizaciones/lib/bus.js`, `integraciones/lib/ports.js` y las cinco hojas de `seguridad/lib/`; **(2)** ningún `.jsx` importa de `data/` (la UI habla con `api/`, siempre) — 208 archivos, ninguno; **(3)** no hay ciclos de import entre archivos — 366 archivos, 1.471 imports internos, 0 ciclos; **(4)** ⭐ **el motor de Automatizaciones no conoce el dominio** — `automatizaciones/` no importa ningún módulo de negocio, son los 8 módulos los que **se registran** en él (`lib/registry.js`, hoja). La regla 4 mira el grafo por **módulo** y no por archivo, porque ahí estaba el ciclo que la 3 no podía ver: `seguridad → automatizaciones` (el bus) y `automatizaciones → seguridad` (el actor) existían las dos sin que ningún archivo cerrara un círculo. Las hojas no están sueltas por prolijidad: es la única forma de que Seguridad pueda auditar a los módulos que la usan sin cerrar el círculo. Se probó que cada chequeo **falla**: un `import` agregado a `audit.js` produce 4 violaciones con 3 caminos de ciclo concretos, y uno agregado a `automatizaciones/lib/describe.js` rompe la regla 4 **mientras la 3 sigue en verde**.
+## 1. Principios de diseño
 
-6. **Un módulo de negocio se saca borrando una línea:** `app/registrarDominio.js` es la única lista de módulos activos del panel. Cada línea importa el `automatizaciones.js` del módulo, que declara qué sujetos, escáneres, acciones y condiciones aporta — y un módulo puede **enriquecer el sujeto de otro** (`extenderSujeto`) sin importarlo: el CRM le agrega la cuenta al pedido, al envío y al carrito. Verificado sacando `logistica` y `marketing`: build verde, motor funcionando, consola sin errores. Medido: llevarse `automatizaciones` arrastraba 10 módulos y ahora no arrastra ninguno; `seguridad` pasó de 10 a 1; `inventario`, `abastecimiento` y `productos` de 10-11 a 4.
+La base aplica de forma explícita cinco principios, y cada uno se traduce en una
+regla concreta del código:
 
-## 2. Capas y Módulos del Sistema
+- **Modular Architecture / Feature-Based Structure.** El código se organiza por
+  *funcionalidad de negocio* (módulos), no por tipo técnico de archivo. Todo lo
+  que un módulo necesita (páginas, componentes, servicios, hooks, config,
+  estilos) vive dentro de su propia carpeta.
+- **Separation of Concerns.** Cada archivo tiene una única razón para cambiar.
+  Las **vistas** (páginas/componentes) no hacen I/O; los **servicios** hacen I/O
+  y no saben de React; los **hooks** orquestan estado; la **configuración** no
+  contiene lógica.
+- **SOLID**, en particular:
+  - *Single Responsibility*: contextos separados (Theme, Auth, Permission, UI),
+    un servicio por dominio, un hook por pantalla.
+  - *Open/Closed*: el núcleo está **cerrado a modificación** y **abierto a
+    extensión** vía el registro de módulos. Se agregan módulos, no se edita el
+    núcleo.
+  - *Dependency Inversion*: el núcleo depende de una **abstracción** (el
+    contrato `defineModule`), no de módulos concretos. Los módulos dependen del
+    núcleo, nunca al revés.
+- **Clean Architecture.** Las dependencias apuntan hacia adentro: `modules →
+  shared → core`. El núcleo no conoce ningún módulo; los detalles (MUI, fetch,
+  el backend) están aislados detrás de servicios y del sistema de temas para
+  poder reemplazarlos sin propagar cambios.
 
-* **Capa de Decisión & Analítica:** Dashboard Central, Data & Analytics.
-* **Capa Comercial & Marketing (Front-Office):** Tienda/CMS, Catálogo (Master Data), Marketing & Promociones.
-* **Capa Transaccional (Core Engine):** Ventas (Cotizaciones, Canales), Pedidos (Ciclo de vida B2C/B2B), Clientes/CRM (Contexto 360).
-* **Capa Operativa & Supply Chain (Back-Office):** Inventario (Stock físico y lógico), Abastecimiento (Compras), Logística & Fulfillment (Picking, Despachos).
-* **Capa Financiera:** Finanzas (Caja, Rentabilidad), Facturación (Fiscal).
-* **Capa de Infraestructura y Transversal:** Automatizaciones, Organización (Roles/Sucursales), Configuración, Integraciones.
+Regla mental de una línea: **para sumar una funcionalidad, se agrega una carpeta
+en `modules/` y una línea en `modules/index.js`. Nada más.**
 
-### 2.1 Estado de implementación (panel con datos mock, sin backend)
+---
 
-| Módulo | Estado |
-|---|---|
-| Clientes / CRM | ✅ Completo (Fases 1-3) — `docs/MODULO-CRM.md` |
-| Inventario + Abastecimiento | ✅ Completo (Fases 1-3) — `docs/MODULO-INVENTARIO-ABASTECIMIENTO.md` |
-| Logística & Fulfillment | ✅ Completo (Fases 1-3) — `docs/MODULO-LOGISTICA-FULFILLMENT.md` |
-| Finanzas + Facturación | ✅ Completo (Fases 1-3) — `docs/MODULO-FINANZAS-FACTURACION.md` |
-| Marketing | 🚧 Arquitectura + UX; **F1 (descuentos) + F2 (campañas) + F3 (carritos/fidelización) implementadas** — `docs/MODULO-MARKETING.md`. Promociones/Cupones (`priceCart`/`validateCoupon`, `Order` gana `discount`/`couponCode`/`pointsRedeemed` pasivos); Campañas/Audiencias/Comunicación (envíos simulados, atribución last-touch); Carritos abandonados (simulados, `sendCartRecovery` = cupón nominal + campaña one-shot); Fidelización (`LoyaltyProgram` + `PointsLedgerEntry` materializado en lectura, `Reward`, canje en checkout, `tierBenefits` en `priceCart`). El CRM lee la actividad vía `getAccountMarketingActivity` + `getAccountLoyaltyActivity`. |
-| Tienda / CMS | ✅ Completo (Fases 1-3) — `docs/MODULO-TIENDA-CMS.md`. Sistema de composición especializado en ecommerce: jerarquía **Página → Sección → Bloque** (Home/Landing/Institucional/**Post** son la misma entidad `Page` con `type`), catálogo **cerrado** de **26 bloques** declarados por schema y recursos reutilizables (Colección, Banner, Medio, Menú, Sección guardada, Tema). Regla central: *un bloque guarda una referencia + presentación, nunca datos de negocio* — lee Catálogo/Inventario/Marketing/Pedidos. **Store Builder** (`/tienda/paginas/:id`) con outline, inspector **generado desde el schema** (`showIf` incluido), vista previa al ancho real del dispositivo con header/footer/anuncio, y "Ver como…" (fecha + audiencia + dispositivo). Borrador↔publicado con `PageVersion`, SEO por página y publicación programada (`ensureScheduledPublish`). Pantallas Resumen · Páginas · Colecciones · Banners (con timeline) · Blog · Menús · Contenido · Apariencia. Único punto donde **escribe** hacia afuera: el bloque `newsletter` → `ChannelSubscription` de Marketing. Creó además **`productos/api/catalogApi.js`**, la capa de lectura del catálogo que faltaba. |
-| Analytics & Reportes | ✅ Completo (Fases 1-3) — `docs/MODULO-ANALYTICS.md`. Capa de **sólo lectura**: es el único módulo que no escribe en ninguno. **46 métricas** en `lib/metrics.js`, cada una con fórmula, origen por módulo, exclusiones, advertencia y `minSample`; `assertContracts()` impide calcular una métrica sin contrato completo, y la UI expone la ficha con un ⓘ en cada número. Motor `query({ métricas, dimensión, período, comparación, filtros })` sobre una tabla de hechos única (`buildFacts`) que une **historia generada** (130 clientes, 11 cohortes, 281 pedidos, sep-2025 → jul-2026) con los **datos vivos**, sin solapamiento — por eso nunca contradice a Finanzas. El dinero se **reparte por línea** (proporcional al precio de lista), así el corte por producto o categoría suma exactamente el total. **Cohortes** (`lib/cohorts.js`): matriz mes-de-alta × mes+n, curva **ponderada por tamaño de cohorte** y repago del CAC contra el margen; lo que todavía no ocurrió queda **vacío, no en cero**, y la ventana termina en el último mes íntegro. **Dashboards**: un widget es una consulta con forma — pasa por el mismo `query()`, así que no puede mostrar otro número. **Objetivos y alertas** de umbral alimentan el panel «Qué mirar». **RBAC en el motor**: a un rol sin permiso las métricas de costo no se le calculan. Declara explícitamente **lo no medible** (conversión de sitio, CAC por canal). Pantallas Resumen · Explorador · Cohortes · Reportes (8 de fábrica, CSV con la fórmula en la cabecera) · Dashboards · Objetivos y alertas · Diccionario de métricas. |
-| Integraciones | ✅ **COMPLETO (F1 marco + F2 conexión + F3 tráfico)** — `docs/MODULO-INTEGRACIONES.md`. Capa de **frontera**. Regla: *no agrega capacidades, reemplaza proveedores* → desconectar vuelve a la simulación local y **nunca rompe**. **Puerto ≠ proveedor**: el núcleo declara la capacidad (`invoicing.issue`, `payments.charge`, …) y pasa su implementación actual como `fallback`; el adaptador sólo la sustituye. Sin ciclos: `lib/ports.js` es una hoja, y lo entrante se **traduce a eventos de dominio** sobre el bus de Automatizaciones. Contrato de proveedor con 7 puntos obligatorios; errores tipados (`negocio` NO se reintenta), idempotencia por hecho de dominio, logs con redacción declarada. **Deuda saldada**: `financeApi` ya no matchea `"mercadopago"` contra `order.paymentMethod`, pregunta al puerto `payments.fee` — verificado que las comisiones dan idénticas ($16.186), y que conectar un proveedor las cambia y desconectarlo las devuelve exactas. **25 puertos en 8 categorías**, 3 ya cableados (`payments.fee`, `invoicing.issue`, `shipping.track`); En `providers/` sólo hay un **doble de prueba** (`_demo.js`), que no habla con ningún servicio. **Asistente de 4 pasos** que no deja habilitar sin una prueba exitosa, **dry-run sobre datos reales** que no pasa por el registro, y **secretos por referencia**: el valor no se persiste en ningún lado y producción queda bloqueada con el motivo a la vista. Hallazgo: los puertos que se consultan **al renderizar** se marcan `syncOnly` y **rechazan proveedores asíncronos** — la comisión no se consulta al pintar un reporte, es un dato que produjo el cobro. `analytics.import` es el puerto que desbloquearía lo que Analytics §2.8 declara no medible. **F3**: la política de una llamada (idempotencia → llamada → negocio → **caída al fallback** → cola) la enchufa el módulo con `setPipeline()`, porque el registro es una hoja y no puede importar el catálogo ni el bus. **La sensibilidad decide si se cae al fallback**: con el proveedor fallando, `payments.fee` (media) se resolvió local y el P&L nunca se rompió, mientras `invoicing.issue` (alta) falló — un CAE inventado es un problema legal. **No se reintenta lo que ya se resolvió local**, y cuando algo no se encola la consola dice el motivo. La clave de idempotencia **la declara el contrato del puerto**: sólo los hechos la llevan, las consultas no. Entrantes: las 5 etapas de §5 con inyector; el hallazgo es que **el que publica el evento de dominio es el módulo dueño** — traducir y además emitir despierta al motor dos veces. Los 6 eventos `integracion.*` viven en el catálogo de Automatizaciones con sujeto `connection`, así que se eligen en el builder como cualquier otro. |
-| Seguridad, Auditoría y Control | ✅ **COMPLETO (F1 + F2 + F3)** — `docs/MODULO-SEGURIDAD.md`. Contesta *¿quién sos?* (autenticación y sesión), *¿qué podés hacer?* (roles y permisos en **un solo lugar**, aplicados en el `api/`) y *¿quién hizo esto y qué cambió?* (auditoría, activity log y registro de cambios). Diagnóstico medido que lo motiva: **178 operaciones de escritura** en 12 módulos sin autor, **8 firmas con `createdBy = "Vos"`**, el rol resuelto por **expresión regular en 3 archivos distintos**, `usuarios/` es scaffold con `useState` y roles de un equipo de desarrollo, y **`catalogApi` no expone ninguna mutación — o sea que "cambio de precio", la primera superficie a controlar, no existe como operación**. Decisiones: **el rol es un paquete de permisos** y el permiso es la unidad, con `appliedAt` como los puertos tienen `wiredAt`; **la auditoría es una hoja propia** (`lib/audit.js`) y no se cuelga del bus, porque el bus se recorta solo; **registrar es del módulo dueño**, que es el único que sabe qué cambió; **sin actor no hay escritura sensible**; **el motivo se pide antes**, no después; **quien aprueba no es quien pide**; el rastro **se lee dentro de la entidad**; y ⭐ **un actor puede ser una persona, una automatización o una integración** — sin eso, el día que una regla cancele un pedido el rastro diría "sistema". Cuatro grados (libre · registrada · con motivo · con aprobación) sobre las 8 superficies: precios · stock · cancelaciones · reembolsos · financiero · permisos · configuración · integraciones. Lo que no se puede sin backend (contraseñas, 2FA, cerrar sesión remota, auditoría a prueba de manipulación) queda declarado y visible. Fases: F1 identidad y permisos · F2 auditoría y cambios · F3 acciones sensibles. **F1 hecha**: 80 permisos con contrato y `appliedAt` (19 aplicados, 61 declarados), 7 roles con comodines y exclusiones, excepciones nominales, padrón real de 10 personas, sesión con expiración y **step-up**, y los 3 RBAC por regex delegando en el catálogo sin cambiar sus firmas. Se jubiló `modules/usuarios/`. Hallazgos: eran **tres** agujeros del mismo flujo (usuario por defecto + registro público que creaba Administradores + login precargado con `admin123`, que ni siquiera cumple la política); la migración **corrigió una divergencia real** (con la regex, Dirección podía configurar integraciones, al revés de lo que declara `MODULO-INTEGRACIONES.md` §10); **un step-up sin salida es peor que no tenerlo**; y una cuenta **invitada** entraba con 0 permisos por bloquear el estado equivocado. **F2 hecha**: `lib/audit.js` (tercera hoja sin dependencias), `lib/actors.js` y `lib/diff.js`; **26 operaciones auditadas** en 8 módulos + 6 registros de actividad; las dos lentes (`/seguridad/auditoria` por entidad, `/seguridad/actividad` por actor) y el `ChangeLog` incrustado en Pedido, Conexión y ficha de usuario. **El actor es ambiente** (`setActor`/`withActor`, como `bus.withContext`): pasarlo por las 178 escrituras habría sido tocar todas las pantallas y olvidarse en la mitad — y así `requireActor` puede **fallar** la operación si nadie sabe quién opera. **Se acabó el `createdBy = "Vos"`** en todo `src/`. Verificado: el mismo pedido pagado a mano queda firmado por la persona y pagado por webhook queda firmado por **`payments.charge`** (la conexión); el export **se audita a sí mismo**; la retención es acotada **y los asientos que se caen se cuentan** — la crítica que le hicimos al bus, aplicada a nosotros. **F3 hecha**: `lib/gate.js` es el portón —`sensitive()` resuelve permiso, exige el motivo **antes**, pide step-up y encola cuando hace falta una firma—, con `lib/approvals.js` (segregación verificada en el `lib/`, no en la pantalla, y **revalidación al aprobar**), `THRESHOLDS` que hacen que **el mismo formulario cambie de grado según el número que se escriba** (±20 % en precio, $200.000 en ajuste), la pantalla **Precios y márgenes** con `catalogApi.setPrice` —**la operación que no existía**, creada con el control puesto desde el primer día—, la cola en `/seguridad/aprobaciones` diciendo **quién puede firmar cada cosa**, y los eventos `seguridad.*` sobre el sujeto `approval`. 12 operaciones pasan por el portón; 28 de 80 permisos cableados. Verificado con dos personas: Camila pide el cambio fuera de umbral, **no puede firmarlo ella**, y Sofía lo aprueba — el asiento queda a nombre de quien ejecutó, con `solicitadoPor` al lado. Arreglado de paso un bug del bus: `record()` pisaba el id generado con el `id: null` del escáner. |
-| Automatizaciones | ✅ Completo (Fases 1-3) — `docs/MODULO-AUTOMATIZACIONES.md`. Capa **transversal**: `Evento → Condición → Acción`. No es dueña de ningún dato; actúa **llamando a los `api/` existentes**, nunca escribiendo en los `data/`. La transversalidad sin ciclos se resuelve con un **bus que es una hoja sin dependencias** (`emit` anuncia, `record` sólo deja rastro). **35 eventos con contrato** (`assertEventContracts()`), 38 condiciones que leen sus opciones del módulo dueño, y acciones con `preview()`+`run()` en tres niveles. Separa **eventos** (algo cambió) de **condiciones observadas** (algo es cierto ahora), estas últimas disparadas **por flanco** con marca de agua para no repetir el aviso mientras el estado dura — y el escáner de stock recorre **filas SKU × depósito**, no el consolidado, para que el aviso nombre el depósito que está corto. Cuatro salvaguardas (profundidad, idempotencia con la misma granularidad que la marca de agua, presupuesto, auto-disparo) que **dicen cuándo cortan**. Las acciones **sensibles no se ejecutan solas**: quedan en `pendiente_aprobacion`. Emisión real en 9 módulos; el motor arranca con la app. Se crean y publican reglas desde la UI: la regla se lee como una oración (`CUANDO / SI / ENTONCES`) con **inspector generado del schema**, y cambiar el disparador **no borra pasos en silencio** — los marca y bloquea la publicación. **Simulador (dry-run)** que corre el mismo camino sin llamar a ningún `api/`, dice qué haría con cada sujeto y **qué condición está frenando la regla**. Los **cuatro modos de ejecución** (inmediata, con retraso, programada, recurrente) se reducen a una cola de trabajos con `dueAt`; el **reloj se simula** desde la UI porque el panel no ejecuta nada cerrado. La recurrencia se detiene cuando el sujeto sale de la condición. Las acciones **sensibles** pasan por una **bandeja de aprobación que revalida sujeto y condiciones antes de ejecutar** — aprobar no reproduce una decisión vieja. **RBAC aplicado en el `api/`**, no escondiendo botones. Pantallas Reglas · Builder · Historial (con métricas) · Bandeja de eventos · Aprobaciones. |
-| Pedidos | Capa `api/` real (confirmar pago → reserva; hitos de fulfillment escritos por Logística; gate de reembolso con Finanzas). Sin doc de módulo propio. |
-| Productos (Catálogo) | UI con mocks + **capa de lectura `api/catalogApi.js`** (creada por Tienda F1): `listProducts` / `getProduct` / `getProducts` / `listCategories` / `listBrands` / `listTags` / `listReviews` sobre `data/catalog.mock.js` (14 productos; los 5 originales conservan id/sku/precio). El **stock no es del catálogo**: se pisa con el disponible real de `inventoryApi`. El ABM sigue en las pantallas de Productos. Inventario mantiene el espejo `inventario/data/skus.mock.js` con `cost`, `weightKg`, `taxRate`. |
-| Ventas | Mock estático (cotizaciones B2B, rendimiento de vendedores). Sin capa `api/`. |
-| Dashboard · Usuarios · Proyectos · Info Sistema | UI base. |
+## 2. Estructura completa de carpetas
 
-Cada módulo implementado sigue el patrón **`src/modules/<mod>/{data,lib,api}/`**: la UI habla **sólo**
-con `api/<mod>Api.js`, nunca con los mocks directo → migrar a backend Laravel = reescribir sólo esa
-carpeta `api/`. El estado de escritura vive en memoria y se resetea al recargar la página.
+```
+crm-dashboard/
+├── index.html
+├── package.json
+├── vite.config.js               # alias @core, @modules, @shared, @styles…
+├── jsconfig.json                # mismos alias para el editor (y base para TS)
+├── .env.example                 # variables VITE_* documentadas
+├── .eslintrc.cjs
+├── README.md
+├── ARCHITECTURE.md
+└── src/
+    ├── main.jsx                 # bootstrap: registerModules() + render
+    ├── App.jsx                  # composición: <AppProviders><AppRouter/>
+    │
+    ├── core/                    # ────────── NÚCLEO DEL FRAMEWORK ──────────
+    │   ├── config/
+    │   │   ├── env.js           # lectura tipada de import.meta.env
+    │   │   └── app.config.js    # configuración global (rutas, api, tema…)
+    │   ├── theme/
+    │   │   ├── palette.js       # paletas claro/oscuro (espejo de tokens.css)
+    │   │   ├── createAppTheme.js# factory de theme MUI (+ overrides por comercio)
+    │   │   └── ThemeModeContext.jsx
+    │   ├── providers/
+    │   │   └── AppProviders.jsx # ThemeMode → Auth → Permission → UI
+    │   ├── auth/                # AUTENTICACIÓN REAL contra la API
+    │   │   ├── auth.service.js  # login / logout / getCurrentUser (/auth/yo)
+    │   │   ├── AuthContext.jsx
+    │   │   ├── sesion.js        # sesión POR PESTAÑA (sessionStorage + copia heredable)
+    │   │   └── terminal.js      # token del equipo registrado (localStorage)
+    │   ├── permissions/
+    │   │   └── PermissionContext.jsx   # can() / canAny() — decide qué se MUESTRA
+    │   ├── context/
+    │   │   └── UIContext.jsx    # estado de layout (sidebar, drawer móvil)
+    │   ├── modules/             # infraestructura del sistema de módulos
+    │   │   ├── defineModule.js  # CONTRATO de un módulo (valida el manifiesto)
+    │   │   └── registry.js      # registro: genera rutas y navegación
+    │   ├── router/
+    │   │   ├── AppRouter.jsx    # árbol de rutas generado desde el registro
+    │   │   ├── HomeRedirect.jsx # "/" → primer módulo que el rol puede ver
+    │   │   ├── LoginPage.jsx    # usuario + contraseña + sucursal (dos pasos)
+    │   │   ├── NotFoundPage.jsx
+    │   │   ├── RouteErrorBoundary.jsx
+    │   │   └── guards/
+    │   │       ├── ProtectedRoute.jsx    # exige sesión
+    │   │       ├── ModuleGuard.jsx       # exige los permisos del módulo (URL tipeada)
+    │   │       └── PermissionRoute.jsx   # (sin uso hoy)
+    │   ├── navigation/
+    │   │   ├── useNavigation.js         # nav = registro + permisos + grupos + badges
+    │   │   ├── navigationGroups.js      # grupos del sidebar y su orden
+    │   │   └── useBreadcrumbs.js        # breadcrumbs desde la ruta activa
+    │   ├── layout/
+    │   │   ├── MainLayout.jsx           # shell responsive (sidebar+topbar+área)
+    │   │   ├── MainLayout.module.css
+    │   │   └── components/
+    │   │       ├── Sidebar/             # SidebarContent + Sidebar + MobileNavDrawer
+    │   │       ├── Topbar/              # Topbar + GlobalSearch (cambio de sucursal, salir)
+    │   │       ├── Breadcrumbs/
+    │   │       ├── ChatDock.jsx         # chat interno (poller `chat.js`)
+    │   │       ├── OrdenesWebAlert.jsx  # aviso con sonido de pedidos del sitio
+    │   │       ├── PedidosCafeAlert.jsx # aviso de pedidos de la cafetería
+    │   │       └── PreciosAlert.jsx     # "cambiaron los precios, recargá"
+    │   ├── hooks/               # useMediaQuery, useBreakpoint, useDocumentTitle, useToggle
+    │   └── services/            # servicios compartidos del núcleo
+    │       ├── httpClient.js    # cliente HTTP único: base url, timeout, Bearer, 401 → login
+    │       ├── imprimir.js      # motor único de impresión (lee Sistema › Impresión)
+    │       ├── barcode.js       # EAN-13 / Code 39 en SVG, sin dependencias
+    │       ├── ordenesWeb.js    # poller: pedidos web pendientes (badge + alerta)
+    │       ├── pedidosCafe.js   # poller: pedidos de la cafetería
+    │       ├── gastosPendientes.js # poller: vencidos + pagos sin aplicar
+    │       ├── cambiosPrecio.js # poller: firma del último cambio de precio
+    │       ├── chat.js          # poller del chat interno (4 s, latido de presencia)
+    │       └── logger.js
+    │
+    ├── modules/                 # ────────── MÓDULOS DE NEGOCIO ──────────
+    │   ├── index.js             # COMPOSITION ROOT: lista y registra los 10 módulos
+    │   ├── dashboard/           # /dashboard — resumen del inventario (pages, styles)
+    │   ├── compras/             # /compras   — manifiesto; usa `productos/`
+    │   ├── almacen/             # /almacen   — manifiesto; usa `productos/`
+    │   ├── productos/           # SUBSISTEMA compartido por Compras y Almacén
+    │   │                        #   (apps, components, config, context, domain,
+    │   │                        #    hooks, pages, panels, services, styles)
+    │   ├── proveedores/         # /proveedores — pedidos, cuentas, echeqs, padrón
+    │   ├── ventas/              # /ventas — POS, caja, órdenes web, presupuestos…
+    │   ├── gastos/              # /gastos — gastos, pagos a proveedor, fijos, rubros
+    │   ├── web/                 # /web — administración del sitio público
+    │   ├── gerencia/            # /gerencia — usuarios y roles, rentabilidad
+    │   ├── sistema/             # /sistema — empresa, impresión, terminales, respaldos
+    │   ├── manual/              # /info — documentación viva (contenido, es DATO)
+    │   └── consultas/           # atajos globales (Alt+F3/F5); lo monta MainLayout
+    │
+    ├── shared/                  # ────────── REUTILIZABLE (sin negocio) ──────────
+    │   ├── components/          # PageHeader, FullScreenLoader, ComingSoon
+    │   ├── constants/breakpoints.js
+    │   └── utils/               # classNames (cx), csv, formatters
+    │
+    ├── assets/                  # imágenes, íconos, fuentes
+    └── styles/                  # ────────── ESTILOS GLOBALES ──────────
+        ├── reset.css
+        ├── tokens.css          # DESIGN TOKENS (variables CSS) — fuente de verdad
+        ├── global.css
+        └── utilities.css
+```
 
-## 3. Modelo de Dominio (Entidades Core)
+Cada **módulo** puede contener las mismas subcarpetas: `pages`, `components`,
+`services`, `hooks`, `routes`/`index.js`, `styles`, `config`, y en los grandes
+también `context` (el provider del módulo), `domain` (cálculos puros) y
+`panels` (las secciones del submenú). Es un mini-proyecto autocontenido.
 
-* **Variante (SKU):** El centro físico del sistema. Lo que realmente se almacena, vende y despacha.
-* **Producto:** Entidad de agrupación y marketing para las variantes.
-* **Pedido (Order):** Contrato comercial principal. Genera pagos, envíos y comprobantes.
-* **Cliente (Customer):** Centro relacional (LTV, historial, segmentos).
-* **Registro de Inventario:** Relación Variante + Depósito + Cantidad.
-* **Movimiento de Inventario:** Bitácora inmutable (Kardex) de ingresos y salidas.
-* **Envío (Shipment):** Paquete físico a despachar (Fulfillment).
-* **Comprobante Fiscal:** Representación legal/tributaria de la transacción (Factura / Nota de Crédito / Nota de Débito).
-* **Rentabilidad (P&L):** Cálculo **derivado** por pedido (ingreso neto − COGS − costo de envío real − comisiones), nunca persistido; se agrega por período / producto / canal / cliente / sucursal.
-* **Reembolso (Refund):** Movimiento de dinero de una devolución. Lo **solicita** Logística/CX y lo **aprueba** Finanzas — el pedido no queda "Reembolsado" en firme hasta esa aprobación.
-* **Descuento (Discount):** *Value object* de Marketing. Nunca vive solo — se entrega vía una **Promoción** (automática, por condiciones), un **Cupón** (con código) o una **Recompensa** (canjeando puntos). Marketing lo calcula (`priceCart`); el `Order` lo refleja en `discount`/`couponCode` (pasivos). Es margen sacrificado: Finanzas lo resta del ingreso, Facturación lo factura como línea negativa.
+**Una excepción conocida y deliberada:** `modules/productos/` no es un módulo
+con ruta propia sino el subsistema que comparten Compras y Almacén, y de él
+importan además Ventas, Gastos, Proveedores, Web, Gerencia, Sistema y
+Consultas (`components/ui.jsx`, `components/Modal.jsx`, `domain/format.js`).
+Funciona como librería compartida disfrazada de módulo; lo correcto sería
+subir esas piezas a `shared/`. Está anotado como deuda.
 
-## 4. Autorización y Permisos (RBAC)
+---
 
-El acceso se evalúa mediante: `[Módulo] : [Recurso] : [Acción] @ [Alcance/Scope]`
+## 3. Explicación de la arquitectura por capas
 
-### Roles Principales
-1. **Propietario / Super Admin:** Acceso irrestricto global.
-2. **Administrador General:** Control operativo global (sin facturación de la plataforma).
-3. **Gerente de Sucursal:** Control total, pero limitado al *Alcance* de su propia sucursal.
-4. **Vendedor:** Crea cotizaciones y pedidos. (Alcance: Propios o de su sucursal).
-5. **Operador de Depósito:** Ajusta stock y prepara envíos. *No puede editar precios ni catálogo.*
-6. **Agente de Soporte (CX):** Solo lectura global, creación de RMA (devoluciones). *No aprueba reembolsos financieros.*
-7. **Marketing:** Control de Catálogo, Promociones y Tienda. Sin acceso a stock o finanzas.
-8. **Finanzas:** Aprueba reembolsos, conciliación, facturación.
+La regla de dependencias es unidireccional (Clean Architecture):
 
-### Reglas Críticas de Seguridad
-* **Exportación aislada:** El permiso `exportar` es el más restringido del sistema. Poder "Ver" no implica poder "Exportar".
-* **Separación Comercial/Física:** Depósito altera cantidades físicas, nunca precios.
-* **Aprobación de Reembolsos:** CX lo solicita, Depósito recibe el producto, Finanzas aprueba el movimiento de dinero. *Implementado:* Logística (`markReturnRequested`) deja el pedido en **"Reembolso pendiente"**; sólo `financeApi.approveRefund` lo confirma (permiso `finanzas:reembolso:aprobar`, aislado). El fee de pasarela y el flete de salida no se recuperan en una devolución.
+```
+modules/*  ──►  shared/*  ──►  core/*        (nunca al revés)
+     │                            ▲
+     └──────── depende de ────────┘
+El núcleo NUNCA importa desde modules/. Por eso es "cerrado a modificación".
+```
 
-## 5. Sistema de Diseño (UI)
+Capas y responsabilidades:
 
-Estilo **"premium sobrio"** (referencia: Linear / Vercel). **Consultar antes de crear cualquier
-componente o pantalla nueva.**
+- **`core` (framework).** Todo lo transversal y estable: shell visual, ruteo,
+  navegación, temas, autenticación, permisos, hooks/servicios compartidos y —lo
+  central— la **infraestructura de módulos** (`defineModule` + `registry`).
+  Cambia poco: casi cualquier feature nueva vive en `modules/`.
+- **`modules` (negocio).** Cada módulo es una vertical independiente y
+  desacoplada. Se comunica con el resto solo a través de contratos del núcleo
+  (el manifiesto, los contextos, `httpClient`). Un módulo puede borrarse sin
+  afectar a otro.
+- **`shared`.** Piezas reutilizables **sin** lógica de negocio (componentes de
+  presentación, utilidades de formato, constantes). Si algo "sabe" de clientes o
+  ventas, no va acá: va en su módulo.
+- **`styles` + `theme`.** Dos vistas de la **misma** paleta: `tokens.css`
+  (variables CSS que consumen los CSS Modules) y `palette.js` (que alimenta el
+  theme de MUI). Mantenerlas en espejo es lo que hace que MUI y el CSS propio se
+  vean como un solo producto.
 
-### Reglas
-1. **Un solo acento:** índigo (`--accent`, `#4f46e5`). Se usa con moderación: acción primaria, ítem
-   de navegación activo, foco, links. Nunca como relleno de zonas grandes.
-2. **Sin gradientes, sin glow, sin sombras de color.** Sombras neutras y suaves (`--shadow-*`).
-3. **Tokens siempre.** Nada de hex/rgba en los CSS de componente. Los tokens viven en
-   `src/assets/styles/variables.css` (primitivos → semánticos por tema) y el tema MUI se alimenta de
-   `src/theme/palette.js` (misma fuente de verdad).
-4. **Dos temas sólidos** (`[data-theme="light|dark"]` en `<html>`), oscuro por defecto. Todo texto
-   debe cumplir contraste AA en ambos.
-5. **Hover discreto:** cambio de fondo/borde, sin `transform: translateY` ni escala.
+Separación de responsabilidades dentro de un módulo (ejemplo Dashboard):
 
-### Primitivas compartidas (`src/components/`) — reutilizar, no reinventar
-| Componente | Uso |
-|---|---|
-| `PageHeader` | Título + subtítulo + acciones de cada módulo. |
-| `Button` | **Único** botón. `variant="primary\|secondary\|ghost\|danger"`, prop `loading`. Los `AddButton/SaveButton/CancelButton/DeleteButton` son shims deprecados que envuelven este. |
-| `Cards/StatCard` | KPIs (`title, value, delta, icon, hint`). |
-| `DataTable` | **Única** tabla. `columns/renderCell/selectable/pagination/onRowClick/toolbar`. |
-| `StatusBadge` | Estados (`status` string → tono, o `tone` manual). Sin glow. |
-| `Modal`, `Toast`, `Toolbar`, `SearchBar`, `Form/*`, `FileUploader` | Ya tematizados. |
+```
+DashboardPage.jsx      → sólo composición y layout (declarativo)
+components/*           → presentación pura (reciben props, no hacen fetch)
+hooks/useDashboardData → orquesta estado de carga/errores/refetch
+services/*.service.js  → única capa de I/O (hoy mock, mañana httpClient)
+config/*.config.js     → qué métricas mostrar, cada cuánto refrescar (datos, no lógica)
+```
 
-Clases globales (`src/assets/styles/globals.css`): `.page`, `.page-header`, `.page-title`,
-`.page-subtitle`, `.page-actions`, `.surface`, `.entity-*`, `.card-title`, `.fade-in`, `.nowrap`.
+---
 
-### Notas de plataforma
-* MUI v9: `Grid` usa `size={{ xs, md }}` (no `item`/`xs`). `ListItemText` usa
-  `slotProps={{ primary, secondary }}`. Algunos alias de iconos sin sufijo fueron removidos
-  (`DeleteOutline` → `DeleteOutlineOutlined`, `PersonOutline` → `PersonOutlineOutlined`,
-  `CheckCircleOutline` → `CheckCircleOutlineOutlined`). `Autocomplete` usa `renderValue`, no `renderTags`.
-* Regla de hooks (eslint `react-hooks/set-state-in-effect`): no llamar `setState` dentro de un
-  `useEffect`. Para resetear el estado de un modal al abrirlo, montarlo condicionalmente
-  (`{open && <Modal…/>}`) o usar `key`, e inicializar `useState` con un lazy initializer.
-* `variables.css` mantiene un bloque de **alias de compatibilidad** (`--color-slate-*`,
-  `--color-primary-*`, …) para CSS aún no migrado; ir eliminándolo.
+## 4. Flujo de escalabilidad
+
+Cómo crece el sistema sin fricción, paso a paso:
+
+1. **Se crea el módulo** en `src/modules/<nombre>/` con su estructura estándar.
+2. **Se describe con un manifiesto** (`defineModule`) que declara `id`, `name`,
+   `basePath`, `icon`, `permissions`, ubicación en la navegación y sus `routes`.
+3. **Se registra** agregándolo al array de `src/modules/index.js`.
+4. En el arranque, `registerModules()` carga los manifiestos en el
+   **`moduleRegistry`**.
+5. El **router** (`AppRouter`) pide `registry.getRouteObjects()` y arma el árbol
+   de rutas; el **sidebar** pide `useNavigation()` y arma el menú. Ambos derivan
+   de la **misma** fuente, así que nunca se desincronizan.
+6. Los **permisos** filtran automáticamente qué módulos ve cada usuario, tanto en
+   la navegación como en el acceso a rutas (guards).
+
+Puntos de escalado adicionales, ya contemplados por el diseño:
+
+- **Feature flags / multi-tenant:** `VITE_ENABLED_MODULES` y el flag `enabled`
+  del manifiesto permiten encender/apagar módulos por entorno o por comercio.
+- **Lazy loading:** cada `element` de ruta puede envolverse en `React.lazy()` sin
+  cambiar el registro; ya hay un `<Suspense>` en el router.
+- **Equipos en paralelo:** como los módulos no se tocan entre sí, distintos
+  equipos trabajan en `customers/`, `sales/`, `inventory/` sin conflictos de
+  merge en el núcleo.
+
+---
+
+## 5. Sistema de registro de módulos
+
+Es el corazón del framework. Un módulo se **auto-describe** con un manifiesto y
+el núcleo solo entiende ese contrato.
+
+### 5.1 El contrato — `core/modules/defineModule.js`
+
+```js
+export const customersModule = defineModule({
+  id: 'customers',                 // único y estable
+  name: 'Clientes',                // rótulo visible (futura clave i18n)
+  description: 'Gestión de clientes',
+  icon: PeopleIcon,                // ícono MUI (opcional)
+  enabled: true,                   // feature flag
+  basePath: '/customers',          // ruta raíz del módulo
+  permissions: ['customers:read'], // requeridos para ver/entrar (opcional)
+  navigation: { showInSidebar: true, group: 'operations', order: 20 },
+  routes: [
+    { path: '',    Component: CustomersListPage, handle: { crumb: 'Clientes' } },
+    { path: ':id', Component: CustomerDetailPage },
+  ],
+});
+```
+
+> Las rutas usan el campo `Component` de React Router (en vez de un `element`
+> con JSX) para que los manifiestos sean `.js` puros, sin necesidad de la
+> transformación de JSX. Las páginas y componentes siguen siendo `.jsx`.
+
+`defineModule` **valida** el manifiesto (falla al arrancar si falta `id`,
+`basePath` o `routes`) y aplica defaults. Los errores aparecen en el bootstrap,
+no enterrados en runtime.
+
+### 5.2 El registro — `core/modules/registry.js`
+
+Un único `moduleRegistry` que:
+
+- guarda los manifiestos (`register` / `registerAll`),
+- filtra los activos (`enabled` + allow-list `VITE_ENABLED_MODULES`),
+- **genera las rutas** (`getRouteObjects()`), prefijando cada ruta con el
+  `basePath` del módulo,
+- **genera la navegación** (`getNavigationItems()`), ordenada por grupo y
+  `order`.
+
+Rutas y navegación salen del mismo lugar ⇒ imposible que discrepen.
+
+### 5.3 El composition root — `modules/index.js`
+
+Es el **único** archivo que se edita para sumar un módulo:
+
+```js
+import { dashboardModule } from './dashboard';
+import { customersModule } from './customers';   // ← nuevo
+
+export const appModules = [
+  dashboardModule,
+  customersModule,                                // ← nuevo
+];
+
+export function registerModules() {
+  moduleRegistry.registerAll(appModules);
+}
+```
+
+---
+
+## 6. Layout principal
+
+`core/layout/MainLayout.jsx` es el *shell* de la aplicación. Compone tres
+regiones y **no** contiene lógica de negocio:
+
+- **Sidebar** — fijo y colapsable en desktop; *off-canvas* (MUI `Drawer`) en
+  mobile/tablet. El contenido de navegación (`SidebarContent`) es **el mismo** en
+  ambos casos: una sola implementación del menú, alimentada por `useNavigation()`.
+- **Topbar** — hamburguesa (abre el drawer en mobile / colapsa el sidebar en
+  desktop), búsqueda global, toggle de tema, notificaciones y menú de usuario.
+- **Área de contenido** — breadcrumbs dinámicos + `<Outlet/>` donde el router
+  inyecta la página del módulo activo.
+
+El estado del layout (sidebar colapsado, drawer abierto) vive en `UIContext`,
+separado de tema y auth para respetar *Single Responsibility*.
+
+---
+
+## 7. Configuración de rutas
+
+`core/router/AppRouter.jsx` usa el **data router** de React Router
+(`createBrowserRouter`) y **genera** el árbol desde el registro:
+
+```
+/login                        → pública (LoginPage)
+/                             → ProtectedRoute (exige sesión)
+  └── MainLayout              → shell
+        ├── index            → HomeRedirect: al PRIMER módulo que el rol puede ver
+        └── ModuleGuard      → exige los permisos del módulo (por `handle.moduleId`)
+              └── …módulos… → moduleRegistry.getRouteObjects()  (auto)
+*                             → NotFoundPage (404)
+```
+
+- **Guards** como componentes de ruta: `ProtectedRoute` (sesión) y
+  `ModuleGuard` (autorización por módulo, para la URL tipeada a mano).
+  `PermissionRoute` existe pero hoy no se usa.
+- **`HomeRedirect`** no es un redirect fijo a `/dashboard` (sería un rebote
+  infinito con el guard para un rol sin ese permiso): manda al primer módulo
+  visible, y si no hay ninguno muestra "Sin secciones asignadas".
+- **`RouteErrorBoundary`** aísla errores: una ruta rota no tumba toda la app.
+- **Breadcrumbs** se derivan de `handle.crumb` de cada ruta (o del pathname),
+  vía `useMatches()`.
+- Agregar un módulo **no** modifica este archivo: sus rutas entran por el
+  registro.
+- **Sub-navegación:** cada módulo declara UNA ruta; sus paneles (Punto de
+  venta, Caja, Clientes…) son estado del provider del módulo, no URL. El
+  `?panel=<id>` permite enlazar a uno, y se ignora si el rol no lo puede ver.
+
+### 7.1 Autenticación y sesión (implementado)
+
+- `LoginPage` pide `GET /auth/opciones` (solo `{id, nombre}` de usuarios y
+  sucursales) y hace `POST /auth/login` con usuario, contraseña y sucursal. Si
+  el equipo está registrado como terminal, la sucursal la impone el servidor.
+- La sesión (`token`, usuario, sucursal) vive en **`sessionStorage`** —una por
+  pestaña— con una copia en `localStorage` que una pestaña nueva hereda
+  durante 10 horas (`core/auth/sesion.js`). Dos ventanas pueden operar con
+  usuarios y sucursales distintos sin pisarse.
+- `httpClient` agrega `Authorization: Bearer` a toda llamada; un **401** limpia
+  la sesión y recarga (vuelve al login); un **403** NO cierra sesión (es "tu
+  rol no puede", no "tu sesión venció").
+- En cada arranque `getCurrentUser()` refresca permisos contra `/auth/yo`; si
+  la API no responde, vale la foto guardada al entrar.
+- `PermissionContext` decide qué se **muestra**; quién puede hacer qué lo
+  decide **el servidor** (guard global de `crm-api`).
+
+---
+
+## 8. Módulos de referencia
+
+El módulo `dashboard` fue la implementación canónica del arranque; hoy es el
+más chico (`index.js` + `pages/` + `styles/`) y lee el inventario real desde el
+store compartido. **Para copiar la estructura de un módulo completo, mirá
+`gastos/` o `proveedores/`**, que tienen el patrón entero:
+
+- `index.js` — manifiesto `defineModule({...})`; los `permissions` se derivan
+  de la lista de paneles del `config/`.
+- `config/<modulo>.config.js` — los paneles del submenú como **dato** (id,
+  rótulo, permiso, badge).
+- `context/<Modulo>Context.jsx` — el provider: carga el bootstrap del módulo,
+  expone `panel/goPanel`, `modal/openModal/closeModal`, `toast`, `recargar`.
+- `pages/<Modulo>Page.jsx` — filtra los paneles por permiso y monta el shell.
+- `panels/` — una pantalla por sección; `components/modals/` — los diálogos.
+- `services/<modulo>.api.js` — la única capa de I/O, sobre `httpClient`.
+- `domain/` — cálculos puros, sin React ni red.
+- `hooks/useResource.js` — carga perezosa de listados grandes.
+
+Los datos se cargan de tres formas que conviven: un **store singleton** para
+el inventario (`productos/services/inventory.store.js`, compartido por
+Compras, Almacén y Dashboard), un **contexto por módulo** (Ventas, Gastos,
+Proveedores), y **pollers globales** del núcleo para los avisos.
+
+---
+
+## 9. Buenas prácticas para agregar módulos
+
+1. **Copiá la estructura de `dashboard/`.** Mantené las mismas subcarpetas.
+2. **Un `index.js` con `defineModule`.** Es la única superficie pública del
+   módulo; el resto de la app no importa archivos internos del módulo.
+3. **I/O solo en `services/`.** Nunca hagas `fetch` desde un componente. Usá
+   `httpClient` del núcleo para heredar base URL, timeout y (a futuro) el token.
+4. **Un hook por pantalla** para el estado (`useXData`). Las páginas quedan
+   declarativas.
+5. **Estilos en CSS Modules del módulo** usando **tokens** (`var(--crm-…)`).
+   Nada de colores hard-codeados ni estilos inline.
+6. **Declará permisos** en el manifiesto; los guards y la navegación los
+   respetan solos.
+7. **No importes de otro módulo.** Si dos módulos necesitan lo mismo, subílo a
+   `shared/` (si es genérico) o al `core/` (si es transversal).
+8. **Registralo** en `src/modules/index.js`. Fin. Rutas y menú aparecen solos.
+
+Checklist rápida para PR de un módulo nuevo: manifiesto válido · servicios sin
+React · página sin fetch · estilos con tokens · permisos declarados · sin
+imports cruzados entre módulos.
+
+---
+
+## 10. Convenciones de nombres
+
+- **Carpetas:** `kebab-case` (`sales-orders/`). Nombre = dominio de negocio.
+- **Componentes React (archivos y símbolos):** `PascalCase`
+  (`MetricCard.jsx` → `export function MetricCard`). Un componente por archivo.
+- **Hooks:** `camelCase` con prefijo `use` (`useDashboardData.js`).
+- **Servicios:** `<dominio>.service.js`, export objeto `xxxService`.
+- **Config:** `<dominio>.config.js`, export objeto `xxxConfig` (con `Object.freeze`).
+- **Contextos:** `XxxContext.jsx` con provider `XxxProvider` y hook `useXxx`.
+- **CSS Modules:** `Componente.module.css`; clases en `camelCase`
+  (`styles.metricCard`).
+- **Tokens CSS:** `--crm-<categoría>-<nombre>` (`--crm-color-primary`).
+- **`id` de módulo y permisos:** `lowercase`; permisos con forma
+  `"<recurso>:<acción>"` (`customers:read`, `sales:create`).
+- **Alias de import:** siempre absolutos vía `@core`, `@modules`, `@shared`,
+  `@styles` (evitar `../../../`).
+- **Barrels (`index.js`):** exponer solo la superficie pública de un paquete.
+
+---
+
+## 11. Sistema de temas
+
+Preparado para **claro**, **oscuro** y **personalización por comercio**:
+
+- **Fuente de verdad doble y en espejo:** `styles/tokens.css` (variables CSS para
+  los CSS Modules) y `core/theme/palette.js` (para MUI). Mismos nombres y
+  valores.
+- **Cambio de modo:** `ThemeModeContext` construye el theme MUI del modo actual y
+  además refleja el modo en `<html data-theme="dark|light">`, de modo que el CSS
+  propio reacciona al mismo switch. El toggle está en la Topbar.
+- **Por comercio (multi-tenant):** `createAppTheme(mode, brandOverrides)` acepta
+  overrides; a futuro, cargá la marca del comercio (colores, radios, logo) y
+  pasala como overrides + un `data-theme="tenant-x"` con variables propias. Cero
+  cambios en componentes.
+
+Reglas de estilo: **MUI solo para componentes** funcionales; **CSS puro/Modules**
+para layout y estilos propios; **sin estilos inline** y **sin dependencias de
+estilo externas**.
+
+---
+
+## 12. Responsive design
+
+**Mobile-first.** Breakpoints únicos compartidos por JS y CSS
+(`shared/constants/breakpoints.js`):
+
+- **Mobile:** `< 768px` — sidebar oculto, menú hamburguesa, cards apiladas.
+- **Tablet:** `768–1023px` — drawer + grid intermedio.
+- **Desktop:** `>= 1024px` — sidebar fijo, grid de 4 columnas.
+
+`useBreakpoint()` (basado en `matchMedia`) expone `isMobile/isTablet/isDesktop`
+usando **los mismos** umbrales que las `@media` de los CSS Modules, así JS y CSS
+nunca se contradicen. El grid de métricas pasa de 1 → 2 → 4 columnas y la tabla
+adopta scroll horizontal en pantallas chicas.
+
+---
+
+## 13. Recomendaciones empresariales
+
+Para llevar esta base a una plataforma CRM/ERP de nivel empresa, en orden
+sugerido:
+
+1. **Data layer:** adoptar **TanStack Query** (React Query) sobre `httpClient`
+   para caché, reintentos, invalidación y estados de servidor. Los hooks
+   `useXData` ya son el lugar natural para migrarlo.
+2. **Autenticación:** ya es real (sesiones con token contra la API, ver §7.1).
+   Si algún día hace falta OAuth2/OIDC, el cambio sigue quedando encapsulado en
+   `auth.service.js` + `sesion.js`.
+3. **Autorización robusta:** RBAC/ABAC con permisos `"<recurso>:<acción>"` (ya
+   soportados), más un componente `<Can permission="…">` para gating a nivel UI.
+4. **Multi-tenant / white-label:** tema y catálogo de módulos por comercio; feature
+   flags server-driven; aislamiento de datos por `tenantId`.
+5. **i18n:** `react-i18next`; los `name` de módulos y rótulos ya están listos para
+   volverse claves de traducción. Formatos regionales ya usan `Intl`.
+6. **Calidad:** **TypeScript** (ver §14), **Vitest + Testing Library** para
+   unidad, **Playwright** para E2E, **Storybook** para `shared/` y componentes de
+   módulos. Hoy el dashboard **no tiene tests**; la CI (`.github/workflows/ci.yml`)
+   corre lint (errores) y build en cada push.
+7. **Observabilidad:** enrutar `logger` a Sentry/Datadog; métricas de uso y
+   *error boundaries* por módulo.
+8. **Rendimiento:** `React.lazy` por módulo/ruta (code-splitting), virtualización
+   de tablas grandes, prefetch de rutas probables.
+9. **DX y gobierno:** un **generador de módulos** (`plop`/`hygen`) que scaffolds la
+   carpeta + manifiesto; ESLint con reglas de límites de import
+   (`eslint-plugin-boundaries`) para *prohibir* imports entre módulos y hacia el
+   núcleo; CI con lint+test+build.
+10. **Backend/contratos:** OpenAPI + cliente generado, o tRPC/GraphQL, para tipar
+    la frontera cliente-servidor de punta a punta.
+11. **Diseño de sistema:** consolidar `shared/components` como design system
+    documentado; tokens versionados.
+
+---
+
+## 14. Migración a TypeScript
+
+La base ya está preparada para adoptar TS incrementalmente:
+
+- Los **alias** están en `jsconfig.json` (se copian tal cual a `tsconfig.json`).
+- Los **contratos** ya existen conceptualmente: el manifiesto de módulo, las
+  formas de `AuthContext`, `PermissionContext`, etc. Se tipan primero como
+  `interfaces`.
+- Estrategia sugerida: activar `allowJs` + `checkJs`, renombrar de a poco
+  `.js/.jsx → .ts/.tsx` empezando por `core/modules` (el contrato) y
+  `shared/utils`, y avanzar módulo por módulo. El desacople permite migrar sin un
+  *big bang*.
+
+---
+
+### Resumen
+
+Un **núcleo cerrado y estable** + **módulos autocontenidos** conectados por un
+**registro declarativo** que genera rutas y navegación. Sumar funcionalidad es
+agregar una carpeta y una línea; el núcleo y los módulos existentes no se tocan.
+Esa es la propiedad que sostiene el crecimiento del producto en el tiempo.
