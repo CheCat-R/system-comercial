@@ -31,17 +31,17 @@ export const MANUAL = [
     temas: [
       {
         id: 'piezas',
-        actualizado: '2026-07-30',
+        actualizado: '2026-09-22',
         titulo: 'Las tres piezas',
         bloques: [
-          { t: 'flujo', items: ['PostgreSQL', 'crm-api (NestJS)', 'crm-dashboard (React)'] },
+          { t: 'flujo', items: ['MySQL', 'api (Laravel)', 'panel (React)'] },
           {
             t: 'tabla',
             cols: ['Pieza', 'Qué hace', 'Dónde vive'],
             filas: [
-              ['PostgreSQL', 'La verdad. Todo lo demás es una vista de esto.', 'local hoy, Hostinger después'],
-              ['crm-api', 'Reglas de negocio y cálculo. Nada se calcula dos veces.', 'carpeta crm-api'],
-              ['crm-dashboard', 'La pantalla. Replica algunos cálculos para responder en vivo.', 'carpeta crm-dashboard'],
+              ['MySQL', 'La verdad. Todo lo demás es una vista de esto.', 'local hoy, hosting compartido después'],
+              ['api', 'Reglas de negocio y cálculo. Nada se calcula dos veces.', 'carpeta api'],
+              ['panel', 'La pantalla. Replica algunos cálculos para responder en vivo.', 'carpeta panel'],
             ],
           },
           {
@@ -49,30 +49,35 @@ export const MANUAL = [
             tono: 'warn',
             texto: 'Hay cálculos DUPLICADOS a propósito entre API y pantalla (precios y costos). La pantalla necesita recalcular con cada tecla y pedirle el número a la API en cada pulsación sería inusable. El precio de esa decisión: **si se toca la fórmula, se toca en los dos lados o el formulario miente**.',
           },
+          {
+            t: 'nota',
+            tono: 'info',
+            texto: 'El sistema arrancó como `crm-api` (NestJS + Drizzle + PostgreSQL). Esa versión quedó como referencia de contrato — la lógica de negocio se auditó y se portó entera a Laravel/MySQL — y ya no se usa en producción. `panel` (antes `crm-dashboard`) no cambió: la pantalla es la misma, solo cambió quién responde sus pedidos.',
+          },
         ],
       },
       {
         id: 'identidad',
-        actualizado: '2026-07-30',
+        actualizado: '2026-09-22',
         titulo: 'Identidad visual',
         bloques: [
           {
             t: 'p',
-            texto: 'Dos colores con papeles fijos. **Verde oscuro** es el principal: navegación, botones primarios, foco, selección y totales — siempre con letra blanca encima. **Naranja** es el detalle: el indicador del módulo activo, la barrita de las pestañas, el chip de oferta — señala "acá", nunca pinta superficies grandes.',
+            texto: 'Un solo acento con rol fijo: **índigo**. Navegación activa, botones primarios, foco, selección, badges y pestañas — siempre con letra blanca encima sobre superficie sólida. No hay un segundo color de marca: `accent-2` es una variación tonal del mismo índigo (un escalón más claro), no un color nuevo — se usa donde algo necesita distinguirse sin salirse de la familia, como el indicador de las pestañas o el detalle del logo.',
           },
           {
             t: 'tabla',
             cols: ['Si es…', 'Va en…'],
             filas: [
-              ['Una superficie o una acción principal', 'Verde oscuro con blanco'],
-              ['Un acento chico que tiene que saltar a la vista', 'Naranja'],
-              ['Todo lo demás', 'Claro y neutro, con un tinte verde apenas perceptible'],
+              ['Una superficie o una acción principal', 'Índigo con blanco'],
+              ['Un detalle que tiene que distinguirse sin salir de la familia', 'accent-2 (variación tonal del índigo)'],
+              ['Todo lo demás', 'Claro y neutro, sin tinte de marca'],
             ],
           },
           {
             t: 'nota',
             tono: 'warn',
-            texto: 'Los colores viven en **un solo lugar**: `src/styles/tokens.css` (variables `--crm-*`) con su espejo MUI en `core/theme/palette.js`. Nunca un hex crudo en un módulo — cambiar la marca entera fue tocar esos dos archivos, y así tiene que seguir. Hay tema claro (por defecto) y oscuro con la misma identidad.',
+            texto: 'Los colores viven en **un solo lugar**: `src/styles/tokens.css` (variables `--crm-*`) con su espejo MUI en `core/theme/palette.js`. Nunca un hex crudo en un módulo — cambiar la marca entera es tocar esos dos archivos, y así tiene que seguir. Hay tema claro (por defecto) y oscuro con la misma identidad.',
           },
         ],
       },
