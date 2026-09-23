@@ -25,6 +25,25 @@ class TransferenciasController extends Controller
         return response()->json($this->svc->get($id));
     }
 
+    /**
+     * QUÉ LLEGÓ QUE ESTE LOCAL NO SABE. Lo consume el armado del pedido.
+     *
+     * `destinoId` pasa por `sucursalDeOperacion` igual que el borrador: para
+     * el cajero es SU sucursal y no la que mande, porque el cálculo es
+     * relativo al local — "nunca lo tuviste", "desde tu último pedido" — y
+     * pedirlo con el id de otro sería leer el historial ajeno. El jefe sí
+     * puede mirar el de cualquiera.
+     */
+    public function novedades(Request $request, Sesion $sesion): JsonResponse
+    {
+        $d = $request->validate(['origenId' => ['required', 'integer'], 'destinoId' => ['nullable', 'integer']]);
+
+        return response()->json($this->svc->novedadesPedido(
+            (int) $d['origenId'],
+            $sesion->sucursalDeOperacion(isset($d['destinoId']) ? (int) $d['destinoId'] : null),
+        ));
+    }
+
     public function borrador(Request $request, Sesion $sesion): JsonResponse
     {
         $d = $request->validate(['origenId' => ['required', 'integer'], 'destinoId' => ['nullable', 'integer']]);

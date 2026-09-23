@@ -6,6 +6,7 @@ use App\Exceptions\ErrorDeNegocio;
 use App\Models\Producto;
 use App\Precios\CostoEntry;
 use App\Precios\Pricing;
+use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -606,6 +607,106 @@ class TransferenciasService extends StockCore
     }
 
     /* ---------------- Consultas ---------------- */
+
+    /** Cuántos días desde su alta un producto sigue siendo "nuevo". */
+    private const DIAS_NUEVO = 30;
+
+    /**
+     * Nada anterior a esta fecha cuenta como novedad. El catálogo migrado no
+     * tiene historia de compras: sin este piso, el primer día son cientos de
+     * "novedades" falsas.
+     */
+    private function corteHistorico(): Carbon
+    {
+        return Carbon::parse('2026-08-01T00:00:00', 'America/Argentina/Buenos_Aires');
+    }
+
+    /**
+     * QUÉ LLEGÓ AL DEPÓSITO QUE ESTE LOCAL TODAVÍA NO SABE (paridad con
+     * crm-api `InventarioService.novedadesPedido`, 0083).
+     *
+     * DOS CHIPS, DOS VENTANAS:
+     *  · NUEVO — el producto SE CREÓ hace poco (`productos.created_at` dentro
+     *    de `DIAS_NUEVO`) y entró a stock. Novedad DEL CATÁLOGO: se apaga
+     *    antes solo si el destino ya lo recibió alguna vez (contra el
+     *    historial completo de `movimientos` del destino, sin ventana).
+     *  · REINGRESO — ya existía (alta vieja) y volvió a entrar al depósito
+     *    desde el último pedido REAL de esta ruta (el borrador no cuenta, el
+     *    cancelado tampoco). Ventana corta: es reposición.
+     *
+     * Exige stock disponible HOY en el origen, solo productos `activo`, y
+     * nada anterior al piso `corteHistorico()`.
+     */
+    public function novedadesPedido(int $origenId, int $destinoId): array
+    {
+        if ($origenId <= 0 || $destinoId <= 0 || $origenId === $destinoId) {
+            throw new ErrorDeNegocio('Elegí origen y destino distintos.');
+        }
+
+        // El último pedido REAL (no borrador, no cancelado) de este local por esta ruta.
+        $ultimo = DB::table('transferencias')
+            ->where('origen_id', $origenId)->where('destino_id', $destinoId)
+            ->where('estado', '!=', 'borrador')->where('estado', '!=', 'cancelada')
+            ->orderByDesc('fecha')->value('fecha');
+        $ultimoFecha = $ultimo ? Carbon::parse($ultimo) : null;
+
+        $piso = $this->corteHistorico();
+        // Sin pedidos previos (local nuevo) la ventana corta arranca en el piso histórico.
+        $desdeLlego = ($ultimoFecha && $ultimoFecha->gt($piso)) ? $ultimoFecha : $piso;
+        $corteNuevo = Carbon::now()->subDays(self::DIAS_NUEVO);
+        $desdeNuevo = $corteNuevo->gt($piso) ? $corteNuevo : $piso;
+        // Se consulta por la MÁS VIEJA de las dos y se clasifica en memoria: una sola pasada por `movimientos`.
+        $desde = $desdeLlego->lt($desdeNuevo) ? $desdeLlego : $desdeNuevo;
+
+        // Lo que ENTRÓ al depósito por compra en la ventana, con la fecha de la última entrada de cada producto.
+        $entradas = DB::table('movimientos')
+            ->select('producto_id', DB::raw('max(fecha) as ultima_entrada'))
+            ->where('tipo', 'compra')->where('sucursal_id', $origenId)
+            ->where('fecha', '>=', $desde)->whereNotNull('producto_id')
+            ->groupBy('producto_id')->get();
+
+        if ($entradas->isEmpty()) {
+            return ['desde' => $desdeLlego, 'desdeNuevo' => $desdeNuevo, 'ultimoPedido' => $ultimo, 'items' => []];
+        }
+        $ids = $entradas->pluck('producto_id')->all();
+
+        // Cuáles de esos este local YA tuvo alguna vez: todo el historial del destino, sin ventana ("nunca" es nunca).
+        $yaTuvo = DB::table('movimientos')->where('sucursal_id', $destinoId)->whereIn('producto_id', $ids)
+            ->groupBy('producto_id')->pluck('producto_id')->flip();
+
+        // Y cuáles hay REALMENTE para mandar hoy.
+        $disponible = DB::table('stock')->select('producto_id', DB::raw('sum(cantidad) as total'))
+            ->where('sucursal_id', $origenId)->where('estado', 'disponible')->whereIn('producto_id', $ids)
+            ->groupBy('producto_id')->pluck('total', 'producto_id');
+
+        $altaDe = DB::table('productos')->whereIn('id', $ids)->where('estado', 'activo')->pluck('created_at', 'id');
+
+        $items = [];
+        foreach ($entradas as $e) {
+            $id = (int) $e->producto_id;
+            if (! isset($altaDe[$id])) {
+                continue;
+            }
+            $disp = (float) ($disponible[$id] ?? 0);
+            if ($disp <= self::EPS) {
+                continue;
+            }
+            $fecha = Carbon::parse($e->ultima_entrada);
+            $alta = Carbon::parse($altaDe[$id]);
+            // NUEVO se decide por la EDAD DEL PRODUCTO, no por el local: se creó dentro de la ventana
+            // y este local todavía no lo recibió. Todo lo demás que entró es REINGRESO.
+            $nuevo = $alta->gte($desdeNuevo) && ! isset($yaTuvo[$id]);
+            // Cada chip tiene SU ventana: la novedad del catálogo aguanta más días que una reposición común.
+            if ($nuevo ? $fecha->lt($desdeNuevo) : $fecha->lt($desdeLlego)) {
+                continue;
+            }
+            $items[] = ['productoId' => $id, 'chip' => $nuevo ? 'nuevo' : 'reingreso', 'fecha' => $fecha, 'disponible' => $disp];
+        }
+        // LO ÚLTIMO QUE ENTRÓ VA ARRIBA, sin agrupar por chip.
+        usort($items, fn ($a, $b) => $b['fecha'] <=> $a['fecha']);
+
+        return ['desde' => $desdeLlego, 'desdeNuevo' => $desdeNuevo, 'ultimoPedido' => $ultimo, 'items' => $items];
+    }
 
     public function listar(?int $soloSuc = null): array
     {

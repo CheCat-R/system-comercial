@@ -198,6 +198,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [TransferenciasController::class, 'index']);
         Route::get('/{id}', [TransferenciasController::class, 'show'])->whereNumber('id');
         Route::middleware('permiso:pedidos')->group(function () {
+            Route::get('/novedades', [TransferenciasController::class, 'novedades']);
             Route::post('/borrador', [TransferenciasController::class, 'borrador']);
             Route::put('/{id}/borrador', [TransferenciasController::class, 'guardarBorrador']);
             Route::post('/{id}/enviar', [TransferenciasController::class, 'enviarBorrador']);

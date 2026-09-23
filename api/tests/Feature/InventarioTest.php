@@ -263,4 +263,40 @@ class InventarioTest extends TestCase
         $this->assertSame(9.0, $this->stock($this->gaseosa, $this->central));
         $this->assertSame(1, DB::table('movimientos')->where('tipo', 'devolucion')->count());
     }
+
+    public function test_novedades_pedido_marca_nuevo_reingreso_y_excluye_lo_viejo(): void
+    {
+        // NUEVO: alta reciente (dentro de DIAS_NUEVO), recién entró a stock, express nunca lo recibió.
+        $nuevo = Producto::query()->create(['nombre' => 'Producto Nuevo', 'tipo' => 'entero', 'iva' => 21]);
+        DB::table('productos')->where('id', $nuevo->id)->update(['created_at' => now()->subDays(10)]);
+        $this->ops->compra(['productoId' => $nuevo->id, 'cantidad' => 15, 'usuarioId' => $this->uid]);
+
+        // REINGRESO: alta vieja (muy anterior a la ventana), pero volvió a entrar stock recién.
+        $reingreso = Producto::query()->create(['nombre' => 'Producto Reingreso', 'tipo' => 'entero', 'iva' => 21]);
+        DB::table('productos')->where('id', $reingreso->id)->update(['created_at' => now()->subDays(500)]);
+        $this->ops->compra(['productoId' => $reingreso->id, 'cantidad' => 8, 'usuarioId' => $this->uid]);
+
+        // VIEJO Y QUIETO: alta y última compra muy anteriores al piso histórico — no es novedad.
+        $viejo = Producto::query()->create(['nombre' => 'Producto Viejo Sin Novedad', 'tipo' => 'entero', 'iva' => 21]);
+        DB::table('productos')->where('id', $viejo->id)->update(['created_at' => '2020-01-01 00:00:00']);
+        $this->ops->compra(['productoId' => $viejo->id, 'cantidad' => 3, 'usuarioId' => $this->uid]);
+        DB::table('movimientos')->where('producto_id', $viejo->id)->where('tipo', 'compra')->update(['fecha' => '2020-01-01 00:00:00']);
+
+        $token = $this->loguear($this->superadmin(), 'admin1234');
+        $res = $this->conToken($token)
+            ->getJson('/api/transferencias/novedades?origenId='.$this->central->id.'&destinoId='.$this->express->id)
+            ->assertOk()->json();
+
+        $porProducto = collect($res['items'])->keyBy('productoId');
+
+        $this->assertTrue($porProducto->has($nuevo->id), 'el producto recién dado de alta debe listarse');
+        $this->assertSame('nuevo', $porProducto[$nuevo->id]['chip']);
+        $this->assertSame(15.0, (float) $porProducto[$nuevo->id]['disponible']);
+
+        $this->assertTrue($porProducto->has($reingreso->id), 'el producto repuesto debe listarse');
+        $this->assertSame('reingreso', $porProducto[$reingreso->id]['chip']);
+        $this->assertSame(8.0, (float) $porProducto[$reingreso->id]['disponible']);
+
+        $this->assertFalse($porProducto->has($viejo->id), 'lo anterior al piso histórico no es novedad');
+    }
 }
