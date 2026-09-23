@@ -31,7 +31,10 @@ export const GERENCIA_SECCIONES = [
     desc: 'Margen real por producto, marca, categoría y proveedor — con el IVA absorbido por la mercadería sin factura a la vista.',
   },
   {
-    id: 'valorizacion', label: 'Valorización de stock', icon: Inventory2Icon, permiso: 'gerencia.valorizacion', pronto: true,
+    /* Construida el 23/9/2026: foto de HOY (no un período), al costo actual
+     * del formato activo — el mismo criterio que Rentabilidad. Entran todos
+     * los estados, incluidos vencido/defectuoso: siguen siendo plata parada. */
+    id: 'valorizacion', label: 'Valorización de stock', icon: Inventory2Icon, permiso: 'gerencia.valorizacion',
     desc: 'Cuánta plata hay parada en mercadería, valuada a costo, por sucursal y por estado.',
   },
   {

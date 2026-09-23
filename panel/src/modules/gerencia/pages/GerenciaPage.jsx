@@ -21,6 +21,7 @@ import { Table, PanelHead, Btn, usePaginado, s } from '@modules/productos/compon
 import { GERENCIA_SECCIONES } from '../config/gerencia.config.js';
 import { RentabilidadPanel } from '../panels/RentabilidadPanel.jsx';
 import { ReportesVentasPanel } from '../panels/ReportesVentasPanel.jsx';
+import { ValorizacionPanel } from '../panels/ValorizacionPanel.jsx';
 
 /** Placeholder honesto: dice qué va a haber acá cuando se construya. */
 function Proximamente({ seccion }) {
@@ -583,7 +584,8 @@ export function GerenciaPage() {
           {/* Cada sección construida tiene su panel; lo agendado dice "pronto". */}
           {activa.id === 'rentabilidad' ? <RentabilidadPanel />
             : activa.id === 'reportes' ? <ReportesVentasPanel />
-              : activa.pronto ? <Proximamente seccion={activa} /> : panelUsuarios}
+              : activa.id === 'valorizacion' ? <ValorizacionPanel />
+                : activa.pronto ? <Proximamente seccion={activa} /> : panelUsuarios}
         </div>
       </div>
 
