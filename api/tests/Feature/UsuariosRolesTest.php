@@ -25,8 +25,8 @@ class UsuariosRolesTest extends TestCase
         $this->comoSuperadmin()->getJson('/api/roles/permisos')->assertOk()
             ->assertJsonPath('0.grupo', 'General');
         $res = $this->comoSuperadmin()->getJson('/api/roles')->assertOk();
-        $this->assertCount(4, $res->json('data'));
-        $this->assertSame(1, collect($res->json('data'))->firstWhere('clave', 'superadmin')['usuarios']);
+        $this->assertCount(4, $res->json());
+        $this->assertSame(1, collect($res->json())->firstWhere('clave', 'superadmin')['usuarios']);
     }
 
     public function test_crear_usuario_y_entrar_con_el(): void

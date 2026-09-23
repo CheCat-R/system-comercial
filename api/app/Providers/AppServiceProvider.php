@@ -8,6 +8,7 @@ use App\Models\SesionToken;
 use App\Models\Usuario;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
 
@@ -37,5 +38,12 @@ class AppServiceProvider extends ServiceProvider
         Sanctum::usePersonalAccessTokenModel(SesionToken::class);
         // Vencimiento por inactividad, refresco deslizante y baja inmediata de usuarios desactivados.
         Sanctum::authenticateAccessTokensUsing([Sesiones::class, 'validar']);
+        /*
+         * El resto de la API devuelve arrays sueltos (contrato heredado de
+         * crm-api/Drizzle, sin envoltorio). Sin esto, un `Resource::collection()`
+         * los envuelve en `{"data": [...]}` por defecto y el panel, que espera
+         * un array, revienta con "x.map is not a function".
+         */
+        JsonResource::withoutWrapping();
     }
 }

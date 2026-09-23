@@ -52,8 +52,8 @@ class SucursalesTerminalesTest extends TestCase
         $this->assertArrayNotHasKey('token_hash', $res->json('terminal'));
 
         $lista = $this->comoSuperadmin()->getJson('/api/terminales')->assertOk();
-        $this->assertArrayNotHasKey('token', $lista->json('data.0'));
-        $this->assertSame('Caja 1', $lista->json('data.0.nombre'));
+        $this->assertArrayNotHasKey('token', $lista->json('0'));
+        $this->assertSame('Caja 1', $lista->json('0.nombre'));
 
         // Dada de baja, el navegador vuelve a ser anónimo.
         $this->comoSuperadmin()->patchJson('/api/terminales/'.$res->json('terminal.id'), ['activa' => false])->assertOk();
