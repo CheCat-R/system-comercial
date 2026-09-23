@@ -732,6 +732,7 @@ class ComprobantesService
             }
             DB::table('comprobantes')->where('id', $id)->update([
                 'estado' => 'anulado', 'updated_at' => now(),
+                'anulado_por' => $usuarioId, 'anulado_en' => now(),
                 'observaciones' => trim(($c->observaciones ? $c->observaciones."\n" : '').'Anulado: '.trim($motivo)),
             ]);
             if ($c->ref_comprobante_id) {

@@ -487,6 +487,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/gerencia/rentabilidad', [GerenciaController::class, 'rentabilidad'])->middleware('permiso:gerencia.rentabilidad');
     Route::get('/gerencia/reportes-ventas', [GerenciaController::class, 'reportesVentas'])->middleware('permiso:gerencia.reportes');
     Route::get('/gerencia/valorizacion', [GerenciaController::class, 'valorizacion'])->middleware('permiso:gerencia.valorizacion');
+    Route::get('/gerencia/auditoria', [GerenciaController::class, 'auditoria'])->middleware('permiso:gerencia.auditoria');
 
     /* ---------------- Transversal ---------------- */
 

@@ -38,8 +38,13 @@ export const GERENCIA_SECCIONES = [
     desc: 'Cuánta plata hay parada en mercadería, valuada a costo, por sucursal y por estado.',
   },
   {
-    id: 'auditoria', label: 'Auditoría', icon: FactCheckIcon, permiso: 'gerencia.auditoria', pronto: true,
-    desc: 'Quién hizo qué: anulaciones, reversiones de precios, ajustes de stock y diferencias de caja.',
+    /* Construida el 23/9/2026: línea de tiempo sobre cuatro fuentes que ya
+     * existían (cambios de ficha, anulaciones, reversiones de precios,
+     * diferencias de caja). Los ajustes de stock quedan afuera a propósito:
+     * ya tienen su propia pantalla completa en Almacén (Existencias e
+     * Incidencias) y traerlos acá sería duplicarla, no sumar algo nuevo. */
+    id: 'auditoria', label: 'Auditoría', icon: FactCheckIcon, permiso: 'gerencia.auditoria',
+    desc: 'Quién hizo qué: anulaciones, reversiones de precios y diferencias de caja, además de los cambios de ficha ya registrados.',
   },
   {
     id: 'configuracion', label: 'Configuración', icon: SettingsIcon, permiso: 'gerencia.configuracion', pronto: true,
