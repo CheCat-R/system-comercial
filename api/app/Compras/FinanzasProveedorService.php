@@ -274,7 +274,7 @@ class FinanzasProveedorService
 
     public function crearEcheq(array $d): array
     {
-        if (empty($d['proveedorId']) || ! DB::table('proveedores')->where('id', (int) $d['proveedorId'])->exists()) {
+        if (empty($d['proveedorId'])) {
             throw new ErrorDeNegocio('Elegí el proveedor del echeq.');
         }
         if (empty($d['fechaVenc'])) {
@@ -283,6 +283,9 @@ class FinanzasProveedorService
         $importe = Documentos::money($d['importe'] ?? 0);
         if ($importe <= 0) {
             throw new ErrorDeNegocio('El importe del echeq tiene que ser mayor a 0.');
+        }
+        if (! DB::table('proveedores')->where('id', (int) $d['proveedorId'])->exists()) {
+            throw new ErrorDeNegocio('Proveedor inválido.');
         }
         $id = DB::table('proveedor_echeqs')->insertGetId([
             'numero' => mb_substr(trim((string) ($d['numero'] ?? '')), 0, 40), 'banco' => mb_substr(trim((string) ($d['banco'] ?? '')), 0, 100), 'importe' => $importe,

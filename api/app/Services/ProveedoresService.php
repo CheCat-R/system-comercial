@@ -105,10 +105,16 @@ class ProveedoresService
             ->map(fn ($p) => ['id' => $p->id, 'nombre' => $p->nombre, 'alicuota' => (float) $p->alicuota, 'base' => $p->base, 'activa' => (bool) $p->activa])->all();
     }
 
+    /** Cómo se lee una percepción en la auditoría: "2% sobre el neto (inactiva)". */
+    private static function legiblePercepcion(array $x): string
+    {
+        return (float) $x['alicuota'].'% sobre '.($x['base'] === 'total' ? 'el total' : 'el neto').($x['activa'] ? '' : ' (inactiva)');
+    }
+
     /** Reemplaza la lista entera (es la ficha, no historia). */
     public function setPercepciones(Proveedor $p, array $lista, ?int $usuarioId = null): array
     {
-        $antes = collect($this->percepciones($p->id))->map(fn ($x) => $x['nombre'].' '.$x['alicuota'].'% s/'.$x['base'].($x['activa'] ? '' : ' (inactiva)'))->implode(', ');
+        $anteriores = $this->percepciones($p->id);
         $filas = [];
         foreach ($lista as $x) {
             $nombre = trim((string) ($x['nombre'] ?? ''));
@@ -127,9 +133,27 @@ class ProveedoresService
                 DB::table('proveedor_percepciones')->insert($filas);
             }
         });
-        $despues = collect($this->percepciones($p->id))->map(fn ($x) => $x['nombre'].' '.$x['alicuota'].'% s/'.$x['base'].($x['activa'] ? '' : ' (inactiva)'))->implode(', ');
-        $this->audit->registrar($this->audit->diferencias(['entidad' => 'proveedor', 'entidadId' => $p->id, 'ambito' => 'Percepciones', 'usuarioId' => $usuarioId],
-            ['percepciones' => $antes], ['percepciones' => $despues], ['percepciones' => 'Percepciones']));
+
+        // El reemplazo entero se traduce a cambios legibles POR PERCEPCIÓN
+        // (comparando por nombre): agregada, quitada o modificada — no un
+        // solo bloque de texto que hay que leer entero para saber qué cambió.
+        $viejas = collect($anteriores)->keyBy('nombre')->map(fn ($x) => self::legiblePercepcion($x));
+        $nuevas = collect($this->percepciones($p->id))->keyBy('nombre')->map(fn ($x) => self::legiblePercepcion($x));
+        $base = ['entidad' => 'proveedor', 'entidadId' => $p->id, 'ambito' => 'Percepciones', 'usuarioId' => $usuarioId];
+        $cambios = [];
+        foreach ($viejas as $nombre => $v) {
+            if (! $nuevas->has($nombre)) {
+                $cambios[] = [...$base, 'campo' => $nombre, 'antes' => $v, 'despues' => '(quitada)'];
+            } elseif ($nuevas[$nombre] !== $v) {
+                $cambios[] = [...$base, 'campo' => $nombre, 'antes' => $v, 'despues' => $nuevas[$nombre]];
+            }
+        }
+        foreach ($nuevas as $nombre => $v) {
+            if (! $viejas->has($nombre)) {
+                $cambios[] = [...$base, 'campo' => $nombre, 'antes' => '(no estaba)', 'despues' => $v];
+            }
+        }
+        $this->audit->registrar($cambios);
 
         return $this->percepciones($p->id);
     }

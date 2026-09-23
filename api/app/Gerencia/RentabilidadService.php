@@ -33,7 +33,9 @@ class RentabilidadService
     {
         $hoy = Documentos::hoy();
         $desde = ! empty($q['desde']) ? Documentos::fecha($q['desde']) : $hoy->copy()->startOfMonth();
-        $hastaEx = ! empty($q['hasta']) ? Documentos::finDeDia($q['hasta'])->addSecond() : $hoy->copy()->addDay();
+        // Tope EXCLUSIVO: la medianoche del día siguiente, justa — no "fin de día + 1s"
+        // (eso deja pasar hasta el segundo siguiente a la medianoche real).
+        $hastaEx = ! empty($q['hasta']) ? Documentos::fecha($q['hasta'])->addDay() : $hoy->copy()->addDay();
         $suc = ! empty($q['sucursalId']) ? (int) $q['sucursalId'] : null;
 
         $filasVenta = $this->ventasPorProducto($desde, $hastaEx, $suc);

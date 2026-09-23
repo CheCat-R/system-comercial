@@ -725,7 +725,7 @@ class VentasService
         if (! in_array($tipo, self::TIPOS_CREABLES, true)) {
             throw new ErrorDeNegocio('Tipo de comprobante inválido.');
         }
-        $puntoVenta = (string) ($config['puntoVenta'] ?: '00001');
+        $puntoVenta = (string) ($config['puntoVenta'] ?: '0001');
         $fecha = self::fechaDeDocumento($dto['fecha'] ?? null, ! empty($opciones['esJefe']));
         $cab = [
             'tipo' => $tipo, 'punto_venta' => $puntoVenta, 'fecha' => $fecha, 'cliente_id' => $cliente->id, 'sucursal_id' => $sucursalId, 'usuario_id' => $autor,

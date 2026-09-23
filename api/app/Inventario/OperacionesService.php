@@ -323,7 +323,7 @@ class OperacionesService extends StockCore
         $liberar = ! empty($o['liberar']);
         $desde = $liberar ? 'comprometido' : 'disponible';
         $hacia = $liberar ? 'disponible' : 'comprometido';
-        $this->moverItems($o, $desde, $hacia, 'ajuste', $liberar ? null : 'Stock insuficiente para reservar');
+        $this->moverItems($o, $desde, $hacia, 'ajuste', $liberar ? null : 'Stock insuficiente para reservar', ['pedido', 'disponible']);
     }
 
     /**
@@ -340,11 +340,17 @@ class OperacionesService extends StockCore
         $this->moverItems($o, $desde, $hacia, $o['tipoMovimiento'] ?? 'ajuste', 'Stock insuficiente');
     }
 
-    /** Mueve una lista de renglones entre dos estados; con `$prefijoFalta`, valida todos antes de mover. */
-    private function moverItems(array $o, string $desde, string $hacia, string $tipoMov, ?string $prefijoFalta): void
+    /**
+     * Mueve una lista de renglones entre dos estados; con `$prefijoFalta`,
+     * valida todos antes de mover. `$etiquetas` son [verbo del pedido, verbo
+     * de lo que hay] — reservar dice "pedido X, disponible Y" y transitar
+     * dice "hace falta X, hay Y": mismo chequeo, dos preguntas distintas.
+     */
+    private function moverItems(array $o, string $desde, string $hacia, string $tipoMov, ?string $prefijoFalta, array $etiquetas = ['hace falta', 'hay']): void
     {
         $items = array_filter($o['items'] ?? [], fn ($it) => (float) ($it['cantidad'] ?? 0) > 0);
         if ($prefijoFalta !== null) {
+            [$etPedido, $etHay] = $etiquetas;
             $faltas = [];
             foreach ($items as $it) {
                 $presId = (int) ($it['presentacionId'] ?? 0) ?: null;
@@ -353,7 +359,7 @@ class OperacionesService extends StockCore
                 if ($c > $hay + self::EPS) {
                     $prod = $this->producto((int) $it['productoId']);
                     $tipo = $prod?->tipo->value ?? 'entero';
-                    $faltas[] = ($prod?->nombre ?? '#'.$it['productoId']).': hace falta '.$this->fmtCant($tipo, $presId, $c).', hay '.$this->fmtCant($tipo, $presId, $hay);
+                    $faltas[] = ($prod?->nombre ?? '#'.$it['productoId']).': '.$etPedido.' '.$this->fmtCant($tipo, $presId, $c).', '.$etHay.' '.$this->fmtCant($tipo, $presId, $hay);
                 }
             }
             if ($faltas) {

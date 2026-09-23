@@ -139,7 +139,7 @@ class CobranzasService
             throw new ErrorDeNegocio('Estás imputando $'.number_format($imputado, 2, '.', '').' y la cobranza es de $'.number_format($total, 2, '.', '').'.');
         }
         $aCuenta = Pricing::money($total - $imputado);
-        $puntoVenta = (string) ($config['puntoVenta'] ?: '00001');
+        $puntoVenta = (string) ($config['puntoVenta'] ?: '0001');
         $fecha = VentasService::fechaDeDocumento($dto['fecha'] ?? null, ! empty($opciones['esJefe']));
 
         $id = DB::transaction(function () use ($turno, $hayEfectivo, $config, $imputaciones, $cliente, $puntoVenta, $fecha, $sucursalId, $autor, $total, $aCuenta, $dto, $pagos) {

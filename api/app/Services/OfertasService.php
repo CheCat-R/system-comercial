@@ -97,7 +97,7 @@ class OfertasService
             'lleva' => (float) ($d['lleva'] ?? 0), 'paga' => (float) ($d['paga'] ?? 0), 'montoMinimo' => (float) ($d['montoMinimo'] ?? 0),
             'desde' => ! empty($d['desde']) ? Carbon::parse($d['desde']) : null,
             'hasta' => ! empty($d['hasta']) ? Carbon::parse($d['hasta']) : null,
-            'dias' => trim($d['dias'] ?? ''), 'sucursales' => self::idsCsv($d['sucursales'] ?? ''),
+            'dias' => trim($d['dias'] ?? ''), 'sucursales' => trim($d['sucursales'] ?? ''),
             'mediosPago' => $tipo === 'ticket' ? trim($d['mediosPago'] ?? '') : '',
             'listas' => self::idsCsv($d['listas'] ?? ''),
             'incluyeFraccionados' => (bool) ($d['incluyeFraccionados'] ?? false),
@@ -128,7 +128,7 @@ class OfertasService
         $componentes = [];
         foreach ($d['componentes'] ?? [] as $c) {
             if ((int) ($c['productoId'] ?? 0) > 0 && (float) ($c['cantidad'] ?? 0) > 0) {
-                $componentes[(int) $c['productoId']] = ['producto_id' => (int) $c['productoId'], 'cantidad' => (float) $c['cantidad']];
+                $componentes[] = ['producto_id' => (int) $c['productoId'], 'cantidad' => (float) $c['cantidad']];
             }
         }
         if ($tipo === 'combo' && count($componentes) < 2) {
@@ -223,6 +223,6 @@ class OfertasService
             return [];
         }
 
-        return DB::table('ofertas')->whereIn('id', $ids)->where('tipo', 'ticket')->where('medios_pago', '!=', '')->get()->all();
+        return DB::table('ofertas')->whereIn('id', $ids)->where('tipo', 'ticket')->whereRaw("trim(medios_pago) != ''")->get()->all();
     }
 }

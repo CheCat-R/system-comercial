@@ -220,7 +220,10 @@ class PresupuestosService
                 throw new ErrorDeNegocio('El presupuesto venció: reabrilo y re-cotizalo — los precios pueden haber cambiado.');
             }
             $reservar = ! empty($this->cfg->get('ventas')['presupuestoReservaStock']);
-            DB::table('presupuestos')->where('id', $id)->update(['estado' => 'confirmado', 'reservado' => $reservar, 'updated_at' => now()]);
+            $gano = DB::table('presupuestos')->where('id', $id)->where('estado', 'enviado')->update(['estado' => 'confirmado', 'reservado' => $reservar, 'updated_at' => now()]);
+            if (! $gano) {
+                throw new ErrorDeNegocio('El presupuesto cambió de estado — actualizá la pantalla.');
+            }
             if ($reservar) {
                 $this->inv->reservarItems(['sucursalId' => (int) $p->sucursal_id, 'usuarioId' => $usuarioId, 'descripcion' => $p->codigo.': reserva por presupuesto confirmado', 'items' => $this->itemsParaStock($id)]);
             }
@@ -326,7 +329,10 @@ class PresupuestosService
             if ($nota !== '') {
                 $upd['observaciones'] = implode(' · ', array_filter([$p->observaciones, 'Rechazado: '.$nota]));
             }
-            DB::table('presupuestos')->where('id', $id)->where('estado', $p->estado)->update($upd);
+            $gano = DB::table('presupuestos')->where('id', $id)->where('estado', $p->estado)->update($upd);
+            if (! $gano) {
+                throw new ErrorDeNegocio('El presupuesto cambió de estado — actualizá la pantalla.');
+            }
             if ($p->estado === 'confirmado' && $p->reservado) {
                 $this->inv->reservarItems(['sucursalId' => (int) $p->sucursal_id, 'usuarioId' => $usuarioId, 'liberar' => true, 'descripcion' => $p->codigo.': cancelado, reserva liberada', 'items' => $this->itemsParaStock($id)]);
             }
