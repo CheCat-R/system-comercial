@@ -197,14 +197,14 @@ class FinanzasProveedorService
             'medio' => ! empty($d['formas']) ? null : ($d['medio'] ?? null), 'formas' => $d['formas'] ?? [], 'fecha' => $d['fecha'] ?? Documentos::hoyIso(), 'concepto' => $concepto,
             'referencia' => $d['referencia'] ?? '', 'cajaSesionId' => $d['cajaSesionId'] ?? null, 'usuarioId' => $auth->usuarioId, 'imputaciones' => $imputaciones,
         ], $auth->sucursalId, $auth->esJefe());
-        // Si el puente cerró por importe OTRA cuota del mismo monto, se la devuelve: la que se pagó es ESTA.
-        if (! DB::table('proveedor_compromisos')->where('id', $id)->value('pagado')) {
-            $otras = DB::table('proveedor_compromisos')->where('pago_id', $pago['id'])->where('id', '!=', $id)->pluck('id');
-            if ($otras->isNotEmpty()) {
-                DB::table('proveedor_compromisos')->whereIn('id', $otras)->update(['pagado' => false, 'pago_id' => null]);
-                DB::table('proveedor_echeqs')->whereIn('compromiso_id', $otras)->where('estado', 'cobrado')->update(['estado' => 'emitido', 'pago_id' => null]);
-            }
-        }
+        /*
+         * LA CUOTA: si la factura sigue con saldo, el puente (sincronizarCompromisos)
+         * no la cerró — la cierra este método, que es el único que sabe cuál se pagó.
+         * No hay que "devolver" hermanos: el puente no empareja por monto, empareja
+         * por saldo de la FACTURA entera llegando a cero — si al pagar esta cuota
+         * también cerró otras (una NC bajó la deuda real después de pactar el
+         * cronograma), esas quedan pagadas de verdad, no por error.
+         */
         DB::table('proveedor_compromisos')->where('id', $id)->update(['pagado' => true, 'pago_id' => $pago['id'], 'updated_at' => now()]);
         DB::table('proveedor_echeqs')->where('compromiso_id', $id)->whereIn('estado', ['emitido', 'entregado'])->update(['estado' => 'cobrado', 'pago_id' => $pago['id']]);
 

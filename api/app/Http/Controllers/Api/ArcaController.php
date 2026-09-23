@@ -35,6 +35,7 @@ class ArcaController extends Controller
             'avisos' => Config::diferenciasConEmpresa($empresa),
             'empresaNombre' => $empresa['razonSocial'] ?: ($empresa['nombre'] ?? ''),
             'clave' => Certificado::hayClave(),
+            'certPersistente' => Certificado::volumenPersistente(),
             'certificado' => Certificado::instalado(),
             'sucursales' => $locales->all(),
             'sinPuntoVenta' => $locales->filter(fn ($s) => ! $s['puntoVenta'])->count(),

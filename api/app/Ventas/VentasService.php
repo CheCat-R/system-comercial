@@ -1236,8 +1236,13 @@ class VentasService
     {
         $this->cli->consumidorFinal();
         $usuarios = DB::table('usuarios as u')->join('roles as r', 'r.id', '=', 'u.rol_id')->orderBy('u.nombre')
-            ->get(['u.id', 'u.nombre', 'u.activo', 'u.rol_id', 'u.relevo_caja', 'r.clave as rol_clave', 'r.nombre as rol_nombre'])
-            ->map(fn ($u) => ['id' => $u->id, 'nombre' => $u->nombre, 'activo' => (bool) $u->activo, 'rolId' => $u->rol_id, 'relevoCaja' => (bool) $u->relevo_caja, 'rolClave' => $u->rol_clave, 'rolNombre' => $u->rol_nombre])->all();
+            ->get(['u.id', 'u.nombre', 'u.activo', 'u.rol_id', 'u.relevo_caja', 'r.clave as rol_clave', 'r.nombre as rol_nombre', 'r.permisos as rol_permisos'])
+            ->map(fn ($u) => [
+                'id' => $u->id, 'nombre' => $u->nombre, 'activo' => (bool) $u->activo, 'rolId' => $u->rol_id, 'relevoCaja' => (bool) $u->relevo_caja, 'rolClave' => $u->rol_clave, 'rolNombre' => $u->rol_nombre,
+                // Los permisos van SOLO del propio usuario: antes viajaba el mapa de
+                // quién puede qué en toda la empresa a cualquier sesión de Ventas.
+                'permisos' => $u->id === $usuarioSesion ? (json_decode($u->rol_permisos ?? '[]', true) ?? []) : [],
+            ])->all();
 
         return [
             'clientes' => $this->cli->listar(),

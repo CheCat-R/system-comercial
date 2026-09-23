@@ -42,6 +42,15 @@ class BootstrapService
                 ->map(fn ($s) => [...(array) $s, 'cantidad' => (float) $s->cantidad])->all(),
             'transferencias' => $this->transferencias->listar($soloSuc),
             'incidencias' => DB::table('incidencias')->when($soloSuc, fn ($q) => $q->where('sucursal_id', $soloSuc))->orderByDesc('id')->get()->all(),
+            /*
+             * Lo que apura del vigía de fechas: vencido sin procesar + vence en ≤7
+             * días. El día se compara contra ARGENTINA, no contra el reloj del
+             * servidor (a la noche UTC ya es mañana y adelantaría los vencidos).
+             */
+            'vencimientosUrgentes' => DB::table('vencimientos')
+                ->where('procesado', false)
+                ->whereRaw('DATEDIFF(fecha_vencimiento, ?) <= 7', [now('America/Argentina/Buenos_Aires')->toDateString()])
+                ->count(),
             // El panel replica el cálculo de precios: necesita el mismo redondeo para no mostrar otro número.
             'configVentas' => $this->cfg->get('ventas'),
         ];

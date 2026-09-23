@@ -25,6 +25,39 @@ class PreciosService
     }
 
     /**
+     * Un UPDATE masivo con CASE (no uno por fila: actualizar 800 costos no
+     * puede ser 800 viajes). Postgres arma esto con `UPDATE ... FROM (VALUES
+     * ...)`, que MySQL no tiene — el CASE por id es el equivalente portable
+     * (no depende de MySQL 8.0.19+ como el `VALUES ROW()` con JOIN).
+     *
+     * @param  array<int, array<string, mixed>>  $filas  cada una con 'id' + una entrada por columna de $columnas
+     * @param  string[]  $columnas
+     */
+    private function actualizarMasivo(string $tabla, array $filas, array $columnas): void
+    {
+        if (! $filas) {
+            return;
+        }
+        $sets = [];
+        $binds = [];
+        foreach ($columnas as $col) {
+            $case = "`{$col}` = CASE `id` ";
+            foreach ($filas as $f) {
+                $case .= 'WHEN ? THEN ? ';
+                $binds[] = $f['id'];
+                $binds[] = $f[$col];
+            }
+            $case .= 'END';
+            $sets[] = $case;
+        }
+        $sets[] = '`updated_at` = ?';
+        $binds[] = now();
+        $ids = array_column($filas, 'id');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        DB::statement("UPDATE `{$tabla}` SET ".implode(', ', $sets)." WHERE `id` IN ({$placeholders})", [...$binds, ...$ids]);
+    }
+
+    /**
      * @param array{cambios: array<int, array{id:int, costo?:float, descuento?:float, flete?:float}>, origen?:string, motivo?:string, usuarioId?:?int, comprobanteId?:?int} $dto
      * @param bool $dentroDeTx true cuando la llama un documento dentro de su propia transacción (no toma snapshot)
      */
@@ -60,9 +93,9 @@ class PreciosService
                 return ['ok' => true, 'actualizados' => 0, 'lote' => '', 'productoIds' => []];
             }
             $lote = $this->lote('L');
+            $this->actualizarMasivo('producto_proveedores', array_column($finales, 'nuevo'), ['costo', 'descuento', 'flete']);
             $historial = [];
             foreach ($finales as ['nuevo' => $n, 'anterior' => $a]) {
-                DB::table('producto_proveedores')->where('id', $n['id'])->update(['costo' => $n['costo'], 'descuento' => $n['descuento'], 'flete' => $n['flete'], 'updated_at' => now()]);
                 $historial[] = [
                     'producto_proveedor_id' => $n['id'], 'fecha' => now(),
                     'costo_anterior' => $a->costo, 'descuento_anterior' => $a->descuento, 'flete_anterior' => $a->flete,
@@ -113,9 +146,7 @@ class PreciosService
             return ['ok' => true, 'actualizados' => 0];
         }
         DB::transaction(function () use ($finales) {
-            foreach ($finales as $f) {
-                DB::table('producto_listas')->where('id', $f['id'])->update(['markup' => $f['valor'], 'updated_at' => now()]);
-            }
+            $this->actualizarMasivo('producto_listas', array_map(fn ($f) => ['id' => $f['id'], 'markup' => $f['valor']], $finales), ['markup']);
         });
         $this->evolucion->snapshot(
             array_values(array_unique(array_column($finales, 'productoId'))), 'formato_venta',

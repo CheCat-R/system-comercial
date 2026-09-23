@@ -141,4 +141,57 @@ final class Certificado
 
         return ['desde' => Carbon::createFromTimestamp(filemtime(Config::keyPath()))->toIso8601String(), 'ruta' => Config::keyPath()];
     }
+
+    /**
+     * "Que la carpeta exista" NO alcanza, y esto se aprendió perdiendo un
+     * certificado: la imagen del contenedor crea la carpeta para que un
+     * volumen nuevo herede el dueño, y con eso `is_dir()` da `true` aunque no
+     * haya ningún volumen montado. La clave se genera contra el disco del
+     * contenedor, el trámite sale perfecto, y el próximo deploy se la lleva.
+     *
+     * La pregunta correcta es si esa carpeta es un PUNTO DE MONTAJE. Se lee
+     * de `/proc/self/mountinfo` (campo 5 = destino de cada montaje): si la
+     * carpeta —o algún padre que no sea `/`— figura ahí, sobrevive al deploy.
+     *
+     * Solo importa DENTRO de un contenedor: en un servidor común, una carpeta
+     * del disco raíz persiste sola. `null` = no se puede saber (Windows, sin
+     * `/proc`, o no es un contenedor) y ahí no se avisa nada, que es lo correcto.
+     */
+    public static function volumenPersistente(): ?bool
+    {
+        $ruta = Config::keyPath();
+        if ($ruta === '' || ! is_file('/proc/self/mountinfo')) {
+            return null;
+        }
+        $carpeta = dirname($ruta);
+        $montajes = @file('/proc/self/mountinfo', FILE_IGNORE_NEW_LINES);
+        if ($montajes === false) {
+            return null;
+        }
+        $destinos = [];
+        $raizOverlay = false;
+        foreach ($montajes as $linea) {
+            $campos = explode(' - ', $linea, 2);
+            $izq = explode(' ', $campos[0]);
+            $destino = $izq[4] ?? null;
+            if ($destino === null || $destino === '/') {
+                if ($destino === '/' && preg_match('/^\s*(overlay|aufs)\b/', $campos[1] ?? '')) {
+                    $raizOverlay = true;
+                }
+                continue;
+            }
+            $destinos[] = $destino;
+        }
+        if (! is_file('/.dockerenv') && ! $raizOverlay) {
+            return null;
+        }
+
+        foreach ($destinos as $d) {
+            if ($carpeta === $d || str_starts_with($carpeta, $d.'/')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
