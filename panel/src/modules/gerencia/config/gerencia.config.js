@@ -47,7 +47,12 @@ export const GERENCIA_SECCIONES = [
     desc: 'Quién hizo qué: anulaciones, reversiones de precios y diferencias de caja, además de los cambios de ficha ya registrados.',
   },
   {
-    id: 'configuracion', label: 'Configuración', icon: SettingsIcon, permiso: 'gerencia.configuracion', pronto: true,
-    desc: 'Parámetros generales del sistema: datos de la empresa, numeraciones y preferencias.',
+    /* Construida el 23/9/2026 como directorio, no como formulario: las 26
+     * opciones de ventas ya estaban, una por una, en Ventas › Configuración,
+     * y empresa/impresión en Sistema. Duplicarlas acá hubiera sido dos
+     * lugares para el mismo dato — el único que este sistema evita en todos
+     * lados. Esta sección solo apunta a dónde vive cada cosa. */
+    id: 'configuracion', label: 'Configuración', icon: SettingsIcon, permiso: 'gerencia.configuracion',
+    desc: 'Dónde encontrar cada parámetro del sistema: empresa, impresión y las preferencias de ventas.',
   },
 ];

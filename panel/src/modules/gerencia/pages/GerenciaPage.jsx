@@ -23,6 +23,7 @@ import { RentabilidadPanel } from '../panels/RentabilidadPanel.jsx';
 import { ReportesVentasPanel } from '../panels/ReportesVentasPanel.jsx';
 import { ValorizacionPanel } from '../panels/ValorizacionPanel.jsx';
 import { AuditoriaPanel } from '../panels/AuditoriaPanel.jsx';
+import { ConfiguracionPanel } from '../panels/ConfiguracionPanel.jsx';
 
 /** Placeholder honesto: dice qué va a haber acá cuando se construya. */
 function Proximamente({ seccion }) {
@@ -587,7 +588,8 @@ export function GerenciaPage() {
             : activa.id === 'reportes' ? <ReportesVentasPanel />
               : activa.id === 'valorizacion' ? <ValorizacionPanel />
                 : activa.id === 'auditoria' ? <AuditoriaPanel />
-                  : activa.pronto ? <Proximamente seccion={activa} /> : panelUsuarios}
+                  : activa.id === 'configuracion' ? <ConfiguracionPanel />
+                    : activa.pronto ? <Proximamente seccion={activa} /> : panelUsuarios}
         </div>
       </div>
 
