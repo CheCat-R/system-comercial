@@ -18,8 +18,11 @@ import SettingsIcon from '@mui/icons-material/Settings';
 export const GERENCIA_SECCIONES = [
   { id: 'usuarios', label: 'Usuarios y roles', icon: GroupIcon, permiso: 'gerencia.usuarios' },
   {
-    id: 'reportes', label: 'Reportes de ventas', icon: BarChartIcon, permiso: 'gerencia.reportes', pronto: true,
-    desc: 'Ventas por día, sucursal y cajero; tickets, medios de pago y comparativas entre períodos.',
+    /* Construida el 23/9/2026: resumen con comparativa contra el período
+     * anterior, serie diaria, y el desglose por sucursal, vendedor, medio de
+     * pago y producto. Sin costo de por medio (eso es Rentabilidad). */
+    id: 'reportes', label: 'Reportes de ventas', icon: BarChartIcon, permiso: 'gerencia.reportes',
+    desc: 'Ventas por día, sucursal y vendedor; tickets, medios de pago y comparativa contra el período anterior.',
   },
   {
     /* Construida el 19/8/2026 (0072): margen real vs aparente, IVA absorbido
