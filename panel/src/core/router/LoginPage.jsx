@@ -26,6 +26,13 @@ import { leerTokenTerminal } from '@core/auth/terminal.js';
  * SIN TERMINAL REGISTRADA el desplegable vuelve, pero **arranca vacío**: uno
  * precargado invita a no mirarlo, uno vacío obliga a elegir.
  *
+ * UNA SOLA SUCURSAL EN TOTAL es el mismo caso que el equipo registrado: no hay
+ * nada que elegir, así que tampoco se pregunta (se muestra fija, como el
+ * nombre del equipo). Es el caso de plan Emprendedor (1 sucursal por límite
+ * de plan) y de cualquier Pymes que todavía no abrió la segunda — sin que
+ * esta pantalla necesite saber qué plan es: alcanza con cuántas sucursales
+ * devuelve `/auth/opciones`.
+ *
  * Tras el login se recarga la página entera: los motores de los módulos leen
  * su contexto al arrancar, y así TODOS nacen como este usuario en esta sucursal.
  */
@@ -95,9 +102,19 @@ export function LoginPage() {
     () => (usuarios ?? []).find((u) => u.id === Number(usuarioId)),
     [usuarios, usuarioId],
   );
-  /* Con el equipo registrado la sucursal sale de la terminal; sin registrar,
-   * del desplegable. Un solo lugar la resuelve para que la confirmación, la
-   * validación y el envío no puedan discrepar entre sí.
+  /*
+   * UNA SOLA SUCURSAL = NADA QUE ELEGIR (mismo criterio que el equipo
+   * registrado: si no hay una decisión real que tomar, no se pregunta). Es el
+   * caso de un plan Emprendedor (1 sucursal por límite de plan) — y de
+   * cualquier Pymes que todavía no abrió la segunda. No se decide mirando el
+   * plan: acá, antes del login, todavía no hay sesión ni `usePlan()`; la
+   * CANTIDAD que ya trae `/auth/opciones` alcanza y es pública sin riesgo.
+   */
+  const unicaSucursal = !terminal && sucursales.length === 1 ? sucursales[0] : null;
+  /* Con el equipo registrado la sucursal sale de la terminal; con una sola
+   * sucursal en total, de ahí; sin ninguna de las dos, del desplegable. Un
+   * solo lugar la resuelve para que la confirmación, la validación y el envío
+   * no puedan discrepar entre sí.
    *
    * EL CAMPO VACÍO ES "SIN ESPECIFICAR" (27/8, pedido del dueño: la opción
    * explícita del desplegable se fue). Vacío viaja SIN sucursal y el servidor
@@ -107,14 +124,15 @@ export function LoginPage() {
    * no sabe quién es superadmin, y publicarlo sería regalar a quién atacar —
    * por eso el default es "vacío que el servidor juzga" y no "campo que
    * desaparece para el superadmin". */
-  const sinSucursal = !terminal && !sucursalId;
+  const sinSucursal = !terminal && !unicaSucursal && !sucursalId;
   const sucursal = useMemo(
     () => {
       if (terminal) return terminal.sucursal;
+      if (unicaSucursal) return unicaSucursal;
       if (!sucursalId) return { id: null, nombre: 'Sin especificar' };
       return sucursales.find((s) => s.id === Number(sucursalId));
     },
-    [terminal, sucursales, sucursalId],
+    [terminal, unicaSucursal, sucursales, sucursalId],
   );
 
   const continuar = (e) => {
@@ -154,7 +172,9 @@ export function LoginPage() {
           {!confirmando ? (
             <>
               <Typography color="text.secondary" sx={{ mb: 3 }}>
-                Ingresá con tu usuario y elegí la sucursal donde vas a trabajar.
+                {terminal || unicaSucursal
+                  ? 'Ingresá con tu usuario.'
+                  : 'Ingresá con tu usuario y elegí la sucursal donde vas a trabajar.'}
               </Typography>
               <form onSubmit={continuar}>
                 <Stack spacing={2}>
@@ -195,6 +215,19 @@ export function LoginPage() {
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           La sucursal la pone este equipo
+                        </Typography>
+                      </div>
+                    </Stack>
+                  ) : unicaSucursal ? (
+                    <Stack
+                      direction="row" spacing={1.5} alignItems="center"
+                      sx={{ p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}
+                    >
+                      <StorefrontIcon color="primary" />
+                      <div>
+                        <Typography variant="subtitle2">{unicaSucursal.nombre}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Tu única sucursal — no hay otra para elegir
                         </Typography>
                       </div>
                     </Stack>
@@ -250,9 +283,11 @@ export function LoginPage() {
                           vuelta al campo antes de que el servidor la rechace. */}
                       {terminal
                         ? `Sucursal de este equipo (${terminal.nombre})`
-                        : sinSucursal
-                          ? 'Así entra solo el superadmin (parado en la central); si no lo sos, volvé y elegí la sucursal'
-                          : 'Sucursal de trabajo de esta sesión'}
+                        : unicaSucursal
+                          ? 'Tu única sucursal'
+                          : sinSucursal
+                            ? 'Así entra solo el superadmin (parado en la central); si no lo sos, volvé y elegí la sucursal'
+                            : 'Sucursal de trabajo de esta sesión'}
                     </Typography>
                   </div>
                 </Stack>
