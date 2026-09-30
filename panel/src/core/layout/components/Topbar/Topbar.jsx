@@ -13,7 +13,6 @@ import MenuIcon from '@mui/icons-material/Menu';
 import MenuOpenIcon from '@mui/icons-material/MenuOpen';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
-import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
 import StorefrontIcon from '@mui/icons-material/Storefront';
@@ -23,7 +22,6 @@ import { useUI } from '@core/context/UIContext.jsx';
 import { useAuth } from '@core/auth/AuthContext.jsx';
 import { useThemeMode } from '@core/theme/ThemeModeContext.jsx';
 import { useBreakpoint } from '@core/hooks/useBreakpoint.js';
-import { GlobalSearch } from './GlobalSearch.jsx';
 import { ChatDock } from '../ChatDock.jsx';
 import { MiPerfilModal } from './MiPerfilModal.jsx';
 import styles from './Topbar.module.css';
@@ -91,9 +89,6 @@ export function Topbar() {
         >
           {isDesktop && !sidebarCollapsed ? <MenuOpenIcon /> : <MenuIcon />}
         </IconButton>
-        <div className={styles.search}>
-          <GlobalSearch />
-        </div>
       </div>
 
       <div className={styles.right}>
@@ -107,11 +102,15 @@ export function Topbar() {
             la sucursal de ESTA sesión (hoy, la distribuidora). */}
         <ChatDock />
 
-        <Tooltip title="Notificaciones">
-          <IconButton aria-label="Notificaciones">
-            <NotificationsNoneIcon />
-          </IconButton>
-        </Tooltip>
+        {/*
+          NO HAY CAMPANITA DE NOTIFICACIONES: estaba acá sin nada atrás (sin
+          onClick, sin backend) — un botón fantasma en cada pantalla del
+          sistema. Sacada a propósito, no perdida: tiene sentido real como
+          función de Corporativo (avisar a otras sucursales/usuarios una
+          actualización de precios, por ejemplo — ver PlanCatalogo y la
+          memoria del proyecto), pero eso es una función nueva para construir
+          el día que haga falta, no un ícono que hoy no hace nada.
+        */}
 
         {/* Quién sos y DÓNDE estás parado: la sucursal se eligió en el login
             y es el contexto de toda la sesión — tiene que estar a la vista. */}
