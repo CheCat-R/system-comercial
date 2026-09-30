@@ -78,7 +78,7 @@ export function VentasShell({ title, subtitle }) {
             <Btn variant="btn-primary" small onClick={onRefresh}>Reintentar</Btn>
           </div>
           <div className={s.hint} style={{ marginTop: 8 }}>
-            Verificá que el backend esté corriendo (crm-api: <code>npm run start:dev</code>) en http://localhost:3001/api.
+            Verificá que la API esté corriendo (<code>php artisan serve</code>) en http://localhost:8000/api.
           </div>
         </div>
       </div>

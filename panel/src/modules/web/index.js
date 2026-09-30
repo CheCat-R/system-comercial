@@ -18,10 +18,18 @@ import { WEB_SECCIONES } from './config/web.config.js';
  * ⭐ APAGADO A PROPÓSITO (no borrado): este negocio no vende online por ahora,
  * pero puede que lo haga más adelante. `enabled` saca el módulo del sidebar Y
  * de la tabla de rutas (`moduleRegistry` filtra por esto en los dos lugares)
- * sin tocar una línea de código de adentro — reactivarlo es volver
- * `appConfig.features.webHabilitado` a `true`. Ese mismo valor es lo que leen
- * los otros módulos que dejan algo ENGANCHADO a Web (hoy: la sección "Órdenes
- * web" de Ventas y su alerta global) — un solo interruptor, no dos.
+ * sin tocar una línea de código de adentro de ESTE módulo. Ese mismo valor es
+ * lo que leen los otros módulos que dejan algo ENGANCHADO a Web (hoy: la
+ * sección "Órdenes web" de Ventas y su alerta global) — un solo interruptor,
+ * no dos.
+ *
+ * OJO al reactivarlo: volver `appConfig.features.webHabilitado` a `true` NO
+ * alcanza solo. El panel llama `/tienda/catalogo`, `/web/productos`,
+ * `/web/imagenes/*`, `/web/estadisticas` — ninguna de esas rutas existe hoy en
+ * `api/routes/api.php` (el backend Laravel nunca portó este módulo, a
+ * diferencia del resto del sistema). Prender el flag sin construir esas rutas
+ * antes deja las 5 secciones del módulo mostrando "No se pudo conectar con la
+ * API" en blanco.
  */
 export const webModule = defineModule({
   id: 'web',
