@@ -2,10 +2,12 @@
 
 namespace Database\Seeders;
 
+use App\Auth\PlanCatalogo;
 use App\Auth\Permisos;
 use App\Models\Rol;
 use App\Models\Sucursal;
 use App\Models\Usuario;
+use App\Services\LicenciaService;
 use Illuminate\Database\Seeder;
 
 /**
@@ -25,10 +27,22 @@ class SeguridadSeeder extends Seeder
             ['tipo' => Sucursal::TIPO_DISTRIBUIDORA],
             ['nombre' => 'Central', 'direccion' => ''],
         );
-        Sucursal::query()->firstOrCreate(
-            ['nombre' => 'Sucursal 1'],
-            ['tipo' => Sucursal::TIPO_EXPRESS],
-        );
+        /*
+         * "Sucursal 1" es de ejemplo — sólo tiene sentido si el plan de esta
+         * instalación admite más de una. Sembrarla en un Emprendedor (límite
+         * 1) dejaría la base arriba de su propio contrato desde el día cero.
+         * `LicenciaService` sin plan fijado es Corporativo (falla abierta),
+         * así que el comportamiento de siempre —dev, tests, `db:seed` suelto—
+         * no cambia: esto sólo frena cuando alguien fijó el plan a propósito
+         * ANTES de sembrar (ver `cliente:aprovisionar`).
+         */
+        $limiteSucursales = PlanCatalogo::limite(app(LicenciaService::class)->plan(), 'sucursales');
+        if ($limiteSucursales === null || $limiteSucursales > 1) {
+            Sucursal::query()->firstOrCreate(
+                ['nombre' => 'Sucursal 1'],
+                ['tipo' => Sucursal::TIPO_EXPRESS],
+            );
+        }
 
         /* ---------------- Roles ---------------- */
         $todas = Permisos::todas();
