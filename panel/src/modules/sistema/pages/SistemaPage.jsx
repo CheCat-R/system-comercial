@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { httpClient } from '@core/services/httpClient.js';
 import { usePermissions } from '@core/permissions/PermissionContext.jsx';
+import { usePlan } from '@core/plan/PlanContext.jsx';
 import { cx } from '@shared/utils/classNames.js';
 import {
   FORMATOS_LABEL, cuerpoCartelGondola, cuerpoEtiquetas, cuerpoFactura, cuerpoPlanillaConteo, esFormatoEtiqueta,
@@ -162,8 +163,12 @@ async function cuerpoMuestra(clave, empresa, impresion) {
 
 export function SistemaPage() {
   const { can } = usePermissions();
+  const { planIncluye } = usePlan();
   // Solo las secciones del rol: lo no asignado no se muestra, ni en el menú.
-  const secciones = useMemo(() => SISTEMA_SECCIONES.filter((x) => can(x.permiso)), [can]);
+  const secciones = useMemo(
+    () => SISTEMA_SECCIONES.filter((x) => can(x.permiso) && planIncluye(x.permiso)),
+    [can, planIncluye],
+  );
   const [seccion, setSeccion] = useState(secciones[0]?.id);
   const [empresa, setEmpresa] = useState(null);
   const [impresion, setImpresion] = useState(null);

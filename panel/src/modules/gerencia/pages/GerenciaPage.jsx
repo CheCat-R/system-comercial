@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { httpClient } from '@core/services/httpClient.js';
 import { useAuth } from '@core/auth/AuthContext.jsx';
 import { usePermissions } from '@core/permissions/PermissionContext.jsx';
+import { usePlan } from '@core/plan/PlanContext.jsx';
 import { cx } from '@shared/utils/classNames.js';
 import { ModalShell } from '@modules/productos/components/Modal.jsx';
 import { Table, PanelHead, Btn, usePaginado, s } from '@modules/productos/components/ui.jsx';
@@ -32,6 +33,24 @@ function Proximamente({ seccion }) {
       <PanelHead title={seccion.label} desc={seccion.desc} />
       <div className={cx(s.callout, s.info)}>
         <strong>Próximamente.</strong> Esta sección está en la agenda de Gerencia y todavía no se construyó.
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Mismo molde que `Proximamente`, para lo opuesto: la sección YA está
+ * construida, pero el plan de esta instalación no la incluye. El rol la
+ * puede ver (por eso sigue en el sub-menú, no desaparece como con un permiso
+ * faltante) — lo que falta es contrato, no autorización.
+ */
+function MejoraTuPlan({ seccion }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--crm-space-4)' }}>
+      <PanelHead title={seccion.label} desc={seccion.desc} />
+      <div className={cx(s.callout, s.warn)}>
+        <strong>No incluido en el plan actual.</strong> {seccion.label} está disponible desde un plan
+        superior — hablá con CheCAT para subir de plan y desbloquearla.
       </div>
     </div>
   );
@@ -261,7 +280,11 @@ function RolModal({ rol, catalogo, onGuardar, onCerrar }) {
 export function GerenciaPage() {
   const { user } = useAuth();
   const { can } = usePermissions();
-  // Solo las secciones del rol: lo no asignado no existe en el menú.
+  const { planIncluye } = usePlan();
+  // Solo las secciones del rol: lo no asignado no existe en el menú. El plan
+  // NO filtra acá a propósito — una sección que el rol puede ver pero el plan
+  // no incluye sigue en el sub-menú (con su candado), para que el dueño vea
+  // qué se desbloquea si sube de plan en vez de que desaparezca sin explicación.
   const secciones = useMemo(() => GERENCIA_SECCIONES.filter((x) => can(x.permiso)), [can]);
   const [seccion, setSeccion] = useState(secciones[0]?.id);
   const [tab, setTab] = useState('usuarios');
@@ -345,6 +368,7 @@ export function GerenciaPage() {
 
   // Si el permiso de la sección activa se fue (rol editado), cae a la primera visible.
   const activa = secciones.find((x) => x.id === seccion) ?? secciones[0];
+  const activaBloqueadaPorPlan = !activa.pronto && !planIncluye(activa.permiso);
 
   const panelUsuarios = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--crm-space-4)' }}>
@@ -577,19 +601,30 @@ export function GerenciaPage() {
                     PRONTO
                   </span>
                 )}
+                {!x.pronto && !planIncluye(x.permiso) && (
+                  <span style={{
+                    fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', padding: '2px 7px',
+                    borderRadius: 999, border: '1px solid var(--crm-color-warning)',
+                    color: 'var(--crm-color-warning)', whiteSpace: 'nowrap',
+                  }}>
+                    PLAN
+                  </span>
+                )}
               </button>
             );
           })}
         </nav>
 
         <div className={s.content}>
-          {/* Cada sección construida tiene su panel; lo agendado dice "pronto". */}
-          {activa.id === 'rentabilidad' ? <RentabilidadPanel />
-            : activa.id === 'reportes' ? <ReportesVentasPanel />
-              : activa.id === 'valorizacion' ? <ValorizacionPanel />
-                : activa.id === 'auditoria' ? <AuditoriaPanel />
-                  : activa.id === 'configuracion' ? <ConfiguracionPanel />
-                    : activa.pronto ? <Proximamente seccion={activa} /> : panelUsuarios}
+          {/* Cada sección construida tiene su panel; lo agendado dice "pronto";
+              lo construido que el plan no trae dice "mejorá tu plan". */}
+          {activaBloqueadaPorPlan ? <MejoraTuPlan seccion={activa} />
+            : activa.id === 'rentabilidad' ? <RentabilidadPanel />
+              : activa.id === 'reportes' ? <ReportesVentasPanel />
+                : activa.id === 'valorizacion' ? <ValorizacionPanel />
+                  : activa.id === 'auditoria' ? <AuditoriaPanel />
+                    : activa.id === 'configuracion' ? <ConfiguracionPanel />
+                      : activa.pronto ? <Proximamente seccion={activa} /> : panelUsuarios}
         </div>
       </div>
 

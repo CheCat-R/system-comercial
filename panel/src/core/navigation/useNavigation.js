@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { moduleRegistry } from '@core/modules/registry.js';
 import { usePermissions } from '@core/permissions/PermissionContext.jsx';
+import { usePlan } from '@core/plan/PlanContext.jsx';
 import { NAVIGATION_GROUPS } from './navigationGroups.js';
 
 /**
@@ -19,11 +20,14 @@ import { NAVIGATION_GROUPS } from './navigationGroups.js';
  */
 export function useNavigation() {
   const { canAny } = usePermissions();
+  const { planIncluyeAlguna } = usePlan();
   const [tick, setTick] = useState(0);
 
+  // El ROL y el PLAN son dos candados independientes: los dos tienen que abrir.
   const rawItems = useMemo(
-    () => moduleRegistry.getNavigationItems().filter((item) => canAny(item.permissions)),
-    [canAny],
+    () => moduleRegistry.getNavigationItems()
+      .filter((item) => canAny(item.permissions) && planIncluyeAlguna(item.permissions)),
+    [canAny, planIncluyeAlguna],
   );
 
   useEffect(() => {

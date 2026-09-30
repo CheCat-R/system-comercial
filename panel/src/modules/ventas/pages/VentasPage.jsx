@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { usePermissions } from '@core/permissions/PermissionContext.jsx';
+import { usePlan } from '@core/plan/PlanContext.jsx';
 import { VentasProvider } from '../context/VentasContext.jsx';
 import { VentasShell } from './VentasShell.jsx';
 import { VENTAS_PANELS } from '../config/ventas.config.js';
@@ -14,8 +15,12 @@ import { VENTAS_PANELS } from '../config/ventas.config.js';
  */
 export function VentasPage() {
   const { can } = usePermissions();
+  const { planIncluye } = usePlan();
   const [searchParams] = useSearchParams();
-  const panels = useMemo(() => VENTAS_PANELS.filter((p) => !p.oculto && can(p.permiso)), [can]);
+  const panels = useMemo(
+    () => VENTAS_PANELS.filter((p) => !p.oculto && can(p.permiso) && planIncluye(p.permiso)),
+    [can, planIncluye],
+  );
 
   const pedido = searchParams.get('panel');
   const defaultPanel = panels.some((p) => p.id === pedido) ? pedido : panels[0]?.id;

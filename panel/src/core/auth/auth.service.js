@@ -26,6 +26,13 @@ function aUsuarioSesion(s) {
     rolNombre: s.usuario.rolNombre,
     sucursalId: s.sucursal.id,
     sucursalNombre: s.sucursal.nombre,
+    // Del PLAN de la empresa, no del usuario — viaja aparte en la respuesta
+    // ({ id, claves }) y PlanContext lo consume tal cual. Si falta (sesión
+    // vieja guardada antes de este campo, o un corte de red que devolvió la
+    // foto de ayer), `claves` queda en `null` y PlanContext lo lee igual que
+    // Corporativo: sin lista, no bloquea nada — mismo criterio "falla
+    // abierta" que ya usa LicenciaService del lado del servidor.
+    plan: s.plan ?? null,
   };
 }
 
@@ -58,7 +65,7 @@ export const authService = {
        * recarga del cliente HTTP y quedaría en un bucle.
        */
       const yo = await httpClient.get('/auth/yo', { sinRedirigir: true });
-      const sesion = { ...s, usuario: yo.usuario, sucursal: yo.sucursal };
+      const sesion = { ...s, usuario: yo.usuario, sucursal: yo.sucursal, plan: yo.plan };
       actualizarSesion(sesion);
       return aUsuarioSesion(sesion);
     } catch (e) {
@@ -91,6 +98,7 @@ export const authService = {
     // para pintar el menú: la API no contestaría ni una llamada.
     const sesion = {
       token: res.token, usuario: res.usuario, sucursal: res.sucursal, terminal: res.terminal ?? null,
+      plan: res.plan,
     };
     guardarSesion(sesion);
     httpClient.reiniciarAvisoDeSesion();

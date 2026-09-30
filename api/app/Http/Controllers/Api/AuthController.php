@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Auth\FrenoLogin;
+use App\Auth\PlanCatalogo;
 use App\Auth\Sesion;
 use App\Auth\Sesiones;
 use App\Http\Controllers\Controller;
@@ -11,6 +12,7 @@ use App\Http\Resources\UsuarioResource;
 use App\Models\Sucursal;
 use App\Models\Terminal;
 use App\Models\Usuario;
+use App\Services\LicenciaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -21,6 +23,20 @@ use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
 
 class AuthController extends Controller
 {
+    public function __construct(private readonly LicenciaService $licencia) {}
+
+    /**
+     * El plan tal como lo necesita el panel: el id (para mostrar/depurar) y la
+     * lista de claves que incluye — `null` en Corporativo, que no enumera
+     * nada (ver PlanCatalogo). Así el frontend nunca porta la matriz de
+     * planes a JS: solo pregunta "¿mi lista (o `null`) incluye esta clave?".
+     */
+    private function planPublico(): array
+    {
+        $plan = $this->licencia->plan();
+
+        return ['id' => $plan, 'claves' => PlanCatalogo::claves($plan)];
+    }
     /**
      * Lo mínimo para poder ELEGIR en la pantalla de login, y nada más. Es
      * público por necesidad, así que devuelve lo justo: ni permisos, ni quién
@@ -109,6 +125,7 @@ class AuthController extends Controller
             'usuario' => new UsuarioResource($usuario),
             'sucursal' => ['id' => $sucursal->id, 'nombre' => $sucursal->nombre],
             'terminal' => $terminal ? ['id' => $terminal->id, 'nombre' => $terminal->nombre] : null,
+            'plan' => $this->planPublico(),
         ]);
     }
 
@@ -121,6 +138,7 @@ class AuthController extends Controller
         return response()->json([
             'usuario' => $sesion->usuarioPublico(),
             'sucursal' => $sesion->sucursalPublica(),
+            'plan' => $this->planPublico(),
         ]);
     }
 

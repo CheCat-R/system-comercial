@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { usePermissions } from '@core/permissions/PermissionContext.jsx';
+import { usePlan } from '@core/plan/PlanContext.jsx';
 import { ProductosProvider } from '../context/ProductosContext.jsx';
 import { InventoryShell } from '../pages/InventoryShell.jsx';
 import { ALMACEN_PANELS } from '../config/productos.config.js';
@@ -15,8 +16,12 @@ import { ALMACEN_PANELS } from '../config/productos.config.js';
  */
 export function AlmacenPage() {
   const { can } = usePermissions();
+  const { planIncluye } = usePlan();
   const [params] = useSearchParams();
-  const panels = useMemo(() => ALMACEN_PANELS.filter((p) => can(p.permiso)), [can]);
+  const panels = useMemo(
+    () => ALMACEN_PANELS.filter((p) => can(p.permiso) && planIncluye(p.permiso)),
+    [can, planIncluye],
+  );
   const pedido = params.get('panel');
   const inicial = panels.some((p) => p.id === pedido) ? pedido : panels[0]?.id;
 

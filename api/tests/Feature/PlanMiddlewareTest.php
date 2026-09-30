@@ -99,4 +99,25 @@ class PlanMiddlewareTest extends TestCase
             'nombre' => 'Otro', 'rolId' => $this->rol('cajero')->id, 'password' => 'otro1234',
         ])->assertCreated();
     }
+
+    public function test_el_plan_viaja_en_auth_yo_y_auth_login(): void
+    {
+        $this->fijarPlan('pymes');
+        $token = $this->loguear($this->superadmin(), 'admin1234');
+
+        $this->conToken($token)->getJson('/api/auth/yo')->assertOk()
+            ->assertJsonPath('plan.id', 'pymes')
+            ->assertJsonPath('plan.claves', fn ($claves) => in_array('almacen.fraccionamiento', $claves, true)
+                && ! in_array('gerencia.auditoria', $claves, true));
+    }
+
+    public function test_corporativo_viaja_con_claves_null_no_una_lista(): void
+    {
+        $this->fijarPlan('corporativo');
+        $token = $this->loguear($this->superadmin(), 'admin1234');
+
+        $this->conToken($token)->getJson('/api/auth/yo')->assertOk()
+            ->assertJsonPath('plan.id', 'corporativo')
+            ->assertJsonPath('plan.claves', null);
+    }
 }
