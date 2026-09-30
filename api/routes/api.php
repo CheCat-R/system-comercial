@@ -66,6 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('auth')->group(function () {
         Route::get('/yo', [AuthController::class, 'yo']);
         Route::post('/sucursal', [AuthController::class, 'cambiarSucursal']);
+        Route::patch('/password', [AuthController::class, 'cambiarPassword']);
         Route::post('/salir', [AuthController::class, 'salir']);
     });
 

@@ -7,6 +7,7 @@ use App\Auth\PlanCatalogo;
 use App\Auth\Sesion;
 use App\Auth\Sesiones;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\CambiarPasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Resources\UsuarioResource;
 use App\Models\Sucursal;
@@ -169,6 +170,28 @@ class AuthController extends Controller
     public function salir(Sesion $sesion): JsonResponse
     {
         Sesiones::cerrar($sesion->tokenId);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * CADA USUARIO CAMBIA LA SUYA, sin permiso de gerencia — es su propia
+     * cuenta, no la de otro. Pide la contraseña ACTUAL (a diferencia del PATCH
+     * de gerencia.usuarios, que la pisa sin pedirla: ahí la autoridad es el
+     * permiso del admin; acá, que quien pide el cambio de verdad es el dueño
+     * de la sesión). Mismo criterio que el resto del sistema: cambiar la
+     * contraseña echa al usuario de TODAS sus sesiones, esta incluida — entra
+     * de nuevo con la nueva.
+     */
+    public function cambiarPassword(CambiarPasswordRequest $request, Sesion $sesion): JsonResponse
+    {
+        $usuario = Usuario::query()->findOrFail($sesion->usuarioId);
+        if (! Hash::check((string) $request->input('passwordActual'), $usuario->password)) {
+            throw ValidationException::withMessages(['passwordActual' => 'La contraseña actual no coincide.']);
+        }
+        $usuario->password = $request->input('password');
+        $usuario->save();
+        $usuario->cerrarTodasLasSesiones();
 
         return response()->json(['ok' => true]);
     }

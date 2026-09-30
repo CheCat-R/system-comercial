@@ -25,6 +25,7 @@ import { useThemeMode } from '@core/theme/ThemeModeContext.jsx';
 import { useBreakpoint } from '@core/hooks/useBreakpoint.js';
 import { GlobalSearch } from './GlobalSearch.jsx';
 import { ChatDock } from '../ChatDock.jsx';
+import { MiPerfilModal } from './MiPerfilModal.jsx';
 import styles from './Topbar.module.css';
 
 /**
@@ -41,6 +42,7 @@ export function Topbar() {
 
   const [anchorEl, setAnchorEl] = useState(null);
   const [sucursales, setSucursales] = useState([]);
+  const [perfilAbierto, setPerfilAbierto] = useState(false);
   const openMenu = (e) => setAnchorEl(e.currentTarget);
   const closeMenu = () => setAnchorEl(null);
 
@@ -156,7 +158,7 @@ export function Topbar() {
               <Divider />
             </>
           )}
-          <MenuItem onClick={closeMenu}>
+          <MenuItem onClick={() => { closeMenu(); setPerfilAbierto(true); }}>
             <ListItemIcon>
               <PersonIcon fontSize="small" />
             </ListItemIcon>
@@ -175,6 +177,8 @@ export function Topbar() {
           </MenuItem>
         </Menu>
       </div>
+
+      <MiPerfilModal open={perfilAbierto} onClose={() => setPerfilAbierto(false)} />
     </div>
   );
 }
