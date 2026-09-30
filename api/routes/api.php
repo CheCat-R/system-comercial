@@ -92,7 +92,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Equipos: registrar uno decide en qué sucursal opera todo el que se siente ahí.
-    Route::middleware('permiso:sistema.terminales')->group(function () {
+    Route::middleware(['permiso:sistema.terminales', 'plan:sistema.terminales'])->group(function () {
         Route::get('/terminales', [TerminalesController::class, 'index']);
         Route::post('/terminales', [TerminalesController::class, 'store']);
         Route::patch('/terminales/{terminal}', [TerminalesController::class, 'update']);
@@ -189,12 +189,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('operaciones')->middleware('permiso:almacen.existencias')->group(function () {
         Route::post('/venta', [InventarioController::class, 'venta'])->middleware('permiso:inventario');
-        Route::post('/fraccionar', [InventarioController::class, 'fraccionar'])->middleware('permiso:fraccionar');
-        Route::post('/corregir-fraccionado', [InventarioController::class, 'corregirFraccionado'])->middleware('permiso:fraccionar');
+        Route::post('/fraccionar', [InventarioController::class, 'fraccionar'])->middleware(['permiso:fraccionar', 'plan:almacen.fraccionamiento']);
+        Route::post('/corregir-fraccionado', [InventarioController::class, 'corregirFraccionado'])->middleware(['permiso:fraccionar', 'plan:almacen.fraccionamiento']);
         Route::post('/movimiento', [InventarioController::class, 'movimiento'])->middleware('permiso:inventario,merma,defectuoso');
     });
 
-    Route::prefix('transferencias')->middleware('permiso:almacen.transferencias')->group(function () {
+    Route::prefix('transferencias')->middleware(['permiso:almacen.transferencias', 'plan:almacen.transferencias'])->group(function () {
         Route::get('/', [TransferenciasController::class, 'index']);
         Route::get('/{id}', [TransferenciasController::class, 'show'])->whereNumber('id');
         Route::middleware('permiso:pedidos')->group(function () {
@@ -216,14 +216,14 @@ Route::middleware('auth:sanctum')->group(function () {
         });
     });
 
-    Route::prefix('incidencias')->middleware('permiso:almacen.incidencias')->group(function () {
+    Route::prefix('incidencias')->middleware(['permiso:almacen.incidencias', 'plan:almacen.incidencias'])->group(function () {
         Route::get('/', [IncidenciasController::class, 'index']);
         Route::post('/', [IncidenciasController::class, 'store'])->middleware('permiso:incidencia_crear');
         Route::post('/{id}/avanzar', [IncidenciasController::class, 'avanzar'])->middleware('permiso:incidencia_crear');
         Route::post('/{id}/resolver', [IncidenciasController::class, 'resolver'])->middleware('permiso:inventario');
     });
 
-    Route::prefix('conteos')->middleware('permiso:almacen.conteos')->group(function () {
+    Route::prefix('conteos')->middleware(['permiso:almacen.conteos', 'plan:almacen.conteos'])->group(function () {
         Route::get('/', [ConteosController::class, 'index']);
         Route::get('/{id}', [ConteosController::class, 'show']);
         Route::post('/', [ConteosController::class, 'store']);
@@ -312,14 +312,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('cobranzas')->group(function () {
         Route::post('/{id}/anular', [CobranzasController::class, 'anular'])->middleware('permiso:devoluciones');
-        Route::middleware('permiso:ventas.cobranzas')->group(function () {
+        Route::middleware(['permiso:ventas.cobranzas', 'plan:ventas.cobranzas'])->group(function () {
             Route::get('/', [CobranzasController::class, 'index']);
             Route::get('/{id}', [CobranzasController::class, 'show']);
             Route::post('/', [CobranzasController::class, 'store']);
         });
     });
 
-    Route::prefix('presupuestos')->middleware('permiso:ventas.presupuestos,presupuestos,ventas.ordenes')->group(function () {
+    Route::prefix('presupuestos')->middleware(['permiso:ventas.presupuestos,presupuestos,ventas.ordenes', 'plan:ventas.presupuestos,ventas.ordenes'])->group(function () {
         Route::get('/', [PresupuestosController::class, 'index']);
         Route::get('/ordenes/pendientes', [PresupuestosController::class, 'ordenesPendientes']);
         Route::get('/{id}', [PresupuestosController::class, 'show'])->whereNumber('id');
@@ -338,7 +338,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('ofertas')->group(function () {
         Route::get('/', [OfertasController::class, 'index']);
-        Route::middleware('permiso:ventas.ofertas,ofertas')->group(function () {
+        Route::middleware(['permiso:ventas.ofertas,ofertas', 'plan:ventas.ofertas'])->group(function () {
             Route::post('/', [OfertasController::class, 'store']);
             Route::patch('/{id}', [OfertasController::class, 'update']);
             Route::delete('/{id}', [OfertasController::class, 'destroy']);
@@ -442,7 +442,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/aplicar-pago', [GastosController::class, 'aplicarPago'])->middleware('permiso:gastos_imputar,gastos.pagos_proveedor,compras.pagos');
     });
 
-    Route::prefix('compromisos')->middleware('permiso:proveedores.ctasctes')->group(function () {
+    Route::prefix('compromisos')->middleware(['permiso:proveedores.ctasctes', 'plan:proveedores.ctasctes'])->group(function () {
         Route::get('/', [FinanzasProveedorController::class, 'compromisos']);
         Route::get('/stats', [FinanzasProveedorController::class, 'statsCompromisos']);
         Route::get('/{id}', [FinanzasProveedorController::class, 'compromiso'])->whereNumber('id');
@@ -452,7 +452,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{id}', [FinanzasProveedorController::class, 'borrarCompromiso']);
     });
 
-    Route::prefix('echeqs')->middleware('permiso:proveedores.echeqs')->group(function () {
+    Route::prefix('echeqs')->middleware(['permiso:proveedores.echeqs', 'plan:proveedores.echeqs'])->group(function () {
         Route::get('/', [FinanzasProveedorController::class, 'echeqs']);
         Route::get('/stats', [FinanzasProveedorController::class, 'statsEcheqs']);
         Route::get('/{id}', [FinanzasProveedorController::class, 'echeq'])->whereNumber('id');
@@ -462,7 +462,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{id}', [FinanzasProveedorController::class, 'borrarEcheq']);
     });
 
-    Route::prefix('proveedores-edoc')->middleware('permiso:proveedores.edoc')->group(function () {
+    Route::prefix('proveedores-edoc')->middleware(['permiso:proveedores.edoc', 'plan:proveedores.edoc'])->group(function () {
         Route::get('/', [FinanzasProveedorController::class, 'edocGlobal']);
         Route::post('/ajustes', [FinanzasProveedorController::class, 'ajuste']);
         Route::delete('/ajustes/{id}', [FinanzasProveedorController::class, 'borrarAjuste']);
@@ -484,10 +484,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{id}', [PedidosProveedorController::class, 'borrar']);
     });
 
-    Route::get('/gerencia/rentabilidad', [GerenciaController::class, 'rentabilidad'])->middleware('permiso:gerencia.rentabilidad');
-    Route::get('/gerencia/reportes-ventas', [GerenciaController::class, 'reportesVentas'])->middleware('permiso:gerencia.reportes');
-    Route::get('/gerencia/valorizacion', [GerenciaController::class, 'valorizacion'])->middleware('permiso:gerencia.valorizacion');
-    Route::get('/gerencia/auditoria', [GerenciaController::class, 'auditoria'])->middleware('permiso:gerencia.auditoria');
+    Route::get('/gerencia/rentabilidad', [GerenciaController::class, 'rentabilidad'])->middleware(['permiso:gerencia.rentabilidad', 'plan:gerencia.rentabilidad']);
+    Route::get('/gerencia/reportes-ventas', [GerenciaController::class, 'reportesVentas'])->middleware(['permiso:gerencia.reportes', 'plan:gerencia.reportes']);
+    Route::get('/gerencia/valorizacion', [GerenciaController::class, 'valorizacion'])->middleware(['permiso:gerencia.valorizacion', 'plan:gerencia.valorizacion']);
+    Route::get('/gerencia/auditoria', [GerenciaController::class, 'auditoria'])->middleware(['permiso:gerencia.auditoria', 'plan:gerencia.auditoria']);
 
     /* ---------------- Transversal ---------------- */
 

@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Auth\PlanCatalogo;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Sucursales\GuardarSucursalRequest;
 use App\Http\Resources\SucursalResource;
 use App\Models\Sucursal;
+use App\Services\LicenciaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 
 class SucursalesController extends Controller
 {
+    public function __construct(private readonly LicenciaService $licencia) {}
+
     public function index(): AnonymousResourceCollection
     {
         return SucursalResource::collection(Sucursal::query()->orderBy('id')->get());
@@ -26,6 +30,14 @@ class SucursalesController extends Controller
 
     public function store(GuardarSucursalRequest $request): JsonResponse
     {
+        $plan = $this->licencia->plan();
+        $limite = PlanCatalogo::limite($plan, 'sucursales');
+        if ($limite !== null && Sucursal::query()->count() >= $limite) {
+            throw ValidationException::withMessages([
+                'sucursal' => 'El plan actual admite hasta '.$limite.' sucursal'.($limite === 1 ? '' : 'es')
+                    .'. Para sumar otra hay que subir de plan.',
+            ]);
+        }
         $sucursal = Sucursal::query()->create($this->normalizar($request->validated()));
 
         return response()->json(new SucursalResource($sucursal), 201);

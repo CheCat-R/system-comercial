@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\CamelizarJson;
 use App\Http\Middleware\ExigirPermiso;
+use App\Http\Middleware\ExigirPlan;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // No se usa statefulApi(): activaría CSRF para el panel en localhost.
         $middleware->alias([
             'permiso' => ExigirPermiso::class,
+            'plan' => ExigirPlan::class,
         ]);
         // Un cliente sin sesión recibe 401 en JSON, nunca una redirección a una pantalla de login.
         $middleware->redirectGuestsTo(fn () => null);

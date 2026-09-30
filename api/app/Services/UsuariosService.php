@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Auth\FrenoPin;
+use App\Auth\PlanCatalogo;
 use App\Auth\Permisos;
 use App\Auth\Sesion;
 use App\Models\Rol;
@@ -21,7 +22,10 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
  */
 class UsuariosService
 {
-    public function __construct(private readonly AuditoriaService $auditoria) {}
+    public function __construct(
+        private readonly AuditoriaService $auditoria,
+        private readonly LicenciaService $licencia,
+    ) {}
     /* ---------------- Roles ---------------- */
 
     public function listarRoles()
@@ -148,6 +152,14 @@ class UsuariosService
         }
         // La tercera puerta al mismo lugar: dar de alta un usuario NUEVO con un rol más fuerte.
         $this->exigirPuedeAsignarRol($rol, $sesion);
+
+        $limite = PlanCatalogo::limite($this->licencia->plan(), 'usuarios');
+        if ($limite !== null && Usuario::query()->where('activo', true)->count() >= $limite) {
+            throw ValidationException::withMessages([
+                'rolId' => 'El plan actual admite hasta '.$limite.' usuario'.($limite === 1 ? '' : 's').' activo'.($limite === 1 ? '' : 's')
+                    .'. Para sumar otro hay que subir de plan, o desactivar uno que ya no se use.',
+            ]);
+        }
 
         $pin = (string) ($datos['pin'] ?? '');
         $relevoCaja = (bool) ($datos['relevoCaja'] ?? false);

@@ -33,17 +33,22 @@ class LicenciaService
      */
     private const PLAN_POR_DEFECTO = 'corporativo';
 
-    private ?string $cache = null;
-
+    /**
+     * A PROPÓSITO sin cache de instancia. Es una sola fila chica: releerla no
+     * cuesta nada, y cachearla tiene una trampa real — el Router de Laravel
+     * reutiliza el controller ya resuelto (y con él, esta instancia) entre
+     * requests simulados dentro de un mismo test, así que un `fijar()` a
+     * mitad de test quedaría invisible para el siguiente `postJson` hasta el
+     * próximo boot del framework. En producción cada request arranca de
+     * cero, pero bajo un servidor de procesos largos (Octane) el mismo riesgo
+     * aplica de verdad — mejor no depender de que nadie se acuerde de eso.
+     */
     public function plan(): string
     {
-        if ($this->cache !== null) {
-            return $this->cache;
-        }
         $valor = Configuracion::query()->where('clave', self::CLAVE)->value('valor');
         $plan = is_array($valor) ? ($valor['plan'] ?? null) : null;
 
-        return $this->cache = in_array($plan, self::PLANES, true) ? $plan : self::PLAN_POR_DEFECTO;
+        return in_array($plan, self::PLANES, true) ? $plan : self::PLAN_POR_DEFECTO;
     }
 
     public function fijar(string $plan): string
@@ -58,6 +63,6 @@ class LicenciaService
             ['valor' => ['plan' => $plan, 'activadoEn' => now()->toIso8601String()]],
         );
 
-        return $this->cache = $plan;
+        return $plan;
     }
 }
