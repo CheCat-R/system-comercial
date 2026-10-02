@@ -55,7 +55,7 @@ export function ExplorarProductosModal({ grupo, origenId, destinoId, yaEnPedido,
       if (p.categoria) categorias.add(p.categoria);
     }
     return { marcas: [...marcas].sort(), categorias: [...categorias].sort() };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [store.state.productos, grupo]);
 
   /**

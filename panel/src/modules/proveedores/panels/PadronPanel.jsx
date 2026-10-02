@@ -49,7 +49,7 @@ export function PadronPanel() {
   }, [proveedores, buscar, soloPendientes]);
 
   const eliminar = async (p) => {
-    // eslint-disable-next-line no-alert
+     
     if (!window.confirm(`¿Eliminar a ${p.nombre}? Solo se puede si no tiene historia (facturas, pagos, compromisos).`)) return;
     try {
       await provApi.eliminarProveedor(p.id);

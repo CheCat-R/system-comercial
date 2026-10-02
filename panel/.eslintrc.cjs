@@ -5,7 +5,10 @@ module.exports = {
   // que ESLint marcaba con ~288 errores cada uno y tapaban por completo los de
   // `src/`. Ahora que la imagen de Docker se construye con `npm run build`, esa
   // carpeta existe siempre, así que el ruido era permanente.
-  ignorePatterns: ['dist', 'coverage'],
+  //
+  // `dev-dist/` es lo mismo pero de `npm run dev`: el service worker que genera
+  // vite-plugin-pwa en desarrollo (también minificado, también ignorado por git).
+  ignorePatterns: ['dist', 'dev-dist', 'coverage'],
   env: { browser: true, es2021: true },
   extends: [
     'eslint:recommended',
@@ -17,7 +20,10 @@ module.exports = {
   settings: { react: { version: 'detect' } },
   plugins: ['react-refresh'],
   rules: {
-    'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    // Apagada: avisaba (37 veces) de archivos que exportan un componente Y un hook o una
+    // constante — el patrón de los contextos de este proyecto, a propósito. Solo afecta
+    // cuánto granular es el refresco en caliente en desarrollo, no el comportamiento.
+    'react-refresh/only-export-components': 'off',
     'react/prop-types': 'off',
   },
   overrides: [

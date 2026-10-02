@@ -1,0 +1,88 @@
+# CI: en cada push a main y en cada pull request corre los tests de la API, y el lint, los tests y el
+# build del panel. Si algo se rompe, GitHub lo marca en rojo antes de que llegue a un cliente.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancela la corrida anterior de la misma rama si llega un push nuevo.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+
+    services:
+      # MariaDB, igual que el desarrollo local (XAMPP). Los tests usan la base `checat_comercio_test`.
+      db:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: checat_comercio_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: root
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql, openssl, bcmath, intl, zip
+          coverage: none
+
+      - name: Dependencias (composer, con caché)
+        uses: ramsey/composer-install@v3
+        with:
+          working-directory: api
+
+      - name: Entorno
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Tests
+        run: php artisan test
+
+  panel:
+    name: Panel (lint, tests y build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: panel
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: panel/package-lock.json
+
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Tests
+        run: npm test
+      - name: Build de producción
+        run: npm run build

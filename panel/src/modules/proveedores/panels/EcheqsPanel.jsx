@@ -30,7 +30,7 @@ export function EcheqsPanel() {
   const refrescar = () => { reload(); reloadStats(); recargarContadores(); };
   const cambiarEstado = async (e, estado, aviso) => {
     if (estado === 'cobrado') {
-      // eslint-disable-next-line no-alert
+       
       if (!window.confirm(`¿El banco debitó el echeq ${e.numero}? Esto registra el pago real al proveedor.`)) return;
     }
     try {
