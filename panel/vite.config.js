@@ -63,7 +63,12 @@ export default defineConfig(({ mode }) => {
        * totalmente fuera de esto, es un proyecto aparte.
        */
       VitePWA({
-        registerType: 'autoUpdate',
+        /*
+         * 'prompt', no 'autoUpdate': con autoUpdate la app recargaba SOLA al encontrar
+         * una versión nueva, aunque hubiera un cobro a medio hacer. Con 'prompt' la
+         * versión nueva espera y se avisa (ver core/pwa/actualizacion.js).
+         */
+        registerType: 'prompt',
         includeAssets: ['favicon.svg', 'favicon-16.png', 'favicon-32.png', 'apple-touch-icon.png'],
         manifest: {
           name: 'CCS · checat commerce systems',

@@ -7,6 +7,7 @@ import { OrdenesWebAlert } from './components/OrdenesWebAlert.jsx';
 import { PreciosAlert } from './components/PreciosAlert.jsx';
 import { OfflineAlert } from './components/OfflineAlert.jsx';
 import { LicenciaAviso } from './components/LicenciaAviso.jsx';
+import { ActualizacionAviso } from './components/ActualizacionAviso.jsx';
 import { ConsultasRapidas } from '@modules/consultas/ConsultasRapidas.jsx';
 import { useUI } from '@core/context/UIContext.jsx';
 import { useBreakpoint } from '@core/hooks/useBreakpoint.js';
@@ -78,6 +79,9 @@ export function MainLayout() {
 
       {/* Sin conexión con la API — en cualquier pantalla, no solo el POS. */}
       <OfflineAlert />
+
+      {/* Hay una versión nueva: se aplica cuando la persona toca "Actualizar", no antes. */}
+      <ActualizacionAviso />
     </div>
   );
 }
