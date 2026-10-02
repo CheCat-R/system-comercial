@@ -174,6 +174,8 @@ class UsuariosService
             'nombre' => trim($datos['nombre']),
             'rol_id' => $rol->id,
             'password' => $datos['password'],
+            // La contraseña inicial la puso quien lo dio de alta: la persona elige la suya al entrar.
+            'debe_cambiar_password' => true,
             'activo' => $datos['activo'] ?? true,
             'relevo_caja' => $relevoCaja,
             'pin' => $pin !== '' ? $pin : null,
@@ -238,6 +240,8 @@ class UsuariosService
         }
         if (! empty($datos['password'])) {
             $usuario->password = $datos['password'];
+            // Si se la cambió otro (restablecer), la persona elige la suya; si se la cambia ella misma, no.
+            $usuario->debe_cambiar_password = $usuario->id !== $sesion->usuarioId;
             $echar = true;
         }
         /*

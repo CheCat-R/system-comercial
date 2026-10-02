@@ -11,6 +11,7 @@
  * caja, Chrome con --kiosk-printing imprime directo a la predeterminada.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { httpClient } from '@core/services/httpClient.js';
 import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { usePermissions } from '@core/permissions/PermissionContext.jsx';
@@ -26,6 +27,7 @@ import { money, fmtFechaHora } from '@modules/productos/domain/format.js';
 import { SISTEMA_SECCIONES } from '../config/sistema.config.js';
 import { EsteEquipoPanel } from './EsteEquipoPanel.jsx';
 import { RespaldosPanel } from './RespaldosPanel.jsx';
+import { LicenciaPanel } from './LicenciaPanel.jsx';
 
 /**
  * Los documentos configurables. `etiqueta: true` marca los que van a la
@@ -170,7 +172,9 @@ export function SistemaPage() {
     () => SISTEMA_SECCIONES.filter((x) => can(x.permiso) && planIncluye(x.permiso)),
     [can, planIncluye],
   );
-  const [seccion, setSeccion] = useState(secciones[0]?.id);
+  // `?seccion=licencia`: el aviso de vencimiento del encabezado cae directo en esa sección.
+  const [params] = useSearchParams();
+  const [seccion, setSeccion] = useState(params.get('seccion') || secciones[0]?.id);
   const [empresa, setEmpresa] = useState(null);
   const [impresion, setImpresion] = useState(null);
   const [aviso, setAviso] = useState(null);
@@ -319,7 +323,7 @@ export function SistemaPage() {
               que con la API caída la sección se quedaba en "Cargando…" para
               siempre — una pantalla que no necesita ningún dato, esperando dos
               consultas que no le hacen falta. */}
-          {cargando && seccionActiva !== 'respaldos' && <div className={s.hint}>Cargando…</div>}
+          {cargando && !['respaldos', 'licencia'].includes(seccionActiva) && <div className={s.hint}>Cargando…</div>}
 
           {!cargando && seccionActiva === 'empresa' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--crm-space-4)' }}>
@@ -476,6 +480,7 @@ export function SistemaPage() {
           {/* Misma regla que "Este equipo": no depende de empresa/impresión,
               así que no espera esa carga. */}
           {seccionActiva === 'respaldos' && <RespaldosPanel onAviso={setAviso} />}
+          {seccionActiva === 'licencia' && <LicenciaPanel onAviso={setAviso} />}
         </div>
       </div>
     </div>

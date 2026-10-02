@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Auth\PlanCatalogo;
+use App\Models\Usuario;
 use App\Services\LicenciaService;
 use Illuminate\Console\Command;
 
@@ -46,12 +47,22 @@ class AprovisionarCliente extends Command
         $this->info('3/3 — Sembrando la base mínima (roles, superadmin, listas de precio, rubros de gasto)…');
         $this->call('db:seed', ['--force' => true]);
 
+        // Con la clave de FÁBRICA (sin SUPERADMIN_PASSWORD en el .env) el dueño tiene que elegir la suya
+        // en el primer ingreso: sin esto, `admin1234` quedaba en producción para siempre.
+        if (! env('SUPERADMIN_PASSWORD')) {
+            Usuario::query()->whereHas('rol', fn ($q) => $q->where('clave', 'superadmin'))->update(['debe_cambiar_password' => true]);
+        }
+
         $limite = PlanCatalogo::limite($plan, 'sucursales');
         $this->newLine();
         $this->info('Listo. Plan "'.$plan.'" — '.($limite === null ? 'sin límite de sucursales.' : 'hasta '.$limite.' sucursal(es).'));
+        $this->newLine();
+        $this->line('ID de esta instalación: '.$licencia->instalacionId());
+        $this->line('  → con ese ID emitís la licencia del cliente:  php artisan licencia:emitir --cliente="..." --plan='.$plan.' --instalacion='.$licencia->instalacionId().' --meses=1');
+        $this->line('  → y se carga en Sistema › Licencia, o acá con:  php artisan licencia:activar <clave>');
         $this->warn(
             'Usuario inicial: Administrador / '
-            .(env('SUPERADMIN_PASSWORD') ? '(la de SUPERADMIN_PASSWORD en el .env)' : 'admin1234 (default — cambiarla en el primer ingreso)')
+            .(env('SUPERADMIN_PASSWORD') ? '(la de SUPERADMIN_PASSWORD en el .env)' : 'admin1234 (de fábrica: el sistema le pide elegir la suya en el primer ingreso)')
         );
 
         return self::SUCCESS;

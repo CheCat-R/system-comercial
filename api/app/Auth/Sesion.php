@@ -25,6 +25,8 @@ final class Sesion
         public readonly array $permisos,
         public readonly int $sucursalId,
         public readonly string $sucursalNombre,
+        /** La contraseña la puso otro y todavía no eligió la suya: ver `ExigirCambioPassword`. */
+        public readonly bool $debeCambiarPassword = false,
     ) {}
 
     public static function desde(Usuario $usuario, SesionToken $token): self
@@ -42,6 +44,7 @@ final class Sesion
             permisos: $usuario->rol->permisos ?? [],
             sucursalId: (int) $token->sucursal_id,
             sucursalNombre: $token->sucursal?->nombre ?? '',
+            debeCambiarPassword: (bool) $usuario->debe_cambiar_password,
         );
     }
 
@@ -94,6 +97,7 @@ final class Sesion
             'rolNombre' => $this->rolNombre,
             'permisos' => $this->permisos,
             'activo' => true,
+            'debeCambiarPassword' => $this->debeCambiarPassword,
         ];
     }
 

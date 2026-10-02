@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\PresupuestosController;
 use App\Http\Controllers\Api\ProductosController;
 use App\Http\Controllers\Api\ProveedoresController;
 use App\Http\Controllers\Api\RelevosController;
+use App\Http\Controllers\Api\LicenciaController;
 use App\Http\Controllers\Api\RespaldosController;
 use App\Http\Controllers\Api\RolesController;
 use App\Http\Controllers\Api\SucursalesController;
@@ -61,7 +62,9 @@ Route::post('/terminales/actual', [TerminalesController::class, 'actual'])->midd
 
 /* ---------------- Con sesión ---------------- */
 
-Route::middleware('auth:sanctum')->group(function () {
+// `cambio.password`: con una contraseña que puso otro, la sesión solo sirve para cambiarla (ver ExigirCambioPassword).
+// `licencia`: sin licencia vigente el sistema queda en SOLO LECTURA (ver ExigirLicencia).
+Route::middleware(['auth:sanctum', 'cambio.password', 'licencia'])->group(function () {
 
     Route::prefix('auth')->group(function () {
         Route::get('/yo', [AuthController::class, 'yo']);
@@ -101,6 +104,12 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/sistema/respaldos/estado', [RespaldosController::class, 'estado']);
+    // Licencia: ver el estado y cargar la clave de activación. Solo el dueño (superadmin) por defecto.
+    Route::prefix('licencia')->middleware('permiso:sistema.licencia')->group(function () {
+        Route::get('/', [LicenciaController::class, 'show']);
+        Route::post('/activar', [LicenciaController::class, 'activar']);
+    });
+
     Route::prefix('sistema/respaldos')->middleware('permiso:sistema.respaldos')->group(function () {
         Route::get('/info', [RespaldosController::class, 'info']);
         Route::get('/descargar', [RespaldosController::class, 'descargar']);

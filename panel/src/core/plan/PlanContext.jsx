@@ -18,6 +18,8 @@ export function PlanProvider({ children }) {
   const { user } = useAuth();
 
   const planId = user?.plan?.id ?? null;
+  // El estado de la licencia (vencimiento, solo lectura…): lo resolvió el servidor al entrar.
+  const licencia = user?.plan?.licencia ?? null;
   const claves = useMemo(() => user?.plan?.claves ?? null, [user]);
 
   const planIncluye = useCallback(
@@ -35,8 +37,8 @@ export function PlanProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({ planId, planIncluye, planIncluyeAlguna }),
-    [planId, planIncluye, planIncluyeAlguna],
+    () => ({ planId, licencia, planIncluye, planIncluyeAlguna }),
+    [planId, licencia, planIncluye, planIncluyeAlguna],
   );
 
   return <PlanContext.Provider value={value}>{children}</PlanContext.Provider>;

@@ -23,6 +23,8 @@ class UsuarioResource extends JsonResource
             'rolNombre' => $this->rol?->nombre ?? '',
             'permisos' => $this->rol?->permisos ?? [],
             'tienePassword' => $this->tienePassword(),
+            // Si la contraseña la puso otro: el panel muestra la pantalla de "elegí la tuya" en vez del sistema.
+            'debeCambiarPassword' => (bool) $this->debe_cambiar_password,
             // La marca y si YA tiene PIN — el PIN mismo jamás viaja.
             'relevoCaja' => $this->relevo_caja,
             'tienePin' => $this->tienePin(),

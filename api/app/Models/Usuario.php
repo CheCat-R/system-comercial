@@ -8,7 +8,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 /**
  * Los usuarios no se borran (están en los historiales): se desactivan.
- * Sin email: el login es por usuario elegido de una lista + contraseña.
+ * Sin email: el login es por el nombre de usuario que se escribe + contraseña.
  */
 class Usuario extends Authenticatable
 {
@@ -16,7 +16,7 @@ class Usuario extends Authenticatable
 
     protected $table = 'usuarios';
 
-    protected $fillable = ['nombre', 'rol_id', 'password', 'activo', 'relevo_caja', 'pin'];
+    protected $fillable = ['nombre', 'rol_id', 'password', 'debe_cambiar_password', 'activo', 'relevo_caja', 'pin'];
 
     // Ni el hash ni el PIN viajan jamás, ni siquiera hasheados.
     protected $hidden = ['password', 'pin'];
@@ -27,6 +27,7 @@ class Usuario extends Authenticatable
             'password' => 'hashed',
             'pin' => 'hashed',
             'activo' => 'boolean',
+            'debe_cambiar_password' => 'boolean',
             'relevo_caja' => 'boolean',
         ];
     }

@@ -9,6 +9,7 @@ import BusinessIcon from '@mui/icons-material/Business';
 import PrintIcon from '@mui/icons-material/Print';
 import BackupIcon from '@mui/icons-material/Backup';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
 
 export const SISTEMA_SECCIONES = [
   { id: 'empresa', label: 'Empresa', icon: BusinessIcon, permiso: 'sistema.empresa' },
@@ -17,5 +18,10 @@ export const SISTEMA_SECCIONES = [
   {
     id: 'respaldos', label: 'Respaldos', icon: BackupIcon, permiso: 'sistema.respaldos',
     desc: 'La copia externa de la base: descargarla a esta máquina, con el rastro de quién y cuándo.',
+  },
+  // Solo el dueño (superadmin): el rol Administrador no trae este permiso.
+  {
+    id: 'licencia', label: 'Licencia', icon: VpnKeyIcon, permiso: 'sistema.licencia',
+    desc: 'El plan contratado, hasta cuándo vale y dónde cargar la clave de activación.',
   },
 ];

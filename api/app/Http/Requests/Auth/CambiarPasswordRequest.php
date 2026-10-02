@@ -12,7 +12,8 @@ class CambiarPasswordRequest extends ApiRequest
 
         return [
             'passwordActual' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:'.$min, 'max:200'],
+            // `different`: sin esto, "cambiar" la contraseña inicial por la misma inicial cumplía el trámite sin cambiar nada.
+            'password' => ['required', 'string', 'min:'.$min, 'max:200', 'different:passwordActual'],
         ];
     }
 
@@ -24,6 +25,7 @@ class CambiarPasswordRequest extends ApiRequest
             'passwordActual.required' => 'Ingresá tu contraseña actual.',
             'password.required' => 'La contraseña nueva necesita al menos '.$min.' caracteres.',
             'password.min' => 'La contraseña nueva necesita al menos '.$min.' caracteres.',
+            'password.different' => 'La contraseña nueva tiene que ser distinta de la actual.',
         ];
     }
 }

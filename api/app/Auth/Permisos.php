@@ -179,6 +179,8 @@ final class Permisos
                 // Registrar un equipo decide en qué sucursal opera TODO el que se siente ahí.
                 ['clave' => 'sistema.terminales', 'nombre' => 'Equipos (terminales)'],
                 ['clave' => 'sistema.respaldos', 'nombre' => 'Respaldos'],
+                // La licencia del sistema (clave de activación). El rol Administrador NO la trae: es del dueño.
+                ['clave' => 'sistema.licencia', 'nombre' => 'Licencia'],
             ],
             'acciones' => [],
         ],

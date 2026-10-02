@@ -37,7 +37,7 @@ class AuthController extends Controller
     {
         $plan = $this->licencia->plan();
 
-        return ['id' => $plan, 'claves' => PlanCatalogo::claves($plan)];
+        return ['id' => $plan, 'claves' => PlanCatalogo::claves($plan), 'licencia' => $this->licencia->resumenPublico()];
     }
     /**
      * Lo mínimo para la pantalla de login, y nada más: las sucursales, para
@@ -103,6 +103,9 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
+        // La fecha más alta vista: atrasar el reloj del servidor no estira una licencia.
+        $this->licencia->registrarReloj();
+
         // El freno cuenta por NOMBRE NORMALIZADO: "Maria", "MARÍA" y " maria " son el mismo cupo, no tres.
         $claveNombre = NombreUsuario::normalizar((string) $request->input('usuario'));
         $ip = (string) $request->ip();
@@ -220,6 +223,8 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['passwordActual' => 'La contraseña actual no coincide.']);
         }
         $usuario->password = $request->input('password');
+        // Eligió la suya: se apaga la marca de "debe cambiarla".
+        $usuario->debe_cambiar_password = false;
         $usuario->save();
         $usuario->cerrarTodasLasSesiones();
 

@@ -56,12 +56,13 @@ class SeguridadSeeder extends Seeder
 
         /*
          * Admin: todo el catálogo salvo lo que el dueño reparte a mano:
-         * `cta_cte` (otorgar crédito) queda sólo para el superadmin.
+         * `cta_cte` (otorgar crédito) y `sistema.licencia` (la licencia del
+         * sistema) quedan sólo para el superadmin.
          */
         Rol::query()->updateOrCreate(['clave' => 'admin'], [
             'nombre' => 'Administrador',
             'descripcion' => 'Operación completa: compras, ventas, almacén, gastos y proveedores.',
-            'permisos' => array_values(array_diff($todas, ['cta_cte'])),
+            'permisos' => array_values(array_diff($todas, ['cta_cte', 'sistema.licencia'])),
             'es_sistema' => true,
         ]);
 

@@ -9,7 +9,8 @@ import { useAuth } from '@core/auth/AuthContext.jsx';
 import { appConfig } from '@core/config/app.config.js';
 import { httpClient } from '@core/services/httpClient.js';
 import { leerTokenTerminal } from '@core/auth/terminal.js';
-import { AvatarMarca, Isotipo, NombreMarca } from '@core/branding/Marca.jsx';
+import { AvatarMarca, NombreMarca } from '@core/branding/Marca.jsx';
+import { PanelMarca } from '@core/branding/PanelMarca.jsx';
 
 /**
  * LOGIN — usuario + contraseña, y la sucursal SOLO si hace falta preguntarla.
@@ -42,39 +43,6 @@ import { AvatarMarca, Isotipo, NombreMarca } from '@core/branding/Marca.jsx';
  * Tras el login se recarga la página entera: los motores de los módulos leen
  * su contexto al arrancar, y así TODOS nacen como este usuario en esta sucursal.
  */
-/**
- * El lado de la MARCA del login (solo en pantallas anchas): isotipo grande,
- * las siglas y, debajo, el nombre completo en minúscula. Siempre oscuro —como
- * el menú lateral— tanto en tema claro como oscuro, así la marca se ve igual
- * y el formulario del otro lado se adapta al tema. Una marca de agua enorme
- * del isotipo, casi invisible, le da profundidad sin gradientes ni brillos.
- */
-function PanelMarca() {
-  return (
-    <Box
-      sx={{
-        display: { xs: 'none', md: 'flex' },
-        position: 'relative',
-        overflow: 'hidden',
-        bgcolor: 'var(--crm-color-brand-panel)',
-        color: 'var(--crm-color-brand-ink)',
-        '--marca-sub': 'var(--crm-color-brand-ink-muted)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        p: 6,
-      }}
-    >
-      <Box aria-hidden sx={{ position: 'absolute', right: -140, bottom: -150, opacity: 0.045, lineHeight: 0 }}>
-        <Isotipo size={560} ojos="var(--crm-color-brand-panel)" />
-      </Box>
-      <Stack spacing={3.5} alignItems="flex-start" sx={{ position: 'relative' }}>
-        <Isotipo size={132} titulo={`${appConfig.name} — ${appConfig.fullName}`} />
-        <NombreMarca tamano="grande" />
-      </Stack>
-    </Box>
-  );
-}
-
 export function LoginPage() {
   const { login } = useAuth();
   const location = useLocation();
@@ -90,6 +58,8 @@ export function LoginPage() {
   const [terminal, setTerminal] = useState(null);
 
   const from = location.state?.from ?? appConfig.routes.defaultAuthenticatedRoute;
+  // Un mensaje que dejó otra pantalla al mandarte acá (ej. "Contraseña actualizada").
+  const aviso = location.state?.aviso ?? '';
 
   /*
    * QUIÉN ES ESTE EQUIPO. Se pregunta ANTES que nada: si está registrado, el
@@ -207,6 +177,7 @@ export function LoginPage() {
       <Card sx={{ width: '100%' }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Typography variant="h2" sx={{ mb: 0.5 }}>Iniciar sesión</Typography>
+          {aviso && !confirmando && <Alert severity="success" sx={{ mt: 1.5, mb: 1 }}>{aviso}</Alert>}
 
           {!confirmando ? (
             <>

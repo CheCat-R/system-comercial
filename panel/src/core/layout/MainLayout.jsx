@@ -6,6 +6,7 @@ import { MobileNavDrawer } from './components/Sidebar/MobileNavDrawer.jsx';
 import { OrdenesWebAlert } from './components/OrdenesWebAlert.jsx';
 import { PreciosAlert } from './components/PreciosAlert.jsx';
 import { OfflineAlert } from './components/OfflineAlert.jsx';
+import { LicenciaAviso } from './components/LicenciaAviso.jsx';
 import { ConsultasRapidas } from '@modules/consultas/ConsultasRapidas.jsx';
 import { useUI } from '@core/context/UIContext.jsx';
 import { useBreakpoint } from '@core/hooks/useBreakpoint.js';
@@ -52,6 +53,8 @@ export function MainLayout() {
 
         <main className={styles.content} id="main-content">
           <div className={styles.contentInner}>
+            {/* Vencimiento de la licencia / modo solo lectura: se ve en cualquier pantalla. */}
+            <LicenciaAviso />
             <Breadcrumbs />
             <Outlet />
           </div>

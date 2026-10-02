@@ -48,7 +48,7 @@ final class PlanCatalogo
         'gastos.categorias', 'gastos.proveedores', 'gastos.resumen',
         'proveedores.pedidos', 'proveedores.padron',
         'gerencia.usuarios', 'gerencia.configuracion',
-        'sistema.empresa', 'sistema.impresion', 'sistema.respaldos',
+        'sistema.empresa', 'sistema.impresion', 'sistema.respaldos', 'sistema.licencia',
     ];
 
     /**

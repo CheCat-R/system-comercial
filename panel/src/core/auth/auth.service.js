@@ -24,6 +24,8 @@ function aUsuarioSesion(s) {
     roles: [s.usuario.rolClave],
     permissions: s.usuario.permisos ?? [],
     rolNombre: s.usuario.rolNombre,
+    // La contraseña la puso otro y todavía no eligió la suya: ProtectedRoute muestra "Elegí tu contraseña" en vez del sistema.
+    debeCambiarPassword: Boolean(s.usuario.debeCambiarPassword),
     sucursalId: s.sucursal.id,
     sucursalNombre: s.sucursal.nombre,
     // Del PLAN de la empresa, no del usuario — viaja aparte en la respuesta
