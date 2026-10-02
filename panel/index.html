@@ -21,21 +21,11 @@
     <title>CCS · checat commerce systems</title>
 
     <!--
-      Captura "instalar app" ACÁ, antes que nada — Chrome dispara
-      `beforeinstallprompt` apenas evalúa manifest + service worker, que
-      puede ser antes de que React termine de montar todo el árbol (login,
-      permisos, plan, layout…). Un listener puesto adentro de un componente
-      llega tarde: el evento ya pasó y no vuelve. Este script plano (NO
-      módulo) corre primero, synchrono, antes que cualquier JS de la app.
+      Captura "instalar app" ACÁ, antes que nada (ver el archivo por el porqué).
+      Es un script plano y síncrono, en un archivo aparte porque la política de
+      seguridad (CSP) no permite scripts en línea.
     -->
-    <script>
-      window.__pwaInstallEvent = null;
-      window.addEventListener('beforeinstallprompt', function (e) {
-        e.preventDefault();
-        window.__pwaInstallEvent = e;
-        window.dispatchEvent(new CustomEvent('pwa-install-ready'));
-      });
-    </script>
+    <script src="/pwa-install.js"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -53,6 +53,8 @@ FROM nginx:1.27-alpine AS runner
 # La configuración propia reemplaza la default de la imagen. Acá vive el
 # fallback de la SPA, que es lo que evita el 404 al recargar una pantalla.
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Las cabeceras de seguridad que nginx.conf incluye desde cada location.
+COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
