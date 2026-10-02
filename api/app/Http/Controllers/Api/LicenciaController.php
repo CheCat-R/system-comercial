@@ -22,7 +22,7 @@ class LicenciaController extends Controller
 
     public function show(): JsonResponse
     {
-        return response()->json([...$this->svc->estado(), 'instalacionId' => $this->svc->instalacionId()]);
+        return response()->json([...$this->svc->estado(), 'contacto' => config('licencia.contacto') ?: null, 'instalacionId' => $this->svc->instalacionId()]);
     }
 
     public function activar(Request $request): JsonResponse
@@ -37,6 +37,6 @@ class LicenciaController extends Controller
             throw ValidationException::withMessages(['clave' => $e->getMessage()]);
         }
 
-        return response()->json([...$estado, 'instalacionId' => $this->svc->instalacionId()]);
+        return response()->json([...$estado, 'contacto' => config('licencia.contacto') ?: null, 'instalacionId' => $this->svc->instalacionId()]);
     }
 }

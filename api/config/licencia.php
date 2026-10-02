@@ -29,6 +29,14 @@ return [
     'clave_publica' => env('LICENCIA_CLAVE_PUBLICA'),
     'clave_publica_archivo' => __DIR__.'/licencia.pub',
 
+    /*
+     * POR DÓNDE PEDIR LA CLAVE: el texto que ven los avisos de licencia para saber a quién
+     * escribirle (un WhatsApp, un mail, lo que uses). Va en el `.env` de cada instalación:
+     * `LICENCIA_CONTACTO="WhatsApp +54 9 11 1234-5678 · soporte@tu-dominio.com"`.
+     * Vacío = los avisos no mencionan ningún contacto.
+     */
+    'contacto' => trim((string) env('LICENCIA_CONTACTO', '')),
+
     /** Días antes del vencimiento en que el dueño empieza a ver el aviso. */
     'dias_aviso' => 15,
 

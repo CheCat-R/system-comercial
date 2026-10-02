@@ -287,6 +287,8 @@ class LicenciaService
         return [
             'exigida' => $e['exigida'], 'estado' => $e['estado'], 'vence' => $e['vence'],
             'diasRestantes' => $e['diasRestantes'], 'modalidad' => $e['modalidad'], 'restringido' => $e['restringido'],
+            // Por dónde pedir la clave (texto libre de LICENCIA_CONTACTO); `null` si no se configuró.
+            'contacto' => config('licencia.contacto') ?: null,
         ];
     }
 }

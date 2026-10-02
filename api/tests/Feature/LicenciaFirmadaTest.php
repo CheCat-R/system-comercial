@@ -251,6 +251,19 @@ class LicenciaFirmadaTest extends TestCase
         $this->assertStringNotContainsString($svc->instalacionId(), $login->getContent());
     }
 
+    public function test_los_avisos_traen_por_donde_pedir_la_clave_si_se_configuro(): void
+    {
+        $svc = $this->exigir();
+        $svc->activar($this->clave(10));
+        $entrar = fn () => $this->postJson('/api/auth/login', ['usuario' => 'Administrador', 'password' => 'admin1234', 'sucursalId' => $this->central()->id])->assertOk();
+
+        $this->assertNull($entrar()->json('plan.licencia.contacto'), 'sin configurar, no se inventa un contacto');
+
+        config(['licencia.contacto' => 'WhatsApp +54 9 11 1234-5678']);
+        $this->assertSame('WhatsApp +54 9 11 1234-5678', $entrar()->json('plan.licencia.contacto'));
+        $this->assertSame('WhatsApp +54 9 11 1234-5678', $this->comoSuperadmin()->getJson('/api/licencia')->json('contacto'));
+    }
+
     public function test_solo_el_superadmin_ve_y_carga_la_licencia(): void
     {
         $admin = $this->crearUsuario('Gerente', 'admin');

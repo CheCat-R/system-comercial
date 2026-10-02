@@ -1376,8 +1376,8 @@ export const MANUAL = [
           {
             t: 'pasos',
             items: [
-              '**El volumen ANTES que nada.** Dokploy › `crm-api` › Advanced › Volumes › Add: *Volume Mount*, nombre `arca-certs`, Mount Path `/certs`. La clave privada tiene que vivir fuera de la imagen, que se reconstruye entera en cada deploy — y el deploy es automático *On Push* a `main`. Una clave generada fuera del volumen se pierde en el próximo merge, en el medio del trámite.',
-              '**Las cinco variables**, en Environment (no en Build Args): `ARCA_ENV`, `ARCA_CUIT`, `ARCA_PTO_VTA`, `ARCA_CERT_PATH=/certs/arca.crt` y `ARCA_KEY_PATH=/certs/arca.key`. **Guardar no aplica nada: hace falta Redeploy.** Sin las dos rutas, los botones del certificado ni aparecen.',
+              '**La carpeta de los certificados ANTES que nada.** Una carpeta del servidor FUERA de la parte pública y de lo que se actualiza con cada versión (por ejemplo `/home/usuario/arca/`), que solo pueda leer el usuario del servidor web. La clave privada tiene que vivir ahí: una clave generada dentro de la carpeta del sistema se pierde en la próxima actualización, en el medio del trámite.',
+              '**Las cinco variables**, en el `.env` de la API: `ARCA_ENV`, `ARCA_CUIT`, `ARCA_PTO_VTA`, `ARCA_CERT_PATH=/home/usuario/arca/arca.crt` y `ARCA_KEY_PATH=/home/usuario/arca/arca.key`. **Guardar el `.env` no aplica nada: hace falta `php artisan config:cache`.** Sin las dos rutas, los botones del certificado ni aparecen. `php artisan produccion:verificar` te dice si el certificado se lee.',
               '**Generar clave y pedido**, en Ventas › Configuración. La clave privada se genera y se queda en el servidor: nunca pasa por el navegador. Lo que se copia es el pedido (`.csr`), que es público. Elegí bien el **alias** y la **razón social**: quedan adentro del certificado y no se cambian. Poné el entorno en el alias (`saboryaroma-homo`, `saboryaroma-prod`) porque vas a tener los dos en la misma cuenta.',
               '**Subir el pedido a ARCA.** Homologación: **WSASS** › *Crear DN y certificado*. Producción: **Administración de Certificados Digitales**. Devuelven el `.crt` en el acto.',
               '**AUTORIZAR EL DN AL SERVICIO `wsfe`.** Es un formulario APARTE (WSASS › *Crear autorización a servicio*): crear el DN **no** lo autoriza. Si falta, WSAA contesta **"Computador no autorizado a acceder al servicio"**, que no menciona la autorización por ningún lado y manda a sospechar del certificado. Solo hace falta `wsfe`.',
@@ -1431,7 +1431,7 @@ export const MANUAL = [
               '**Dos certificados**, cada uno con su trámite y su lugar (WSASS / Administración de Certificados Digitales). El de uno no sirve en el otro.',
               '**Dos numeraciones.** Lo emitido en homologación no cuenta para nada.',
               '**Cada máquina, su clave.** La de desarrollo no se copia al servidor: se hace el trámite de nuevo, que es gratis y evita mover un archivo secreto.',
-              '**La clave no está en ningún respaldo** — `backup.sh` hace `pg_dump` y el resto vive en git; el par `.key`/`.crt` no está en ninguno de los dos, a propósito. Perderla no se restaura: se da de baja el certificado y se tramita otro. Las facturas ya emitidas no se pierden (el CAE vive en la venta).',
+              '**La clave no está en ningún respaldo** — ni en la descarga de Sistema › Respaldos ni en las copias automáticas: son copias de la base de datos, y el par `.key`/`.crt` vive aparte, en el servidor. Guardalo en otro lado. Perderlo no se restaura: se da de baja el certificado y se tramita otro. Las facturas ya emitidas no se pierden (el CAE vive en la venta).',
             ],
           },
           { t: 'ruta', texto: 'Ventas › Configuración (permiso ventas.configuracion) · Sistema › Empresa · Gerencia › Sucursales' },
@@ -2696,7 +2696,7 @@ export const MANUAL = [
           },
           {
             t: 'p',
-            texto: '**Por qué.** Postgres trabaja por defecto en READ COMMITTED: un `select` común **no espera** a la transacción de al lado, lee la última versión confirmada. Así, dos pedidos simultáneos de imputar el mismo pago leían los dos `aplicado = 0`, los dos pasaban la validación, y las dos imputaciones entraban. No hace falta un ataque: un doble click en una conexión lenta alcanza.',
+            texto: '**Por qué.** Un `select` común (sin candado) **no espera** a la transacción de al lado: lee una foto de lo ya confirmado. Así, dos pedidos simultáneos de imputar el mismo pago leían los dos `aplicado = 0`, los dos pasaban la validación, y las dos imputaciones entraban. No hace falta un ataque: un doble click en una conexión lenta alcanza.',
           },
           {
             t: 'p',

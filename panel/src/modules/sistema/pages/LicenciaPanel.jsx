@@ -122,7 +122,10 @@ export function LicenciaPanel({ onAviso }) {
               </code>
               <Btn small onClick={copiarId}>{copiado ? 'Copiado ✓' : 'Copiar'}</Btn>
             </div>
-            <div className={s.hint}>Es lo que se le pasa a CCS para emitir tu clave. Cada clave sirve en una sola instalación.</div>
+            <div className={s.hint}>
+              Es lo que se le pasa a CCS para emitir tu clave. Cada clave sirve en una sola instalación.
+              {info.contacto && <> Para pedirla o renovarla: <strong>{info.contacto}</strong>.</>}
+            </div>
           </div>
 
           <form onSubmit={activar}>

@@ -23,6 +23,8 @@ export function LicenciaAviso() {
   if (!licencia?.exigida) return null;
 
   const esDueno = can('sistema.licencia');
+  // Por dónde pedir la clave (si se configuró en el servidor).
+  const contacto = licencia.contacto ? <> Contacto: <strong>{licencia.contacto}</strong>.</> : null;
   const ir = esDueno ? (
     <Button component={Link} to="/sistema?seccion=licencia" color="inherit" size="small" sx={{ fontWeight: 700 }}>
       Ir a Licencia
@@ -34,7 +36,7 @@ export function LicenciaAviso() {
       <Alert severity="warning" action={ir} sx={{ mb: 2 }}>
         Tu licencia vence el <strong>{fecha(licencia.vence)}</strong>
         {licencia.diasRestantes === 0 ? ' (hoy)' : ` (en ${licencia.diasRestantes} día${licencia.diasRestantes === 1 ? '' : 's'})`}.
-        Pedí la renovación para no quedarte en modo solo lectura.
+        Pedí la renovación para no quedarte en modo solo lectura.{contacto}
       </Alert>
     );
   }
@@ -42,7 +44,7 @@ export function LicenciaAviso() {
     return (
       <Alert severity="error" action={ir} sx={{ mb: 2 }}>
         La licencia <strong>venció el {fecha(licencia.vence)}</strong>. El sistema todavía funciona, pero en unos días pasa a solo lectura.
-        {esDueno ? ' Cargá la clave de renovación.' : ' Avisale al dueño.'}
+        {esDueno ? ' Cargá la clave de renovación.' : ' Avisale al dueño.'}{esDueno && contacto}
       </Alert>
     );
   }
@@ -52,7 +54,7 @@ export function LicenciaAviso() {
         <strong>Modo solo lectura:</strong>{' '}
         {licencia.estado === 'vencida' ? `la licencia venció el ${fecha(licencia.vence)}` : 'el sistema no tiene una licencia activa'}.
         Podés ver tus datos y bajar respaldos, pero no se registran ventas ni compras nuevas.
-        {esDueno ? ' Cargá una clave vigente.' : ' Avisale al dueño.'}
+        {esDueno ? ' Cargá una clave vigente.' : ' Avisale al dueño.'}{esDueno && contacto}
       </Alert>
     );
   }
