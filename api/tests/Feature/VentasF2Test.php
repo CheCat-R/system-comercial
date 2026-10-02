@@ -225,6 +225,66 @@ class VentasF2Test extends TestCase
         $this->admin()->deleteJson('/api/ventas/'.$b2['id'])->assertOk();
     }
 
+    public function test_sincronizar_offline_vende_en_negativo_y_es_idempotente(): void
+    {
+        [$p, $mostrador] = $this->armarHarinaConStock();
+        $this->abrirCaja(1000);
+
+        $fila = fn (string $idLocal, float $kg) => [
+            'idLocal' => $idLocal,
+            'items' => [['productoId' => $p['id'], 'cantidad' => $kg, 'listaId' => $mostrador['id'], 'precioUnitario' => 600]],
+            'pagos' => [['medio' => 'efectivo', 'importe' => round($kg * 726, 2)]],
+        ];
+
+        // Dos ventas armadas "sin conexión": juntas piden 23 kg y solo había 20 — la segunda deja el stock en negativo.
+        $lote = ['ventas' => [$fila('offline-1', 15), $fila('offline-2', 8)]];
+        $r = $this->cajero()->postJson('/api/ventas/offline-lote', $lote)->assertOk()->json();
+
+        $this->assertCount(2, $r['resultados']);
+        $this->assertTrue($r['resultados'][0]['ok']);
+        $this->assertFalse($r['resultados'][0]['yaExistia']);
+        $this->assertTrue($r['resultados'][1]['ok']);
+        $this->assertEquals(-3.0, $this->stockDisponible($p['id']), 'la venta offline se confirma igual, aunque deje stock negativo');
+        $this->assertCount(1, $r['stockNegativo']);
+        $this->assertSame('Harina 000', $r['stockNegativo'][0]['producto']);
+        $this->assertEquals(-3.0, $r['stockNegativo'][0]['cantidad']);
+
+        $idVenta1 = $r['resultados'][0]['ventaId'];
+        $idVenta2 = $r['resultados'][1]['ventaId'];
+
+        // Reintentar el MISMO lote (se cortó la respuesta y el navegador lo mandó de nuevo): no duplica nada.
+        $r2 = $this->cajero()->postJson('/api/ventas/offline-lote', $lote)->assertOk()->json();
+        $this->assertTrue($r2['resultados'][0]['yaExistia']);
+        $this->assertSame($idVenta1, $r2['resultados'][0]['ventaId']);
+        $this->assertTrue($r2['resultados'][1]['yaExistia']);
+        $this->assertSame($idVenta2, $r2['resultados'][1]['ventaId']);
+        $this->assertEquals(-3.0, $this->stockDisponible($p['id']), 'el reintento no vuelve a descontar stock');
+
+        // Offline solo acepta efectivo: una fila con otro medio se rechaza, el resto del lote sigue.
+        $conTarjeta = [
+            'idLocal' => 'offline-3',
+            'items' => [['productoId' => $p['id'], 'cantidad' => 1, 'listaId' => $mostrador['id'], 'precioUnitario' => 600]],
+            'pagos' => [['medio' => 'tarjeta_credito', 'importe' => 726]],
+        ];
+        $r3 = $this->cajero()->postJson('/api/ventas/offline-lote', ['ventas' => [$conTarjeta]])->assertOk()->json();
+        $this->assertFalse($r3['resultados'][0]['ok']);
+        $this->assertStringContainsString('efectivo', $r3['resultados'][0]['motivo']);
+
+        // Un ticket abierto CON conexión (borrador en el servidor) que se cobró offline: al sincronizar, el borrador se descarta.
+        $items = [['productoId' => $p['id'], 'cantidad' => 1, 'listaId' => $mostrador['id'], 'precioUnitario' => 600]];
+        $borrador = $this->cajero()->postJson('/api/ventas', ['estado' => 'borrador', 'items' => $items])->assertCreated()->json();
+        $conBorrador = ['idLocal' => 'offline-4', 'borradorId' => $borrador['id'], 'items' => $items, 'pagos' => [['medio' => 'efectivo', 'importe' => 726]]];
+        $r4 = $this->cajero()->postJson('/api/ventas/offline-lote', ['ventas' => [$conBorrador]])->assertOk()->json();
+        $this->assertTrue($r4['resultados'][0]['ok']);
+        $this->assertDatabaseMissing('ventas', ['id' => $borrador['id']]);
+        $this->assertDatabaseHas('ventas', ['id' => $r4['resultados'][0]['ventaId'], 'estado' => 'confirmada']);
+
+        // Un borradorId que apunta a una venta YA emitida nunca se toca.
+        $r5 = $this->cajero()->postJson('/api/ventas/offline-lote', ['ventas' => [['idLocal' => 'offline-5', 'borradorId' => $idVenta1, 'items' => $items, 'pagos' => [['medio' => 'efectivo', 'importe' => 726]]]]])->assertOk()->json();
+        $this->assertTrue($r5['resultados'][0]['ok']);
+        $this->assertDatabaseHas('ventas', ['id' => $idVenta1, 'estado' => 'confirmada']);
+    }
+
     public function test_venta_directa_cuenta_corriente_cobranza_y_anulacion_del_recibo(): void
     {
         [$p, $mostrador] = $this->armarHarinaConStock();
@@ -259,6 +319,41 @@ class VentasF2Test extends TestCase
         $this->assertEqualsWithDelta(1452.0, $this->admin()->getJson('/api/clientes/'.$cli['id'].'/cuenta')->json('saldo'), 0.01);
         // El cliente con historial no se borra: se desactiva.
         $this->admin()->deleteJson('/api/clientes/'.$cli['id'])->assertOk()->assertJsonPath('desactivado', true);
+    }
+
+    public function test_cobranzas_pendientes_resumen_suma_ordena_y_excluye_saldados(): void
+    {
+        [$p, $mostrador] = $this->armarHarinaConStock();
+        $a = $this->admin()->postJson('/api/clientes', ['nombre' => 'Despensa A', 'tipoDoc' => 'dni', 'numeroDoc' => '30111001', 'ctaCteHabilitada' => true, 'limiteCredito' => 5000])->assertCreated()->json();
+        $b = $this->admin()->postJson('/api/clientes', ['nombre' => 'Despensa B', 'tipoDoc' => 'dni', 'numeroDoc' => '30111002', 'ctaCteHabilitada' => true, 'limiteCredito' => 5000])->assertCreated()->json();
+        $c = $this->admin()->postJson('/api/clientes', ['nombre' => 'Despensa C', 'tipoDoc' => 'dni', 'numeroDoc' => '30111003', 'ctaCteHabilitada' => true, 'limiteCredito' => 5000])->assertCreated()->json();
+        $this->abrirCaja(500);
+
+        // A debe 2 kg ($1452), B debe 1 kg ($726) pero lo paga entero, C debe 1 kg ($726) y queda pendiente.
+        $va = $this->admin()->postJson('/api/ventas', ['clienteId' => $a['id'], 'condicionPago' => 'cuenta_corriente', 'items' => [['productoId' => $p['id'], 'cantidad' => 2, 'listaId' => $mostrador['id']]]])->assertCreated()->json();
+        $vb = $this->admin()->postJson('/api/ventas', ['clienteId' => $b['id'], 'condicionPago' => 'cuenta_corriente', 'items' => [['productoId' => $p['id'], 'cantidad' => 1, 'listaId' => $mostrador['id']]]])->assertCreated()->json();
+        $this->admin()->postJson('/api/ventas', ['clienteId' => $c['id'], 'condicionPago' => 'cuenta_corriente', 'items' => [['productoId' => $p['id'], 'cantidad' => 1, 'listaId' => $mostrador['id']]]])->assertCreated()->json();
+        $this->admin()->postJson('/api/cobranzas', ['clienteId' => $b['id'], 'pagos' => [['medio' => 'efectivo', 'importe' => 726]], 'imputaciones' => [['ventaId' => $vb['id'], 'importe' => 726]]])->assertCreated();
+
+        $r = $this->admin()->getJson('/api/cobranzas/pendientes-resumen')->assertOk()->json();
+        $this->assertSame(2, $r['clientes'], 'B ya está saldado y no cuenta');
+        $this->assertEqualsWithDelta(1452.0 + 726.0, $r['saldo'], 0.01);
+        $this->assertCount(2, $r['masDeuda']);
+        // Ordenado por el que más debe primero: A ($1452) antes que C ($726).
+        $this->assertSame($a['id'], $r['masDeuda'][0]['clienteId']);
+        $this->assertEqualsWithDelta(1452.0, $r['masDeuda'][0]['saldo'], 0.01);
+        $this->assertSame($c['id'], $r['masDeuda'][1]['clienteId']);
+        $this->assertEqualsWithDelta(726.0, $r['masDeuda'][1]['saldo'], 0.01);
+        $this->assertFalse(collect($r['masDeuda'])->contains('clienteId', $b['id']), 'B no debería aparecer en el detalle');
+
+        // Todo saldado: resumen vacío, no un error.
+        $this->admin()->postJson('/api/ventas', ['clienteId' => $a['id'], 'condicionPago' => 'cuenta_corriente', 'items' => [['productoId' => $p['id'], 'cantidad' => 1, 'listaId' => $mostrador['id']]]])->assertCreated();
+        $this->admin()->postJson('/api/cobranzas', ['clienteId' => $a['id'], 'pagos' => [['medio' => 'efectivo', 'importe' => 2178]], 'auto' => true])->assertCreated();
+        $this->admin()->postJson('/api/cobranzas', ['clienteId' => $c['id'], 'pagos' => [['medio' => 'efectivo', 'importe' => 726]], 'auto' => true])->assertCreated();
+        $vacio = $this->admin()->getJson('/api/cobranzas/pendientes-resumen')->assertOk()->json();
+        $this->assertSame(0, $vacio['clientes']);
+        $this->assertEquals(0.0, $vacio['saldo']);
+        $this->assertSame([], $vacio['masDeuda']);
     }
 
     public function test_factura_sin_arca_y_nota_de_credito_parcial_con_devolucion(): void
@@ -345,6 +440,42 @@ class VentasF2Test extends TestCase
         $this->assertEquals(5.0, $this->stockDisponible($p['id']));
         $this->admin()->postJson('/api/presupuestos/'.$pr2['id'].'/cancelar', ['motivo' => 'No vino'])->assertOk();
         $this->assertEquals(8.0, $this->stockDisponible($p['id']));
+    }
+
+    public function test_presupuestos_pendientes_resumen_cuenta_por_estado_y_ordena_por_vencer(): void
+    {
+        [$p] = $this->armarHarinaConStock();
+        $cli = $this->admin()->postJson('/api/clientes', ['nombre' => 'Kiosco Uno'])->assertCreated()->json();
+        $crear = fn () => $this->admin()->postJson('/api/presupuestos', ['clienteId' => $cli['id'], 'items' => [['productoId' => $p['id'], 'cantidad' => 1, 'precioLista' => 600]]])->assertCreated()->json();
+
+        $crear(); // borrador: no cuenta como "por vencer".
+
+        $prLejos = $crear();
+        $this->admin()->postJson('/api/presupuestos/'.$prLejos['id'].'/enviar')->assertOk();
+
+        $prCerca = $crear();
+        $this->admin()->postJson('/api/presupuestos/'.$prCerca['id'].'/enviar')->assertOk();
+        DB::table('presupuestos')->where('id', $prCerca['id'])->update(['vencimiento' => now()->addDay()]);
+
+        $prVencido = $crear();
+        $this->admin()->postJson('/api/presupuestos/'.$prVencido['id'].'/enviar')->assertOk();
+        DB::table('presupuestos')->where('id', $prVencido['id'])->update(['vencimiento' => now()->subDay()]);
+
+        $prConf = $crear();
+        $this->admin()->postJson('/api/presupuestos/'.$prConf['id'].'/enviar')->assertOk();
+        $this->admin()->postJson('/api/presupuestos/'.$prConf['id'].'/confirmar')->assertOk();
+
+        $prCancel = $crear();
+        $this->admin()->postJson('/api/presupuestos/'.$prCancel['id'].'/cancelar', ['motivo' => 'x'])->assertOk();
+
+        $r = $this->admin()->getJson('/api/presupuestos/pendientes-resumen')->assertOk()->json();
+        $this->assertSame(1, $r['borrador']);
+        $this->assertSame(1, $r['confirmado']);
+        $this->assertSame(2, $r['enviadoVigente']);
+        $this->assertSame(1, $r['enviadoVencido']);
+        $this->assertCount(2, $r['porVencer'], 'el vencido y el cancelado no entran en la lista');
+        $this->assertSame($prCerca['id'], $r['porVencer'][0]['id'], 'el que vence antes va primero');
+        $this->assertSame($prLejos['id'], $r['porVencer'][1]['id']);
     }
 
     /* ------------------------------ Ofertas y descuentos ------------------------------ */

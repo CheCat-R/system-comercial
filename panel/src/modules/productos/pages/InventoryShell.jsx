@@ -3,6 +3,7 @@ import { Button, Snackbar, Alert } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { PageHeader } from '@shared/components/PageHeader/PageHeader.jsx';
 import { FullScreenLoader } from '@shared/components/FullScreenLoader/FullScreenLoader.jsx';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { cx } from '@shared/utils/classNames.js';
 import { useProductos } from '../context/ProductosContext.jsx';
 import { ModalHost } from '../components/ModalHost.jsx';
@@ -56,7 +57,7 @@ const PANEL_COMPONENTS = {
  * `panels` (vía el provider) y su `title`/`subtitle`. El puesto de trabajo
  * (usuario, rol y sucursal) sale de la sesión y se ve en el encabezado.
  */
-export function InventoryShell({ title, subtitle }) {
+export function InventoryShell({ title, subtitle, ayudaCategoriaId }) {
   const { store, panels, panel, goPanel, toast, toastState, closeToast } = useProductos();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -109,11 +110,14 @@ export function InventoryShell({ title, subtitle }) {
       <PageHeader
         title={title}
         subtitle={subtitle}
-        actions={
-          <Button variant="outlined" startIcon={<RefreshIcon />} onClick={onRefresh} disabled={refreshing}>
-            Actualizar
-          </Button>
-        }
+        actions={(
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Button variant="outlined" startIcon={<RefreshIcon />} onClick={onRefresh} disabled={refreshing}>
+              Actualizar
+            </Button>
+            {ayudaCategoriaId && <AyudaButton categoriaId={ayudaCategoriaId} />}
+          </div>
+        )}
       />
 
       {/* El puesto de trabajo (usuario + sucursal + rol) vive en la sesión y se

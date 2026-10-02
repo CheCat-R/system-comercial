@@ -98,8 +98,11 @@ export const provApi = {
   /** Descontar fletes SIN pago nuevo: lo adelantado cubre todo lo que se paga. */
   descontarFletes: (data) => httpClient.post('/pagos-proveedor/descontar-fletes', data),
 
-  /* La caja de la sucursal (para el pago en efectivo desde el cajón) */
-  cajaActual: (sucursalId) => httpClient.get(`/caja/actual/${sucursalId}`),
+  /* La caja de la sucursal (para el pago en efectivo desde el cajón). La API
+   * envuelve en `{ turno }` (un `null` pelado se confundiría con el sobre al
+   * serializar) — se desenvuelve acá, antes de llegar a los modales, que
+   * esperan que `caja` SEA el turno. */
+  cajaActual: (sucursalId) => httpClient.get(`/caja/actual/${sucursalId}`).then((r) => r.turno),
 };
 
 /* Etiquetas compartidas del módulo. */

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Auth\FrenoPin;
+use App\Auth\NombreUsuario;
 use App\Auth\PlanCatalogo;
 use App\Auth\Permisos;
 use App\Auth\Sesion;
@@ -161,6 +162,8 @@ class UsuariosService
             ]);
         }
 
+        $this->exigirNombreLibre(trim($datos['nombre']), null);
+
         $pin = (string) ($datos['pin'] ?? '');
         $relevoCaja = (bool) ($datos['relevoCaja'] ?? false);
         if ($relevoCaja && $pin === '') {
@@ -175,6 +178,24 @@ class UsuariosService
             'relevo_caja' => $relevoCaja,
             'pin' => $pin !== '' ? $pin : null,
         ]);
+    }
+
+    /**
+     * EL NOMBRE ES EL USUARIO DE ENTRADA: se escribe en el login, así que no
+     * puede haber dos iguales — ni siquiera "Maria" y "MARÍA", que para el
+     * login son la misma persona. Cuenta también a los desactivados: si se
+     * reactivara uno, el choque aparecería recién en ese momento.
+     */
+    private function exigirNombreLibre(string $nombre, ?int $exceptoId): void
+    {
+        $clave = NombreUsuario::normalizar($nombre);
+        $choca = Usuario::query()->when($exceptoId, fn ($q) => $q->where('id', '!=', $exceptoId))->get(['id', 'nombre'])
+            ->first(fn (Usuario $u) => NombreUsuario::normalizar($u->nombre) === $clave);
+        if ($choca) {
+            throw ValidationException::withMessages([
+                'nombre' => 'Ya hay un usuario llamado "'.$choca->nombre.'". El nombre es lo que se escribe para entrar al sistema: tiene que ser único.',
+            ]);
+        }
     }
 
     public function editarUsuario(Usuario $usuario, array $datos, Sesion $sesion): Usuario
@@ -193,6 +214,7 @@ class UsuariosService
         $echar = false;
 
         if (array_key_exists('nombre', $datos)) {
+            $this->exigirNombreLibre(trim($datos['nombre']), $usuario->id);
             $usuario->nombre = trim($datos['nombre']);
         }
         if (isset($datos['rolId']) && (int) $datos['rolId'] !== $usuario->rol_id) {

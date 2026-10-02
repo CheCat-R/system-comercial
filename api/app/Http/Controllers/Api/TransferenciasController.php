@@ -25,6 +25,11 @@ class TransferenciasController extends Controller
         return response()->json($this->svc->get($id));
     }
 
+    public function pendientesResumen(Sesion $sesion): JsonResponse
+    {
+        return response()->json($this->svc->pendientesResumen($sesion->soloSuSucursal()));
+    }
+
     /**
      * QUÉ LLEGÓ QUE ESTE LOCAL NO SABE. Lo consume el armado del pedido.
      *

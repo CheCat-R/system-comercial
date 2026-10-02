@@ -1,0 +1,34 @@
+/*
+ * El nombre de la marca: SIGLAS grandes + nombre completo en minúscula y chico.
+ * Los colores salen del contexto (`color` del contenedor y `--marca-sub`), así
+ * el mismo bloque sirve sobre el menú oscuro y sobre el login claro u oscuro.
+ */
+.nombre {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.1;
+}
+
+.siglas {
+  font-weight: 800;
+  /* El espaciado entre letras es lo que le da el aire "premium" a unas siglas. */
+  letter-spacing: 0.14em;
+  /* El espaciado también se aplica después de la última letra: se lo quita para que el bloque quede alineado a la izquierda. */
+  margin-right: -0.14em;
+}
+
+.completo {
+  font-weight: 500;
+  /* Minúscula a propósito: es solo la explicación de las siglas. */
+  text-transform: lowercase;
+  letter-spacing: 0.06em;
+  color: var(--marca-sub, var(--crm-color-text-muted));
+  white-space: nowrap;
+}
+
+.chico .siglas { font-size: 1.15rem; }
+.chico .completo { font-size: 0.66rem; margin-top: 3px; }
+
+.grande .siglas { font-size: clamp(2.4rem, 5vw, 3.4rem); letter-spacing: 0.18em; margin-right: -0.18em; }
+.grande .completo { font-size: clamp(0.85rem, 1.6vw, 1rem); margin-top: 10px; letter-spacing: 0.12em; }

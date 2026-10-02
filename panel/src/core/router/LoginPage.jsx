@@ -9,9 +9,15 @@ import { useAuth } from '@core/auth/AuthContext.jsx';
 import { appConfig } from '@core/config/app.config.js';
 import { httpClient } from '@core/services/httpClient.js';
 import { leerTokenTerminal } from '@core/auth/terminal.js';
+import { AvatarMarca, Isotipo, NombreMarca } from '@core/branding/Marca.jsx';
 
 /**
  * LOGIN — usuario + contraseña, y la sucursal SOLO si hace falta preguntarla.
+ *
+ * EL USUARIO SE ESCRIBE. Antes era un desplegable con todos los nombres, que
+ * la API tenía que publicar sin sesión: cualquiera que abriera la URL leía
+ * quién tiene cuenta. Ahora es un campo de texto (da igual mayúsculas, tildes
+ * o espacios de más) y `/auth/opciones` ya no devuelve a nadie.
  *
  * LA SUCURSAL LA PONE EL EQUIPO (0081). Si esta máquina está registrada como
  * terminal, acá no hay desplegable: se muestra "Caja 2 · Distribuidora" y
@@ -36,13 +42,45 @@ import { leerTokenTerminal } from '@core/auth/terminal.js';
  * Tras el login se recarga la página entera: los motores de los módulos leen
  * su contexto al arrancar, y así TODOS nacen como este usuario en esta sucursal.
  */
+/**
+ * El lado de la MARCA del login (solo en pantallas anchas): isotipo grande,
+ * las siglas y, debajo, el nombre completo en minúscula. Siempre oscuro —como
+ * el menú lateral— tanto en tema claro como oscuro, así la marca se ve igual
+ * y el formulario del otro lado se adapta al tema. Una marca de agua enorme
+ * del isotipo, casi invisible, le da profundidad sin gradientes ni brillos.
+ */
+function PanelMarca() {
+  return (
+    <Box
+      sx={{
+        display: { xs: 'none', md: 'flex' },
+        position: 'relative',
+        overflow: 'hidden',
+        bgcolor: 'var(--crm-color-brand-panel)',
+        color: 'var(--crm-color-brand-ink)',
+        '--marca-sub': 'var(--crm-color-brand-ink-muted)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        p: 6,
+      }}
+    >
+      <Box aria-hidden sx={{ position: 'absolute', right: -140, bottom: -150, opacity: 0.045, lineHeight: 0 }}>
+        <Isotipo size={560} ojos="var(--crm-color-brand-panel)" />
+      </Box>
+      <Stack spacing={3.5} alignItems="flex-start" sx={{ position: 'relative' }}>
+        <Isotipo size={132} titulo={`${appConfig.name} — ${appConfig.fullName}`} />
+        <NombreMarca tamano="grande" />
+      </Stack>
+    </Box>
+  );
+}
+
 export function LoginPage() {
   const { login } = useAuth();
   const location = useLocation();
 
-  const [usuarios, setUsuarios] = useState(null);
   const [sucursales, setSucursales] = useState([]);
-  const [usuarioId, setUsuarioId] = useState('');
+  const [usuario, setUsuario] = useState('');
   const [sucursalId, setSucursalId] = useState('');
   const [password, setPassword] = useState('');
   const [confirmando, setConfirmando] = useState(false);
@@ -74,20 +112,14 @@ export function LoginPage() {
   useEffect(() => {
     let vivo = true;
     /*
-     * UN SOLO endpoint público, y devuelve lo justo para poder elegir.
-     *
-     * Antes esto pedía `/usuarios` y `/sucursales`, que ahora exigen sesión —
-     * y no puede haberla todavía. Pero abrirlos habría sido peor que un
-     * problema técnico: `/usuarios` trae los permisos de cada rol y quién es
-     * superadmin, o sea el mapa de a quién conviene atacar, servido a
-     * cualquiera que abra la URL. `/auth/opciones` devuelve **solo nombre e
-     * id**: también se le sacó "si tiene contraseña definida", que era la lista
-     * de por dónde empezar y que esta pantalla ni siquiera usaba.
+     * UN SOLO endpoint público, y devuelve lo justo: las sucursales, para
+     * poder elegir donde hay más de una. NO devuelve usuarios — el usuario se
+     * escribe, y publicar los nombres era regalar a cualquiera quién tiene
+     * cuenta (y, con los permisos, a quién conviene atacar).
      */
     httpClient.get('/auth/opciones')
-      .then(({ usuarios: us, sucursales: sucs }) => {
+      .then(({ sucursales: sucs }) => {
         if (!vivo) return;
-        setUsuarios(us);
         setSucursales(sucs);
         /* NO SE PRESELECCIONA NINGUNA. Acá había un `setSucursalId(sucs[0].id)`
          * que dejaba el campo en la primera de la lista —la Distribuidora— y
@@ -98,10 +130,6 @@ export function LoginPage() {
     return () => { vivo = false; };
   }, []);
 
-  const usuario = useMemo(
-    () => (usuarios ?? []).find((u) => u.id === Number(usuarioId)),
-    [usuarios, usuarioId],
-  );
   /*
    * UNA SOLA SUCURSAL = NADA QUE ELEGIR (mismo criterio que el equipo
    * registrado: si no hay una decisión real que tomar, no se pregunta). Es el
@@ -138,7 +166,7 @@ export function LoginPage() {
   const continuar = (e) => {
     e?.preventDefault();
     setError('');
-    if (!usuario) { setError('Elegí tu usuario.'); return; }
+    if (!usuario.trim()) { setError('Escribí tu usuario.'); return; }
     if (!password) { setError('Ingresá tu contraseña.'); return; }
     /* La sucursal vacía NO corta acá: sigue viaje sin sucursal y el servidor
      * decide (superadmin sí, el resto no). El corte del lado de la pantalla
@@ -153,7 +181,7 @@ export function LoginPage() {
       /* El `sucursalId` viaja igual, pero cuando hay terminal **el servidor lo
        * ignora** y usa la del equipo: el candado vive allá, no acá. Con "No
        * especificar" directamente no viaja, y el servidor decide si puede. */
-      await login({ usuarioId: usuario.id, password, sucursalId: sucursal.id ?? undefined });
+      await login({ usuario: usuario.trim(), password, sucursalId: sucursal.id ?? undefined });
       // Recarga completa a propósito: ver comentario de arriba.
       window.location.replace(from);
     } catch (e2) {
@@ -164,10 +192,21 @@ export function LoginPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 2 }}>
-      <Card sx={{ width: 400, maxWidth: '100%' }}>
-        <CardContent sx={{ p: 3.5 }}>
-          <Typography variant="h2" sx={{ mb: 0.5 }}>{appConfig.name}</Typography>
+    <Box sx={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(380px, 5fr) 6fr' }, bgcolor: 'var(--crm-color-bg)' }}>
+      <PanelMarca />
+      <Box sx={{ display: 'grid', placeItems: 'center', p: { xs: 2, sm: 4 } }}>
+        <Box sx={{ width: '100%', maxWidth: 420 }}>
+          {/* En pantallas angostas no hay panel de marca: va arriba del formulario. */}
+          <Stack
+            direction="row" spacing={1.75} alignItems="center"
+            sx={{ display: { xs: 'flex', md: 'none' }, mb: 3, color: 'var(--crm-color-text)', '--marca-sub': 'var(--crm-color-text-muted)' }}
+          >
+            <AvatarMarca size={46} />
+            <NombreMarca />
+          </Stack>
+      <Card sx={{ width: '100%' }}>
+        <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
+          <Typography variant="h2" sx={{ mb: 0.5 }}>Iniciar sesión</Typography>
 
           {!confirmando ? (
             <>
@@ -179,18 +218,12 @@ export function LoginPage() {
               <form onSubmit={continuar}>
                 <Stack spacing={2}>
                   <TextField
-                    select fullWidth label="Usuario" value={usuarioId}
-                    onChange={(e) => setUsuarioId(e.target.value)}
-                    disabled={usuarios === null}
-                  >
-                    {/* Solo el nombre. `rolNombre` NO viaja en /auth/opciones —que es
-                        público— y este renglón mostraba "Lucas — " con el guion colgando.
-                        Agregarlo a la API para "arreglar" el guion publicaría quién es el
-                        superadmin a cualquiera que abra la URL del login. */}
-                    {(usuarios ?? []).map((u) => (
-                      <MenuItem key={u.id} value={String(u.id)}>{u.nombre}</MenuItem>
-                    ))}
-                  </TextField>
+                    fullWidth label="Usuario" value={usuario}
+                    onChange={(e) => setUsuario(e.target.value)}
+                    autoComplete="username" autoFocus
+                    // Sin corrección ni mayúscula automática: es un nombre de usuario, no una frase.
+                    inputProps={{ autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false }}
+                  />
                   <TextField
                     fullWidth type="password" label="Contraseña" value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -260,7 +293,7 @@ export function LoginPage() {
                 <Stack direction="row" spacing={1.5} alignItems="center">
                   <PersonIcon color="primary" />
                   <div>
-                    <Typography variant="subtitle2">{usuario?.nombre}</Typography>
+                    <Typography variant="subtitle2">{usuario.trim()}</Typography>
                     {/* Antes acá iba el nombre del ROL. Se sacó a propósito: la
                         pantalla de login es pública, y "Lucas ·
                         Superadministrador" le dice a cualquiera a quién le
@@ -305,6 +338,8 @@ export function LoginPage() {
           )}
         </CardContent>
       </Card>
+        </Box>
+      </Box>
     </Box>
   );
 }

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { cx } from '@shared/utils/classNames.js';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { useVentas } from '../context/VentasContext.jsx';
 import { MEDIOS_PAGO } from '../domain/constants.js';
 import { PanelHead, Btn, money, s } from '../components/ui.jsx';
@@ -39,10 +40,11 @@ export function ListasPanel() {
         title="Formato de venta"
         desc="La modalidad agrupa y la lista identifica. El markup no vive acá: se carga por producto, en Compras › Productos › Formato de Venta."
         actions={
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Btn onClick={() => openModal('verLogica', {})}>Ver lógica</Btn>
             <Btn onClick={() => openModal('modalidadForm', {})}>+ Modalidad</Btn>
             <Btn variant="btn-primary" onClick={() => openModal('listaForm', {})}>+ Lista</Btn>
+            <AyudaButton categoriaId="formato-venta" />
           </div>
         }
       />

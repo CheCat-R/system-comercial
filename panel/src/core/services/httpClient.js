@@ -41,6 +41,22 @@ class HttpError extends Error {
 }
 
 /**
+ * SEÑAL GLOBAL DE CONECTIVIDAD — cualquier llamada, de cualquier módulo, deja
+ * una marca acá: "no contestó nadie" o "contestó algo" (así sea un 4xx — un
+ * rechazo del servidor prueba que la red funciona). `conectividad.js` escucha
+ * estos dos eventos para saber si el sistema está offline; vive en el
+ * `window` y no en un valor de retorno porque el que SABE que se cortó la
+ * red es este archivo, y lo tiene que saber TODA la app, no solo quien hizo
+ * esa llamada puntual.
+ */
+function marcarSinRespuesta() {
+  try { window.dispatchEvent(new Event('crm:sin-respuesta')); } catch { /* sin window (tests) */ }
+}
+function marcarConRespuesta() {
+  try { window.dispatchEvent(new Event('crm:con-respuesta')); } catch { /* sin window (tests) */ }
+}
+
+/**
  * Los endpoints que la API abre a propósito. Un 401 acá NO es una sesión
  * vencida: es "la contraseña está mal". Si no se distinguiera, escribir mal la
  * clave en el login limpiaría la sesión y recargaría la pantalla.
@@ -128,11 +144,13 @@ async function request(method, path, { body, headers, signal, sinRedirigir = fal
        * re-tira como `HttpError` para que quien llama no tenga que distinguir
        * un `AbortError` de un `TypeError` de red — lo que necesita saber es
        * una sola cosa, y es que **no sabe si la operación se hizo o no**. */
+      marcarSinRespuesta();
       throw new HttpError(`Sin respuesta del servidor: ${method} ${path}`, {
         sinRespuesta: true,
         data: { message: 'No llegó la respuesta del servidor.' },
       });
     }
+    marcarConRespuesta();
 
     /*
      * 401 = la credencial no sirve → afuera. 403 = la credencial está bien pero
@@ -181,11 +199,13 @@ async function urlProtegida(path) {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
   } catch {
+    marcarSinRespuesta();
     throw new HttpError(`Sin respuesta del servidor: GET ${path}`, {
       sinRespuesta: true,
       data: { message: 'No llegó la respuesta del servidor.' },
     });
   }
+  marcarConRespuesta();
   if (response.status === 401) sesionVencida();
   if (!response.ok) {
     throw new HttpError(`Request failed: ${response.status}`, { status: response.status });
@@ -218,11 +238,13 @@ async function descargar(path, nombrePorDefecto = 'archivo') {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
   } catch {
+    marcarSinRespuesta();
     throw new HttpError(`Sin respuesta del servidor: GET ${path}`, {
       sinRespuesta: true,
       data: { message: 'No llegó la respuesta del servidor.' },
     });
   }
+  marcarConRespuesta();
   if (response.status === 401) sesionVencida();
   if (!response.ok) {
     throw new HttpError(`Request failed: ${response.status}`, { status: response.status });

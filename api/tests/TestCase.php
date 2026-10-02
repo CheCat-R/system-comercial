@@ -49,7 +49,7 @@ abstract class TestCase extends BaseTestCase
     protected function loguear(Usuario $usuario, string $password = 'clave1234', ?int $sucursalId = null): string
     {
         $res = $this->postJson('/api/auth/login', [
-            'usuarioId' => $usuario->id,
+            'usuario' => $usuario->nombre,
             'password' => $password,
             'sucursalId' => $sucursalId ?? $this->central()->id,
         ]);

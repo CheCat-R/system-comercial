@@ -1,5 +1,6 @@
 import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
 import { defineModule } from '@core/modules/defineModule.js';
+import { respaldoAviso } from '@core/services/respaldoAviso.js';
 import { SistemaPage } from './pages/SistemaPage.jsx';
 import { SISTEMA_SECCIONES } from './config/sistema.config.js';
 
@@ -13,7 +14,14 @@ export const sistemaModule = defineModule({
   basePath: '/sistema',
   // Cualquier sección hace visible el módulo; sin ninguna, no existe.
   permissions: SISTEMA_SECCIONES.map((x) => x.permiso),
-  navigation: { showInSidebar: true, group: 'catalog', order: 55 },
+  navigation: {
+    showInSidebar: true,
+    group: 'catalog',
+    order: 55,
+    // Pendientes del sidebar: copia externa vieja o copia diaria automática caída.
+    badgeCount: () => respaldoAviso.count(),
+    badgeSubscribe: (listener) => respaldoAviso.subscribe(listener),
+  },
   routes: [
     { path: '', Component: SistemaPage, handle: { crumb: 'Sistema' } },
   ],

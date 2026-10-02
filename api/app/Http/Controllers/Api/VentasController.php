@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Ventas\ConfirmarVentaRequest;
 use App\Http\Requests\Ventas\GuardarVentaRequest;
 use App\Http\Requests\Ventas\NotaCreditoRequest;
+use App\Http\Requests\Ventas\SincronizarOfflineRequest;
 use App\Ventas\CatalogoPos;
 use App\Ventas\VentasService;
 use Illuminate\Http\JsonResponse;
@@ -108,6 +109,14 @@ class VentasController extends Controller
     public function update(GuardarVentaRequest $request, int $id, Sesion $sesion): JsonResponse
     {
         return response()->json($this->svc->actualizar($id, $request->validated(), $this->opciones($sesion)));
+    }
+
+    /** El lote de ventas que el POS armó sin conexión, recién mandado al volver internet. */
+    public function sincronizarOffline(SincronizarOfflineRequest $request, Sesion $sesion): JsonResponse
+    {
+        $d = $request->validated();
+
+        return response()->json($this->svc->sincronizarOffline($d['ventas'], $this->opciones($sesion)));
     }
 
     public function confirmar(ConfirmarVentaRequest $request, int $id, Sesion $sesion): JsonResponse

@@ -12,6 +12,7 @@
  */
 import { useMemo, useState } from 'react';
 import { cx } from '@shared/utils/classNames.js';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { configImpresion, esc, imprimirDocumento } from '@core/services/imprimir.js';
 import { useVentas } from '../context/VentasContext.jsx';
 import { useResource } from '../hooks/useResource.js';
@@ -371,8 +372,13 @@ export function PresupuestosPanel() {
       <PanelHead
         title="Presupuestos"
         desc="Pedidos mayoristas (WhatsApp hoy, tienda web mañana). Se cotizan en el POS con el botón «Presupuesto»; acá se envían, se confirman (reserva stock), se arman y se cierran como venta."
-        actions={puedeCotizar && (
-          <Btn variant="btn-primary" onClick={() => goPanel('pos')}>+ Cotizar en el POS</Btn>
+        actions={(
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {puedeCotizar && (
+              <Btn variant="btn-primary" onClick={() => goPanel('pos')}>+ Cotizar en el POS</Btn>
+            )}
+            <AyudaButton categoriaId="presupuestos" />
+          </div>
         )}
       />
 

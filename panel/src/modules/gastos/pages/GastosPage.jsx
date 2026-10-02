@@ -25,6 +25,7 @@ export function GastosPage() {
       <GastosShell
         title="Gastos"
         subtitle="Lo que la empresa paga: comprobantes, vencimientos y pagos a proveedores"
+        ayudaCategoriaId="gastos"
       />
     </GastosProvider>
   );

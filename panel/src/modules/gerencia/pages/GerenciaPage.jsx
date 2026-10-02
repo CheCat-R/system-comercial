@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { httpClient } from '@core/services/httpClient.js';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { useAuth } from '@core/auth/AuthContext.jsx';
 import { usePermissions } from '@core/permissions/PermissionContext.jsx';
 import { usePlan } from '@core/plan/PlanContext.jsx';
@@ -94,6 +95,9 @@ function UsuarioModal({ usuario, roles, onGuardar, onCerrar }) {
       <div className={s.field}>
         <label>Nombre <span className={s.req}>*</span></label>
         <input autoFocus value={nombre} placeholder="Nombre y apellido" onChange={(e) => setNombre(e.target.value)} />
+        <div className={s.hint}>
+          Es lo que la persona escribe para entrar al sistema (da igual mayúsculas y tildes). No puede repetirse.
+        </div>
       </div>
       <div className={s['form-grid']}>
         <div className={s.field}>
@@ -376,7 +380,7 @@ export function GerenciaPage() {
         title="Usuarios y roles"
         desc={`Sesión de ${user?.name ?? '—'} (superadmin). Los usuarios entran con su contraseña; cada rol define qué puede hacer cada uno.`}
         actions={
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {/* Las sucursales no se crean desde acá: son estructura de la
                 empresa y se editan las que hay. Sin este `null`, la pestaña
                 ofrecía "+ Nuevo rol", que no es lo que se está mirando. */}
@@ -386,6 +390,7 @@ export function GerenciaPage() {
             {tab === 'roles' && (
               <Btn variant="btn-primary" onClick={() => setModal({ tipo: 'rol', datos: null })}>+ Nuevo rol</Btn>
             )}
+            <AyudaButton categoriaId="gerencia-usuarios" />
           </div>
         }
       />

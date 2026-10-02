@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { httpClient } from '@core/services/httpClient.js';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { usePermissions } from '@core/permissions/PermissionContext.jsx';
 import { usePlan } from '@core/plan/PlanContext.jsx';
 import { cx } from '@shared/utils/classNames.js';
@@ -274,7 +275,11 @@ export function SistemaPage() {
 
   return (
     <div style={{ padding: 'var(--crm-space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--crm-space-4)' }}>
-      <PanelHead title="Sistema" desc="Identidad de la empresa, impresión y todo lo que es del sistema." />
+      <PanelHead
+        title="Sistema"
+        desc="Identidad de la empresa, impresión y todo lo que es del sistema."
+        actions={<AyudaButton categoriaId="sistema" />}
+      />
 
       <div className={s.shell}>
         <nav className={s.subnav} aria-label="Secciones de Sistema">

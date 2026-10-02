@@ -28,6 +28,7 @@ import { useVentas } from '../context/VentasContext.jsx';
 import { useResource } from '../hooks/useResource.js';
 import { ventasApi, errorMsg } from '../services/ventas.api.js';
 import { imprimirVenta } from '@core/services/imprimir.js';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import {
   MEDIOS_PAGO, ESTADOS_VENTA, TIPOS_VENTA, nroComprobante, esNotaCredito,
 } from '../domain/constants.js';
@@ -256,7 +257,12 @@ export function ListadoVentasPanel() {
         desc={esJefe
           ? 'Todo lo que se vendió, con sus filtros. Clic en una fila para ver el ticket, reimprimirlo o anularlo. Los totales son del filtro completo y no cuentan las anuladas.'
           : 'Las ventas del mostrador de tu sucursal. Clic en una fila para ver el ticket y reimprimirlo.'}
-        actions={<Btn small onClick={reload} disabled={loading}>{loading ? 'Cargando…' : 'Actualizar'}</Btn>}
+        actions={(
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Btn small onClick={reload} disabled={loading}>{loading ? 'Cargando…' : 'Actualizar'}</Btn>
+            <AyudaButton categoriaId="devoluciones" />
+          </div>
+        )}
       />
 
       <div className={s.stats}>

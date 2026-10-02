@@ -62,6 +62,7 @@ final class PlanCatalogo
         'proveedores.ctasctes', 'proveedores.echeqs', 'proveedores.edoc',
         'gerencia.reportes', 'gerencia.rentabilidad',
         'sistema.terminales',
+        'sistema.respaldos_auto', // copia diaria automática de la base, guardada en el servidor
     ];
 
     /**
@@ -77,6 +78,7 @@ final class PlanCatalogo
         'compras.cuotas_echeq',    // Compromiso de pago en cuotas / cartera de echeqs
         'compras.costos_masivo',   // % "sin factura" + regla masiva de costos por proveedor/marca
         'gastos.fiscal_avanzado',  // Pie fiscal abierto: impuestos internos, percepción DGI/DGR
+        'sistema.respaldos_auto',  // Copia diaria automática (sin permiso de rol propio; el plan es lo que la trae — ver PYMES_SUMA)
     ];
 
     /**

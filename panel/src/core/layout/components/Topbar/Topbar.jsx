@@ -182,7 +182,7 @@ export function Topbar() {
   );
 }
 
-function getInitials(name) {
+export function getInitials(name) {
   if (!name) return '?';
   return name
     .split(' ')

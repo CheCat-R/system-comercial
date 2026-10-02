@@ -5,6 +5,7 @@ import { Breadcrumbs } from './components/Breadcrumbs/Breadcrumbs.jsx';
 import { MobileNavDrawer } from './components/Sidebar/MobileNavDrawer.jsx';
 import { OrdenesWebAlert } from './components/OrdenesWebAlert.jsx';
 import { PreciosAlert } from './components/PreciosAlert.jsx';
+import { OfflineAlert } from './components/OfflineAlert.jsx';
 import { ConsultasRapidas } from '@modules/consultas/ConsultasRapidas.jsx';
 import { useUI } from '@core/context/UIContext.jsx';
 import { useBreakpoint } from '@core/hooks/useBreakpoint.js';
@@ -71,6 +72,9 @@ export function MainLayout() {
       {/* Idem para los cambios de precio: el cajero tiene el catálogo en memoria
           y sin este aviso seguiría cobrando el precio viejo. */}
       <PreciosAlert />
+
+      {/* Sin conexión con la API — en cualquier pantalla, no solo el POS. */}
+      <OfflineAlert />
     </div>
   );
 }

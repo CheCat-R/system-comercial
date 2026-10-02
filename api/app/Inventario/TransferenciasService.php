@@ -737,4 +737,41 @@ class TransferenciasService extends StockCore
             'hist' => DB::table('transferencia_hist')->where('transferencia_id', $id)->orderBy('id')->get()->all(),
         ];
     }
+
+    /**
+     * ABIERTAS: todo lo que ya salió del borrador y todavía no llegó —
+     * `pendiente` (la pidió el destino, falta prepararla), `preparada`
+     * (lista reservada, falta despachar) y `transito` (en viaje). Mismo
+     * recorte que ya usa el panel (`transferenciasPendientes()` en
+     * `inventory.store.js`): ni borrador (no es un compromiso todavía) ni
+     * recibida/cancelada (ya se cerraron).
+     *
+     * Ordenadas por fecha ascendente: la más vieja esperando es la que
+     * primero necesita que alguien la mueva.
+     */
+    public function pendientesResumen(?int $soloSuc = null, int $top = 5): array
+    {
+        $ts = DB::table('transferencias')
+            ->whereIn('estado', ['pendiente', 'preparada', 'transito'])
+            ->when($soloSuc !== null, fn ($q) => $q->where(fn ($w) => $w->where('origen_id', $soloSuc)->orWhere('destino_id', $soloSuc)))
+            ->orderBy('fecha')
+            ->get();
+
+        $sucursalIds = $ts->pluck('origen_id')->merge($ts->pluck('destino_id'))->unique();
+        $nombres = DB::table('sucursales')->whereIn('id', $sucursalIds)->pluck('nombre', 'id');
+
+        return [
+            'pendiente' => $ts->where('estado', 'pendiente')->count(),
+            'preparada' => $ts->where('estado', 'preparada')->count(),
+            'transito' => $ts->where('estado', 'transito')->count(),
+            'masAntiguas' => $ts->take($top)->map(fn ($t) => [
+                'id' => $t->id,
+                'codigo' => $t->codigo,
+                'estado' => $t->estado,
+                'origenNombre' => $nombres[$t->origen_id] ?? '',
+                'destinoNombre' => $nombres[$t->destino_id] ?? '',
+                'fecha' => $t->fecha,
+            ])->values()->all(),
+        ];
+    }
 }

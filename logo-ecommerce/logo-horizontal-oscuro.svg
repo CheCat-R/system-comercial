@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 320" width="820" height="320" role="img" aria-label="CheCAT Commerce Systems">
+  <!--
+    Lockup horizontal para fondos claros. Mismas salvedades que la versión
+    clara: color fijo, y el texto conviene convertirlo a trazados antes de
+    mandarlo a imprenta.
+  -->
+  <g transform="translate(-31,33) scale(0.613)">
+    <g fill="#373435">
+      <rect x="84" y="170" width="344" height="298" rx="28"/>
+      <path d="M84 196 L90 44 C90 44 158 92 190 178 Z"/>
+      <path d="M428 196 L422 44 C422 44 354 92 322 178 Z"/>
+    </g>
+    <path d="M198 172 C198 86 314 86 314 172" fill="none" stroke="#373435" stroke-width="24" stroke-linecap="round"/>
+    <g fill="#FFD400" transform="translate(94,137) scale(0.62)">
+      <path d="M302.713 369.764C440.213 302.264 451.713 210.828 418.713 190.764C362.713 156.716 282.713 271.264 302.713 369.764Z"/>
+      <path d="M221.713 363.764C180.213 350.764 73.7125 266.264 123.213 235.264C174.788 202.964 211.213 300.764 221.713 363.764Z"/>
+    </g>
+  </g>
+
+  <text x="280" y="168" fill="#373435"
+        font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+        font-size="112" font-weight="700" letter-spacing="-2">CheCAT</text>
+  <text x="284" y="236" fill="#6B7280"
+        font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+        font-size="50" font-weight="500" letter-spacing="3">Commerce Systems</text>
+</svg>

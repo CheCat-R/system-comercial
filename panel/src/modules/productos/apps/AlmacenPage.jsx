@@ -30,6 +30,7 @@ export function AlmacenPage() {
       <InventoryShell
         title="Almacén"
         subtitle="Stock por sucursal, transferencias e incidencias"
+        ayudaCategoriaId="almacen"
       />
     </ProductosProvider>
   );

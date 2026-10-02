@@ -32,6 +32,7 @@ import {
   htmlDocumento, imprimirDocumento, invalidarConfigImpresion, plantillaCartelGuardada,
 } from '@core/services/imprimir.js';
 import { Btn, s } from '../components/ui.jsx';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { AyudaEncabezadoNavegador } from '@modules/productos/components/AyudaEncabezado.jsx';
 import { DisenadorCartel } from '../components/DisenadorCartel.jsx';
 
@@ -231,12 +232,15 @@ export function CartelesPanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--crm-space-4)' }}>
-      <div>
-        <h2 className={s['card-title']} style={{ margin: 0 }}>Carteles de góndola</h2>
-        <div className={s.hint} style={{ marginTop: 4 }}>
-          El precio que el cliente lee en el estante, para que no tenga que preguntarle al cajero.
-          El texto se guarda por producto: cuando cambie el precio, es volver acá y apretar Imprimir.
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, justifyContent: 'space-between' }}>
+        <div>
+          <h2 className={s['card-title']} style={{ margin: 0 }}>Carteles de góndola</h2>
+          <div className={s.hint} style={{ marginTop: 4 }}>
+            El precio que el cliente lee en el estante, para que no tenga que preguntarle al cajero.
+            El texto se guarda por producto: cuando cambie el precio, es volver acá y apretar Imprimir.
+          </div>
         </div>
+        <AyudaButton categoriaId="carteles" />
       </div>
 
       {errorCat && <div className={cx(s.callout, s.warn)}>{errorCat}</div>}

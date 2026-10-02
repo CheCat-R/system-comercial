@@ -1,0 +1,54 @@
+/* Ámbar lleno a propósito: es el único botón de este color en la pantalla,
+   así no compite con los botones de acción (del color de marca) ni se
+   confunde con un error (rojo) — solo tiene que saltar a la vista. */
+.boton {
+  flex: none;
+  width: 28px; height: 28px; border-radius: 50%;
+  border: none; cursor: pointer; padding: 0;
+  background: var(--crm-color-warning); color: #fff;
+  font-size: 15px; font-weight: 800; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--crm-color-warning) 45%, transparent);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.boton:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--crm-color-warning) 30%, transparent);
+}
+
+.panel {
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  padding: var(--crm-space-4);
+}
+
+.titulo {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--crm-color-text-muted); margin: 0 0 10px;
+}
+
+.articulo + .articulo {
+  margin-top: var(--crm-space-4);
+  padding-top: var(--crm-space-4);
+  border-top: 1px solid var(--crm-color-border);
+}
+
+.pregunta { font-size: 14.5px; font-weight: 700; margin: 0 0 8px; }
+
+.pasos { margin: 0; padding-left: 20px; }
+.pasos li { line-height: 1.6; margin-bottom: 7px; font-size: 13.5px; }
+.pasos li:last-child { margin-bottom: 0; }
+
+.nota {
+  border-left: 3px solid var(--crm-color-border);
+  border-radius: 0 var(--crm-radius-sm) var(--crm-radius-sm) 0;
+  padding: 8px 12px; margin-top: 10px; font-size: 12.5px; line-height: 1.55;
+  background: color-mix(in srgb, var(--crm-color-text) 4%, transparent);
+}
+.nota-info { border-left-color: var(--crm-color-accent); }
+.nota-warn {
+  border-left-color: var(--crm-color-warning);
+  background: color-mix(in srgb, var(--crm-color-warning) 8%, transparent);
+}

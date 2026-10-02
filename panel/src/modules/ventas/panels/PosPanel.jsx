@@ -1,5 +1,10 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+  useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore,
+} from 'react';
 import { cx } from '@shared/utils/classNames.js';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
+import { conectividad } from '@core/services/conectividad.js';
+import { guardarSnapshot, leerSnapshot } from '@core/offline/catalogoSnapshot.js';
 import { useVentas } from '../context/VentasContext.jsx';
 import { useResource } from '../hooks/useResource.js';
 import { ventasApi } from '../services/ventas.api.js';
@@ -603,6 +608,17 @@ export function PosPanel() {
   const prevLenRef = useRef(0);
 
   const sucursalId = ctx.sucursalId;
+
+  /**
+   * MODO OFFLINE — cuando no hay conexión con la API, el ticket deja de
+   * tocar el servidor (ni abrir borrador, ni autoguardar) y vive SOLO en esta
+   * pantalla hasta que se cobra: `cobrar()` lo manda a la cola local en vez
+   * de confirmarlo en línea (ver `CobroModal`). Única fuente de verdad —la
+   * misma que ya usa el cartel global `OfflineAlert`— así que los dos
+   * concuerdan siempre.
+   */
+  const { offline } = useSyncExternalStore(conectividad.subscribe, conectividad.estado, conectividad.estado);
+
   const permisosActual = usuarios.find((u) => u.id === ctx.usuarioId)?.permisos ?? [];
   const puedePresupuestar = permisosActual.includes('*') || permisosActual.includes('presupuestos');
   /*
@@ -634,11 +650,28 @@ export function PosPanel() {
    * listas disponibles: cambiar de cliente o cruzar un umbral se resuelve en
    * memoria, sin volver a la red.
    */
-  const { data: catalogoRaw, loading: cargandoCatalogo, error: errorCatalogo, reload: recargarCatalogo } = useResource(
+  const { data: catalogoVivo, loading: cargandoCatalogo, error: errorCatalogo, reload: recargarCatalogo } = useResource(
     `catalogo:${sucursalId}`,
     () => ventasApi.catalogo(sucursalId),
     { enabled: !!sucursalId },
   );
+
+  /**
+   * MODO OFFLINE — la última foto buena del catálogo, guardada en el propio
+   * dispositivo. Dos usos: respaldo si el pedido en vivo falló (sin ella, un
+   * F5 a mitad de un corte dejaría el POS sin nada para vender hasta que
+   * vuelva internet), y la fuente que se actualiza sola cada vez que SÍ hay
+   * una foto fresca — así la próxima vez que falte, la foto no es vieja.
+   */
+  const [snapshotCatalogo, setSnapshotCatalogo] = useState(null);
+  useEffect(() => {
+    if (sucursalId) leerSnapshot(sucursalId).then(setSnapshotCatalogo);
+  }, [sucursalId]);
+  useEffect(() => {
+    if (catalogoVivo && sucursalId) guardarSnapshot(sucursalId, catalogoVivo);
+  }, [catalogoVivo, sucursalId]);
+
+  const catalogoRaw = catalogoVivo ?? snapshotCatalogo;
   const catalogo = useMemo(() => catalogoRaw?.items ?? [], [catalogoRaw]);
   const listasCatalogo = useMemo(() => catalogoRaw?.listas ?? [], [catalogoRaw]);
 
@@ -911,7 +944,9 @@ export function PosPanel() {
    * petición por tecla. Al cambiar de pestaña se fuerza el guardado.
    */
   const guardarAhora = useCallback(async (id, estado, cliente) => {
-    if (!id) return;
+    // Offline no autoguarda: no hay servidor al que mandarle el PUT, y total
+    // el ticket va a viajar completo recién al cobrar (ver `cobrar`/`CobroModal`).
+    if (!id || offline) return;
     setGuardando(true);
     try {
       await ventasApi.guardarVenta(id, {
@@ -932,16 +967,16 @@ export function PosPanel() {
     } finally {
       setGuardando(false);
     }
-  }, [recargarAbiertas, toast, operadorId]);
+  }, [recargarAbiertas, toast, operadorId, offline]);
 
   useEffect(() => {
-    if (!activaId) return undefined;
+    if (!activaId || offline) return undefined;
     clearTimeout(guardadoRef.current);
     guardadoRef.current = setTimeout(() => guardarAhora(activaId, ticket, clienteActual), AUTOGUARDADO_MS);
     return () => clearTimeout(guardadoRef.current);
     // `clienteActual` se sigue por id para no reguardar en cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activaId, ticket, clienteActual?.id, guardarAhora]);
+  }, [activaId, ticket, clienteActual?.id, guardarAhora, offline]);
 
   /* ------------------------------ Navegación ------------------------------ */
 
@@ -982,6 +1017,24 @@ export function PosPanel() {
    * venta ya cerrada.
    */
   const abrirBorradorNuevo = useCallback(async () => {
+    /*
+     * OFFLINE: no hay servidor al que pedirle un borrador — el ticket nace y
+     * vive ACÁ, con un id local que solo esta pestaña conoce (nunca se manda
+     * tal cual: `cobrar()` arma el payload real recién al cerrar la venta).
+     * El prefijo `offline:` es lo único que lo distingue de un id numérico
+     * del servidor; nada más en el POS necesita saberlo.
+     */
+    if (offline) {
+      const idLocal = `offline:${crypto.randomUUID()}`;
+      dispatch({ tipo: 'limpiar' });
+      setClienteId(consumidorFinal?.id ?? null);
+      setActivaId(idLocal);
+      setUltimoKey(null);
+      setFlashTick(0);
+      abrirPestana(idLocal);
+      enfocarBuscador();
+      return;
+    }
     try {
       const borrador = await ventasApi.abrirVenta({
         clienteId: consumidorFinal?.id,
@@ -1002,7 +1055,7 @@ export function PosPanel() {
     } catch (e) {
       toast(e?.data?.message || 'No se pudo abrir una venta nueva.', 'err');
     }
-  }, [consumidorFinal, sucursalId, ctx.usuarioId, operadorId, abrirPestana, recargarAbiertas, enfocarBuscador, toast]);
+  }, [offline, consumidorFinal, sucursalId, ctx.usuarioId, operadorId, abrirPestana, recargarAbiertas, enfocarBuscador, toast]);
 
   const nuevaVenta = useCallback(async () => {
     clearTimeout(guardadoRef.current);
@@ -1108,8 +1161,17 @@ export function PosPanel() {
     setUltimoKey(null);
     setFlashTick(0);
     if (idCobrado) cerrarPestana(idCobrado);
-    recargarCatalogo();   // el stock cambió con la venta
-    recargarCaja();
+    /*
+     * Offline NO se recarga: el pedido fallaría igual (no hay con quién
+     * hablar) y, peor, `useResource` borra el último dato bueno que tenía en
+     * memoria ante un error — eso dejaría sin caja/catálogo cacheados a la
+     * PRÓXIMA venta offline de la misma visita. Se recarga de una sola vez
+     * cuando sincroniza (ver el sincronizador del paso siguiente).
+     */
+    if (!offline) {
+      recargarCatalogo();   // el stock cambió con la venta
+      recargarCaja();
+    }
 
     /*
      * Y ARRANCA LA SIGUIENTE VENTA SOLA.
@@ -1128,31 +1190,37 @@ export function PosPanel() {
      * puesto, no basura — y es uno solo, porque el siguiente cobro lo reusa.
      */
     abrirBorradorNuevo();
-  }, [cerrarPestana, recargarCatalogo, recargarCaja, abrirBorradorNuevo]);
+  }, [cerrarPestana, recargarCatalogo, recargarCaja, abrirBorradorNuevo, offline]);
 
   const cobrar = useCallback(() => {
     if (!puedeCobrar) {
       toast(problemas[0] || (!activaId ? 'Abrí una venta primero.' : 'No hay un turno de caja abierto.'), 'err');
       return;
     }
-    // Se fuerza el guardado antes de cobrar: el backend confirma lo GUARDADO.
-    clearTimeout(guardadoRef.current);
-    guardarAhora(activaId, ticket, clienteActual).then(() => {
-      openModal('cobro', {
-        ventaId: activaId,
-        totales,
-        clienteId: clienteActual.id,
-        cajaSesionId: caja?.id ?? null,
-        onCobrado: (venta, vuelto) => {
-          closeModal();
-          openModal('ventaEmitida', {
-            venta, vuelto, renglones: ticket.renglones,
-            onNuevoTicket: () => trasCobrar(venta.id),
-          });
-        },
-      });
+    const idActivo = activaId;
+    const abrirCobro = () => openModal('cobro', {
+      ventaId: idActivo,
+      // Offline: `CobroModal` arma el payload DIRECTO del ticket en memoria
+      // (no hay borrador en el servidor del cual partir) — ver ahí.
+      offline,
+      ticket,
+      sucursalId,
+      totales,
+      clienteId: clienteActual.id,
+      cajaSesionId: caja?.id ?? null,
+      onCobrado: (venta, vuelto) => {
+        closeModal();
+        openModal('ventaEmitida', {
+          venta, vuelto, renglones: ticket.renglones,
+          onNuevoTicket: () => trasCobrar(idActivo),
+        });
+      },
     });
-  }, [puedeCobrar, problemas, activaId, ticket, clienteActual, totales, caja, guardarAhora, openModal, closeModal, trasCobrar, toast]);
+    if (offline) { abrirCobro(); return; }
+    // Online: se fuerza el guardado antes de cobrar — el backend confirma lo GUARDADO.
+    clearTimeout(guardadoRef.current);
+    guardarAhora(activaId, ticket, clienteActual).then(abrirCobro);
+  }, [puedeCobrar, problemas, activaId, ticket, clienteActual, totales, caja, sucursalId, offline, guardarAhora, openModal, closeModal, trasCobrar, toast]);
 
   const cambiarCliente = (id) => {
     const anterior = clienteActual?.descuento || 0;
@@ -1296,7 +1364,7 @@ export function PosPanel() {
           </div>
         )}
 
-        {errorCatalogo && (
+        {errorCatalogo && !catalogoRaw && (
           <div className={cx(s.callout, s.warn)} style={{ margin: 0 }}>
             No se pudo cargar el catálogo: <strong>{errorCatalogo}</strong>
           </div>
@@ -1580,6 +1648,7 @@ export function PosPanel() {
             <Btn onClick={actualizarPrecios} disabled={cargandoCatalogo}>
               {cargandoCatalogo ? 'Cargando…' : 'Actualizar precios'}
             </Btn>
+            <AyudaButton categoriaId="vender" />
           </div>
         }
       />
@@ -1638,7 +1707,7 @@ export function PosPanel() {
       {/* ---------------- Pestañas ---------------- */}
       {barraPestanas(false)}
 
-      {errorCatalogo && (
+      {errorCatalogo && !catalogoRaw && (
         <div className={cx(s.callout, s.warn)}>No se pudo cargar el catálogo: <strong>{errorCatalogo}</strong></div>
       )}
 

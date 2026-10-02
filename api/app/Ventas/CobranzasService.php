@@ -70,6 +70,45 @@ class CobranzasService
             'imputaciones' => $imput->map(fn ($i) => [...Fila::camel($i), 'etiqueta' => VentasService::etiquetaVenta($i)])->all()];
     }
 
+    /**
+     * Resumen para el Dashboard: cuánto falta cobrar en total y de quién,
+     * ordenado por lo que más debe primero.
+     *
+     * Reusa `VentasService::cuenta()` cliente por cliente en vez de recalcular
+     * la deuda con otra consulta: el saldo que corta el límite de crédito y el
+     * que ve el cajero en la ficha del cliente salen de ESA misma función —
+     * armar un segundo cálculo acá sería la receta para que un día diga un
+     * número distinto. El universo de candidatos (clientes con al menos una
+     * venta en cuenta corriente pendiente) es chico en la práctica, así que el
+     * costo de recorrerlo uno por uno no pesa frente a la certeza de que
+     * cierra con el resto del sistema.
+     */
+    public function pendientesResumen(int $top = 5): array
+    {
+        $clienteIds = DB::table('ventas')
+            ->where('estado', 'confirmada')->where('condicion_pago', 'cuenta_corriente')
+            ->where('tipo', 'not like', 'nota_credito%')
+            ->distinct()->pluck('cliente_id');
+
+        $filas = [];
+        $saldoTotal = 0.0;
+        foreach ($clienteIds as $clienteId) {
+            $cuenta = $this->ventas->cuenta((int) $clienteId);
+            if ($cuenta['saldo'] <= self::EPS) {
+                continue;
+            }
+            $saldoTotal += $cuenta['saldo'];
+            $filas[] = ['clienteId' => (int) $clienteId, 'clienteNombre' => $this->cli->get((int) $clienteId)->nombre, 'saldo' => $cuenta['saldo']];
+        }
+        usort($filas, fn ($a, $b) => $b['saldo'] <=> $a['saldo']);
+
+        return [
+            'clientes' => count($filas),
+            'saldo' => Pricing::money($saldoTotal),
+            'masDeuda' => array_slice($filas, 0, $top),
+        ];
+    }
+
     /** Saldo real de cada venta, leído dentro de la transacción con la fila bloqueada. */
     private function saldosEnTx(array $ventaIds): array
     {

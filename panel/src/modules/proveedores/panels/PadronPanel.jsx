@@ -2,6 +2,25 @@ import { useMemo, useState } from 'react';
 import { useProveedores } from '../context/ProveedoresContext.jsx';
 import { errorMsg, provApi, MEDIOS_HABITUALES, CONDICIONES_COMPRA } from '../services/proveedores.api.js';
 import { Btn, PanelHead, Pill, Table, usePaginado, s } from '../components/ui.jsx';
+import { ExportarMenu } from '@modules/productos/components/ExportarMenu.jsx';
+
+/** Lo que sale en el Excel/PDF: la ficha completa del padrón, sin acciones ni el tablero de migración (es interno). */
+const COLUMNAS_EXPORT = [
+  { h: 'Proveedor', tipo: 'texto', ancho: 34 },
+  { h: 'CUIT', tipo: 'texto', ancho: 16 },
+  { h: 'Condición IVA', tipo: 'texto', ancho: 22 },
+  { h: 'Emite', tipo: 'texto', ancho: 14 },
+  { h: 'Cómo cobra', tipo: 'texto', ancho: 20 },
+  { h: 'Modo de cuenta', tipo: 'texto', ancho: 16 },
+  { h: 'Mercadería', tipo: 'texto', ancho: 12 },
+  { h: 'Gastos', tipo: 'texto', ancho: 10 },
+  { h: 'Teléfono', tipo: 'texto', ancho: 18 },
+  { h: 'Email', tipo: 'texto', ancho: 28 },
+  { h: 'Dirección', tipo: 'texto', ancho: 30 },
+];
+
+/** 'responsable_inscripto' → 'Responsable inscripto'. */
+const legible = (v) => (v ? String(v).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '');
 
 /**
  * EL PADRÓN — la ficha única del sistema (0068). Los ABM chicos que vivían en
@@ -48,6 +67,17 @@ export function PadronPanel() {
 
   const pendientes = proveedores.filter((p) => !p.migracionLista).length;
 
+  /** Todos los proveedores filtrados (todas las páginas). */
+  const filasParaExportar = () => filas.map((p) => [
+    p.nombre, p.cuit || '', legible(p.condicionIva),
+    CONDICIONES_COMPRA[p.condicionCompra] ?? '',
+    p.medioHabitual ? `${MEDIOS_HABITUALES[p.medioHabitual] ?? p.medioHabitual}${p.diasPago ? ` ${p.diasPago}` : ''}` : '',
+    p.modoCuenta === 'libre' ? 'Libre' : 'Por facturas',
+    p.proveeMercaderia ? 'Sí' : 'No', p.proveeGastos ? 'Sí' : 'No',
+    p.telefono || '', p.email || '', p.direccion || '',
+  ]);
+  const filtrosTexto = [buscar.trim() && `Búsqueda: ${buscar.trim()}`, soloPendientes && 'Solo migración pendiente'].filter(Boolean).join(' · ');
+
   // Paginado de servidor no hace falta: el padrón entero ya viene en memoria.
   // Los filtros van en la clave para volver a la página 1 al cambiarlos.
   const pag = usePaginado(filas, 'padron', `${buscar}|${soloPendientes}`);
@@ -73,6 +103,14 @@ export function PadronPanel() {
           <input type="checkbox" checked={soloPendientes} onChange={(e) => setSoloPendientes(e.target.checked)} />
           Solo migración pendiente ({pendientes})
         </label>
+        <ExportarMenu
+          archivo="proveedores"
+          titulo="Proveedores"
+          columnas={COLUMNAS_EXPORT}
+          obtenerFilas={filasParaExportar}
+          filtros={filtrosTexto}
+          disabled={!filas.length}
+        />
       </div>
       <Table
         cols={[

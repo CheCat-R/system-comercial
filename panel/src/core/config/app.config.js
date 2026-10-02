@@ -8,7 +8,16 @@ import { env } from './env.js';
  * from env), so components read config instead of hard-coding values.
  */
 export const appConfig = Object.freeze({
-  name: env.appName,
+  /*
+   * LA MARCA del producto, fija en el código: no hay pantalla ni variable de
+   * entorno que la cambie (lo que SÍ edita el cliente es el nombre de SU
+   * empresa, en Sistema > Empresa — eso es lo que sale en tickets y facturas).
+   *  - `name`: las siglas, que son lo que se ve (menú, login, pestaña).
+   *  - `fullName`: lo que significan, en minúscula y chico — solo para que
+   *    el cliente sepa qué quiere decir CCS.
+   */
+  name: 'CCS',
+  fullName: 'checat commerce systems',
   version: '0.1.0',
   company: 'CheCAT',
 

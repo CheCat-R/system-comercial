@@ -24,6 +24,17 @@ return [
         'espera_minutos' => 5, // cuánto dura el castigo y la ventana de acumulación
     ],
 
+    /*
+     * Copia diaria automática de la base (planes Pymes y Corporativo).
+     * `carpeta`: vacía = `storage/app/respaldos` (fuera de `public/`).
+     * `retencion`: cuántas copias se conservan; las más viejas se borran.
+     * Es una copia EN EL MISMO SERVIDOR: no reemplaza a la descarga manual.
+     */
+    'respaldos' => [
+        'carpeta' => env('RESPALDOS_CARPETA'),
+        'retencion' => (int) env('RESPALDOS_RETENCION', 14),
+    ],
+
     /** Largo mínimo de contraseña para contraseñas NUEVAS. */
     'min_password' => 8,
 

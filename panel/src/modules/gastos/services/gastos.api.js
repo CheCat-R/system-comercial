@@ -90,6 +90,9 @@ export const gastosApi = {
   crearProveedor: (data) => httpClient.post('/proveedores', data),
   editarProveedor: (id, data) => httpClient.patch(`/proveedores/${id}`, data),
 
-  /* Turnos de caja abiertos: para poder pagar en efectivo desde el módulo */
-  cajaActual: (sucursalId) => httpClient.get(`/caja/actual/${sucursalId}`),
+  /* Turnos de caja abiertos: para poder pagar en efectivo desde el módulo.
+   * La API envuelve en `{ turno }` (un `null` pelado se confundiría con el
+   * sobre al serializar) — se desenvuelve acá, antes de que llegue a los
+   * modales, que esperan que `caja` SEA el turno. */
+  cajaActual: (sucursalId) => httpClient.get(`/caja/actual/${sucursalId}`).then((r) => r.turno),
 };

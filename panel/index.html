@@ -6,11 +6,36 @@
     <meta name="theme-color" content="#121826" />
     <meta
       name="description"
-      content="CRM/ERP modular para comercios — plataforma escalable construida como framework."
+      content="CCS (checat commerce systems) — sistema de gestión para comercios: ventas, stock, compras y caja."
     />
-    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
-    <title>CheCAT</title>
+    <!-- Instalable en iOS (Safari ignora el manifest para esto). -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="CCS">
+
+    <title>CCS · checat commerce systems</title>
+
+    <!--
+      Captura "instalar app" ACÁ, antes que nada — Chrome dispara
+      `beforeinstallprompt` apenas evalúa manifest + service worker, que
+      puede ser antes de que React termine de montar todo el árbol (login,
+      permisos, plan, layout…). Un listener puesto adentro de un componente
+      llega tarde: el evento ya pasó y no vuelve. Este script plano (NO
+      módulo) corre primero, synchrono, antes que cualquier JS de la app.
+    -->
+    <script>
+      window.__pwaInstallEvent = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__pwaInstallEvent = e;
+        window.dispatchEvent(new CustomEvent('pwa-install-ready'));
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

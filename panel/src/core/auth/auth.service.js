@@ -81,7 +81,7 @@ export const authService = {
     }
   },
 
-  /** credentials: { usuarioId, password, sucursalId } */
+  /** credentials: { usuario (el nombre, escrito), password, sucursalId } */
   async login(credentials) {
     /*
      * EL TOKEN DEL EQUIPO VIAJA SIEMPRE, y se agrega acá y no en la pantalla

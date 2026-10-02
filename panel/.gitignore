@@ -31,3 +31,6 @@ Thumbs.db
 *.local
 coverage/
 tmp/
+
+# Salida del service worker en desarrollo (vite-plugin-pwa devOptions)
+dev-dist/

@@ -25,7 +25,7 @@ class PerfilTest extends TestCase
         // Lo echó de TODAS sus sesiones, esta incluida.
         $this->conToken($token)->getJson('/api/auth/yo')->assertStatus(401);
         // La vieja ya no sirve; la nueva sí.
-        $this->postJson('/api/auth/login', ['usuarioId' => $lucas->id, 'password' => 'clave1234'])->assertStatus(401);
+        $this->postJson('/api/auth/login', ['usuario' => $lucas->nombre, 'password' => 'clave1234'])->assertStatus(401);
         $this->loguear($lucas, 'nueva1234');
     }
 

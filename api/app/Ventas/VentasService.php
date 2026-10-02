@@ -761,7 +761,7 @@ class VentasService
         $puntoVentaFinal = $fiscal['puntoVenta'] ?? $puntoVenta;
         $vencimientoPago = ($condicionPago === 'cuenta_corriente' && $cliente->dias_plazo > 0) ? $fecha->copy()->addDays($cliente->dias_plazo) : null;
 
-        $id = DB::transaction(function () use ($cab, $tot, $pagos, $fiscal, $tipoFinal, $puntoVentaFinal, $vencimientoPago, $turno, $dto, $sucursalId, $cliente, $autor, $config) {
+        $id = DB::transaction(function () use ($cab, $tot, $pagos, $fiscal, $tipoFinal, $puntoVentaFinal, $vencimientoPago, $turno, $dto, $sucursalId, $cliente, $autor, $config, $opciones) {
             $numero = $fiscal['cbteNro'] ?? $this->siguienteNumero($tipoFinal, $puntoVentaFinal);
             $id = DB::table('ventas')->insertGetId([...$cab, 'tipo' => $tipoFinal, 'punto_venta' => $puntoVentaFinal, 'numero' => $numero, 'estado' => 'confirmada',
                 'caja_sesion_id' => $turno?->id, 'vencimiento_pago' => $vencimientoPago, 'cae' => $fiscal['cae'], 'cae_vencimiento' => $fiscal['caeVencimiento'],
@@ -770,13 +770,111 @@ class VentasService
             if (! empty($dto['presupuestoId'])) {
                 $this->cerrarPresupuesto((int) $dto['presupuestoId'], $id, (int) $sucursalId, $cliente->id, $autor);
             }
-            $this->inv->egresarStockItems(['sucursalId' => (int) $sucursalId, 'usuarioId' => $autor, 'permitirNegativo' => ! empty($config['permitirStockNegativo']),
+            // `forzarStockNegativo`: el lote offline (ver `sincronizarOffline()`) lo
+            // prende SIEMPRE, sin importar la config general — la venta YA pasó en el
+            // mostrador; lo único que queda es que el stock refleje la realidad,
+            // aunque quede en negativo, en vez de rechazar algo que ya se cobró.
+            $this->inv->egresarStockItems(['sucursalId' => (int) $sucursalId, 'usuarioId' => $autor,
+                'permitirNegativo' => ! empty($config['permitirStockNegativo']) || ! empty($opciones['forzarStockNegativo']),
                 'descripcion' => 'Venta '.$puntoVentaFinal.'-'.str_pad((string) $numero, 8, '0', STR_PAD_LEFT).' · '.$cliente->nombre, 'items' => $this->itemsGuardados($id)]);
 
             return $id;
         });
 
         return $this->get($id);
+    }
+
+    /**
+     * LOTE OFFLINE — cada fila es una venta que el POS armó y cobró SIN
+     * CONEXIÓN; esto corre recién cuando el navegador recupera la conexión.
+     * No reinventa nada: cada fila pasa por el MISMO `create()` de arriba
+     * (el camino "confirmada de una"), fila por fila, en su propia
+     * transacción — así una que falla no tira abajo a las demás.
+     *
+     * Dos cuidados que no tiene el camino normal:
+     *  · IDEMPOTENCIA por `idLocal`: si el lote se reintenta (se cortó la
+     *    respuesta a mitad de camino y el navegador manda las mismas filas
+     *    de nuevo), la que ya se proceso se devuelve tal cual —
+     *    `idempotencia_offline` tiene índice único, así que ni una carrera
+     *    entre dos reintentos simultáneos la duplicaría.
+     *  · SOLO EFECTIVO: es la regla de negocio del modo offline (cuenta
+     *    corriente necesitaría el saldo real del cliente, que pudo quedar
+     *    desactualizado mientras no había conexión) — se exige acá, no solo
+     *    en el POS, porque esta es la puerta de entrada real.
+     *
+     * Devuelve, por fila, si se pudo o no (y por qué no), más la lista de
+     * stock que quedó negativo en la sucursal — la venta YA pasó en el
+     * mostrador, así que nunca se rechaza por falta de stock (ver
+     * `forzarStockNegativo` en `create()`): se avisa para revisar después,
+     * no se bloquea algo que ya es un hecho.
+     */
+    public function sincronizarOffline(array $ventas, array $opciones): array
+    {
+        $resultados = [];
+        $sucursalesTocadas = [];
+
+        foreach ($ventas as $v) {
+            $idLocal = (string) $v['idLocal'];
+            $existente = DB::table('ventas')->where('idempotencia_offline', $idLocal)->first();
+            if ($existente) {
+                // Por si el lote anterior creó la venta pero se cortó antes de descartar el borrador.
+                $this->descartarBorradorDeOffline($v, $opciones);
+                $resultados[] = ['idLocal' => $idLocal, 'ok' => true, 'yaExistia' => true, 'ventaId' => $existente->id, 'numero' => $existente->numero];
+                $sucursalesTocadas[(int) $existente->sucursal_id] = true;
+
+                continue;
+            }
+
+            $medios = array_unique(array_map(fn ($p) => $p['medio'] ?? '', $v['pagos'] ?? []));
+            if ($medios !== ['efectivo']) {
+                $resultados[] = ['idLocal' => $idLocal, 'ok' => false, 'motivo' => 'El modo offline solo sincroniza ventas cobradas en efectivo.'];
+
+                continue;
+            }
+
+            try {
+                $venta = $this->create([...$v, 'estado' => 'confirmada', 'condicionPago' => 'contado'], [...$opciones, 'forzarStockNegativo' => true]);
+                DB::table('ventas')->where('id', $venta['id'])->update(['idempotencia_offline' => $idLocal]);
+                $this->descartarBorradorDeOffline($v, $opciones);
+                $resultados[] = ['idLocal' => $idLocal, 'ok' => true, 'yaExistia' => false, 'ventaId' => $venta['id'], 'numero' => $venta['numero']];
+                $sucursalesTocadas[(int) $venta['sucursalId']] = true;
+            } catch (ErrorDeNegocio $e) {
+                $resultados[] = ['idLocal' => $idLocal, 'ok' => false, 'motivo' => $e->getMessage()];
+            }
+        }
+
+        $stockNegativo = $sucursalesTocadas
+            ? DB::table('stock')->join('productos', 'productos.id', '=', 'stock.producto_id')
+                ->whereIn('stock.sucursal_id', array_keys($sucursalesTocadas))
+                ->where('stock.estado', 'disponible')->where('stock.cantidad', '<', 0)
+                ->select('productos.nombre as producto', 'stock.sucursal_id as sucursalId', 'stock.cantidad as cantidad')
+                ->get()->all()
+            : [];
+
+        return ['resultados' => $resultados, 'stockNegativo' => $stockNegativo];
+    }
+
+    /**
+     * El ticket que se cobró offline pudo haber nacido con conexión: en el
+     * servidor quedó un BORRADOR con el mismo contenido. Ya se cobró en el
+     * mostrador, así que se descarta — si no, seguiría abierto en "Ventas en
+     * curso" y cobrarlo de nuevo duplicaría la venta. Solo toca borradores
+     * (nunca una venta emitida) y respeta el candado de sucursal.
+     */
+    private function descartarBorradorDeOffline(array $fila, array $opciones): void
+    {
+        $id = (int) ($fila['borradorId'] ?? 0);
+        if ($id <= 0) {
+            return;
+        }
+        $b = DB::table('ventas')->where('id', $id)->where('estado', 'borrador')->first();
+        if (! $b) {
+            return;
+        }
+        if (! empty($opciones['soloSuSucursal']) && (int) $b->sucursal_id !== (int) $opciones['soloSuSucursal']) {
+            return;
+        }
+        DB::table('ventas')->where('id', $id)->delete();
     }
 
     /** Venta que CIERRA un presupuesto: reclama el estado y libera la reserva ANTES del egreso. */

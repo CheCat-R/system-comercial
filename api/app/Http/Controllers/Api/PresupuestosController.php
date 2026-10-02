@@ -33,6 +33,13 @@ class PresupuestosController extends Controller
         return response()->json($this->svc->ordenesPendientes());
     }
 
+    public function pendientesResumen(Request $request, Sesion $sesion): JsonResponse
+    {
+        $sucursalId = $sesion->esJefe() ? $request->query('sucursalId') : $sesion->sucursalId;
+
+        return response()->json($this->svc->pendientesResumen($sucursalId ? (int) $sucursalId : null));
+    }
+
     public function show(int $id, Sesion $sesion): JsonResponse
     {
         $p = $this->svc->get($id);

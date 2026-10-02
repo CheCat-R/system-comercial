@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { cx } from '@shared/utils/classNames.js';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { useVentas } from '../context/VentasContext.jsx';
 import { ventasApi, errorMsg } from '../services/ventas.api.js';
 import { TIPOS_OFERTA, MEDIOS_PAGO } from '../domain/constants.js';
@@ -156,7 +157,12 @@ export function OfertasPanel() {
       <PanelHead
         title="Ofertas"
         desc="Las mecánicas por cantidad (3×2, 2ª unidad, pack, combo) se aplican solas en la caja; la de monto del ticket se sugiere y el cajero la aplica con un clic. Por renglón gana UNA sola: la de mayor beneficio."
-        actions={<Btn variant="btn-primary" onClick={() => abrirForm(null)}>+ Oferta</Btn>}
+        actions={(
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Btn variant="btn-primary" onClick={() => abrirForm(null)}>+ Oferta</Btn>
+            <AyudaButton categoriaId="ofertas" />
+          </div>
+        )}
       />
 
       {/* Lo único urgente que esta pantalla puede resolver: apagar una oferta

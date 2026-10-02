@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { useVentas } from '../context/VentasContext.jsx';
 import { useResource } from '../hooks/useResource.js';
 import { ventasApi } from '../services/ventas.api.js';
@@ -71,11 +72,14 @@ export function CobranzasPanel() {
       <PanelHead
         title="Cobranzas"
         desc="Recibos de cobro a clientes. Cada uno registra los medios de pago y a qué comprobantes se imputa."
-        actions={
-          <Btn variant="btn-primary" onClick={() => openModal('cobranzaForm', { onChange: reload })}>
-            + Nueva cobranza
-          </Btn>
-        }
+        actions={(
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Btn variant="btn-primary" onClick={() => openModal('cobranzaForm', { onChange: reload })}>
+              + Nueva cobranza
+            </Btn>
+            <AyudaButton categoriaId="cobranzas" />
+          </div>
+        )}
       />
 
       <div className={s.stats}>

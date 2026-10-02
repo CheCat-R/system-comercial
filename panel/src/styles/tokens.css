@@ -27,6 +27,11 @@
    ========================================================================== */
 
 :root {
+  /* ----- Marca: panel del login (siempre oscuro, igual que el menú lateral) ----- */
+  --crm-color-brand-panel: #121826;
+  --crm-color-brand-ink: #f2f2f2;
+  --crm-color-brand-ink-muted: #9aa7b8;
+
   /* ----- Spacing scale (4px base) ----- */
   --crm-space-0: 0;
   --crm-space-1: 4px;

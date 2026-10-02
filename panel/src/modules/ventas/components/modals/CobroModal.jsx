@@ -4,9 +4,12 @@ import { useVentas } from '../../context/VentasContext.jsx';
 import { useResource } from '../../hooks/useResource.js';
 import { ventasApi } from '../../services/ventas.api.js';
 import { MEDIOS_PAGO, nroComprobante } from '../../domain/constants.js';
-import { r2 } from '../../domain/pos.js';
+import {
+  calcularRenglon, descuentosParaApi, extrasParaApi, itemsParaApi, r2, totalesTicket,
+} from '../../domain/pos.js';
 import { Table, Btn, Di, ModalShell, VentaTag, money, fmtFechaHora, s } from '../ui.jsx';
 import { configImpresion, imprimirVenta } from '@core/services/imprimir.js';
+import { agregarVentaPendiente } from '@core/offline/colaVentas.js';
 import p from '../../styles/Pos.module.css';
 
 /**
@@ -35,7 +38,9 @@ import p from '../../styles/Pos.module.css';
  * tiene cuenta corriente habilitada — si no, toda venta es al contado y no hay
  * nada que elegir. Los medios de pago arrancan en efectivo por el total.
  */
-export function CobroModal({ ventaId, totales, clienteId, cajaSesionId, onCobrado }) {
+export function CobroModal({
+  ventaId, totales, clienteId, cajaSesionId, onCobrado, offline = false, ticket = null, sucursalId = null,
+}) {
   const { getCliente, config, ctx, closeModal, toast, operadorId } = useVentas();
   const cliente = getCliente(clienteId);
 
@@ -92,7 +97,9 @@ export function CobroModal({ ventaId, totales, clienteId, cajaSesionId, onCobrad
     return () => clearTimeout(t);
   }, []);
 
-  const ctaCteDisponible = !!config.ctaCteHabilitada && !!cliente?.ctaCteHabilitada;
+  // Offline: SOLO efectivo — cuenta corriente necesitaría el saldo real del
+  // cliente, que puede haber quedado desactualizado mientras no hubo conexión.
+  const ctaCteDisponible = !offline && !!config.ctaCteHabilitada && !!cliente?.ctaCteHabilitada;
 
   // El crédito se consulta solo si el camino de cuenta corriente está en juego.
   const { data: cuenta } = useResource(
@@ -102,9 +109,10 @@ export function CobroModal({ ventaId, totales, clienteId, cajaSesionId, onCobrad
   );
 
   const medios = useMemo(() => {
+    if (offline) return ['efectivo'];
     const habilitados = (config.mediosPago ?? []).filter((m) => MEDIOS_PAGO[m]);
     return habilitados.length ? habilitados : Object.keys(MEDIOS_PAGO);
-  }, [config.mediosPago]);
+  }, [config.mediosPago, offline]);
 
   const pagado = r2(pagos.reduce((a, x) => a + (Number(x.importe) || 0), 0));
   const faltante = r2(totalCobrar - pagado);
@@ -116,11 +124,12 @@ export function CobroModal({ ventaId, totales, clienteId, cajaSesionId, onCobrad
    * La API lo revalida al confirmar; acá se avisa ANTES de apretar.
    */
   const medioExigeFactura = useMemo(() => {
-    if (condicionPago !== 'contado') return null;
+    // Offline no tiene F8: nunca puede bloquear Liquidar por esto.
+    if (offline || condicionPago !== 'contado') return null;
     const exigen = config.mediosFacturar ?? [];
     const usado = pagos.find((x) => Number(x.importe) > 0 && exigen.includes(x.medio));
     return usado ? (MEDIOS_PAGO[usado.medio] ?? usado.medio) : null;
-  }, [pagos, condicionPago, config.mediosFacturar]);
+  }, [pagos, condicionPago, config.mediosFacturar, offline]);
 
   const efectivoAsignado = r2(
     pagos.filter((x) => x.medio === 'efectivo').reduce((a, x) => a + (Number(x.importe) || 0), 0),
@@ -163,8 +172,59 @@ export function CobroModal({ ventaId, totales, clienteId, cajaSesionId, onCobrad
 
   /* ------------------------------ Confirmar ------------------------------ */
 
+  /**
+   * OFFLINE: no hay borrador en el servidor del cual partir — se arma la
+   * venta DIRECTO de lo que hay en pantalla (`ticket`, el mismo estado que ya
+   * usa el ticket en curso) y se guarda en la cola local
+   * (`agregarVentaPendiente`). Nada de ARCA ni numeración acá: eso lo hace el
+   * servidor recién al sincronizar (`VentasService::sincronizarOffline`), así
+   * que lo que sale es un TICKET PROVISORIO — el cajero lo ve marcado como tal
+   * y el número real llega después, con la sincronización.
+   */
+  const confirmarOffline = async () => {
+    if (Math.abs(faltante) > 0.01) {
+      toast(faltante > 0 ? `Faltan ${money(faltante)}.` : `Sobran ${money(-faltante)}.`, 'err');
+      return;
+    }
+    setEnviando(true);
+    try {
+      const totalesPago = totalesTicket(ticket.renglones, ticket.extras);
+      // Un ticket que ya existía en el servidor como borrador (se abrió con
+      // conexión y el corte llegó después) viaja con su id: al sincronizar, el
+      // servidor lo descarta, así no queda abierto un duplicado de lo ya cobrado.
+      // Un ticket nacido offline (`offline:<uuid>`) no tiene borrador allá.
+      const borradorId = /^\d+$/.test(String(ventaId)) ? Number(ventaId) : undefined;
+      const idLocal = await agregarVentaPendiente({
+        borradorId,
+        sucursalId,
+        clienteId: cliente?.id,
+        items: itemsParaApi(ticket.renglones),
+        extras: extrasParaApi(ticket.extras),
+        descuentos: descuentosParaApi(ticket),
+        observaciones,
+        pagos: [{ medio: 'efectivo', importe: totalCobrar }],
+      });
+      const ventaLocal = {
+        id: idLocal, offline: true, tipo: 'ticket', numero: null, puntoVenta: null,
+        clienteId: cliente?.id, condicionPago: 'contado',
+        subtotalNeto: totalesPago.neto, ivaTotal: totalesPago.iva, total: totalCobrar,
+        items: ticket.renglones.map((r, i) => ({
+          id: r.uid ?? i, productoId: r.productoId, presentacionId: r.presentacionId ?? null,
+          cantidad: r.cantidad, precioUnitario: r.precioUnitario, subtotal: calcularRenglon(r).neto,
+        })),
+        extras: (ticket.extras ?? []).map((e, i) => ({ id: e.uid ?? i, concepto: e.concepto, importe: e.importe })),
+      };
+      onCobrado(ventaLocal, vuelto && vuelto > 0 ? vuelto : 0);
+    } catch {
+      toast('No se pudo guardar la venta en este dispositivo. Probá de nuevo.', 'err');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
   /** `tipo`: 'ticket' liquida, 'factura' emite comprobante fiscal. */
   const confirmar = async (tipo) => {
+    if (offline) { await confirmarOffline(); return; }
     if (tipo === 'ticket' && condicionPago !== 'contado') {
       toast('Liquidar es al contado. Para cuenta corriente, facturá (F8).', 'err');
       return;
@@ -309,7 +369,9 @@ export function CobroModal({ ventaId, totales, clienteId, cajaSesionId, onCobrad
     ? !(excedeCredito && config.ctaCteBloquearSuperado)
     : Math.abs(faltante) <= 0.01;
   const puedeLiquidar = pagosOk && condicionPago === 'contado' && !medioExigeFactura && !enviando;
-  const puedeFacturar = pagosOk && !enviando;
+  // Offline no factura: no hay ARCA ni numeración posible sin servidor — el
+  // único camino es el ticket provisorio (Liquidar).
+  const puedeFacturar = !offline && pagosOk && !enviando;
 
   /* ------------------------------ Atajos ------------------------------ */
   useEffect(() => {
@@ -331,13 +393,14 @@ export function CobroModal({ ventaId, totales, clienteId, cajaSesionId, onCobrad
         { texto: 'Cancelar', clase: 'btn-ghost', onClick: closeModal },
         // Los botones nunca son un no-op silencioso: si no se puede cerrar,
         // `confirmar` avisa POR QUÉ (falta plata, es cta. cte., excede crédito).
-        {
+        // Offline no tiene "Facturar": sin servidor no hay ARCA ni numeración.
+        ...(offline ? [] : [{
           texto: enviando ? 'Registrando…' : 'Facturar · F8',
           clase: puedeFacturar ? 'btn-ingreso' : 'btn-ghost',
           onClick: () => confirmar('factura'),
-        },
+        }]),
         {
-          texto: enviando ? 'Registrando…' : `Liquidar ${money(totalCobrar)} · F10`,
+          texto: enviando ? 'Registrando…' : `${offline ? 'Cobrar (provisorio)' : 'Liquidar'} ${money(totalCobrar)} · F10`,
           clase: puedeLiquidar ? 'btn-primary' : 'btn-ghost',
           onClick: () => confirmar('ticket'),
         },
@@ -347,6 +410,13 @@ export function CobroModal({ ventaId, totales, clienteId, cajaSesionId, onCobrad
         <span className={p.cobroTotalLabel}>Total</span>
         <span className={p.cobroTotalValor}>{money(totalCobrar)}</span>
       </div>
+
+      {offline && (
+        <div className={cx(s.callout, s.warn)} style={{ marginBottom: 'var(--crm-space-3)' }}>
+          Sin conexión: sale como <strong>ticket provisorio</strong>, solo en efectivo. Se factura
+          solo cuando vuelva internet y se sincronice.
+        </div>
+      )}
 
       {/* EL REDONDEO, pegado al total porque ES del total: los números redondos
           alcanzables con hasta $100 de más, a un clic. Aplicado, se dice cuánto
@@ -517,7 +587,7 @@ export function VentaEmitidaModal({ venta, vuelto = 0, renglones = [], onNuevoTi
 
   return (
     <ModalShell
-      title="Venta registrada"
+      title={venta.offline ? 'Ticket provisorio' : 'Venta registrada'}
       wide
       onClose={cerrar}
       footer={[
@@ -525,6 +595,13 @@ export function VentaEmitidaModal({ venta, vuelto = 0, renglones = [], onNuevoTi
         { texto: 'Nuevo ticket', clase: 'btn-primary', onClick: cerrar },
       ]}
     >
+      {venta.offline && (
+        <div className={cx(s.callout, s.warn)} style={{ marginBottom: 'var(--crm-space-4)' }}>
+          Se guardó en este dispositivo — todavía no tiene número real ni factura. Se sincroniza
+          solo apenas vuelva la conexión.
+        </div>
+      )}
+
       {vuelto > 0 && (
         <div className={p.vuelto} style={{ marginBottom: 'var(--crm-space-4)' }}>
           <span>Vuelto a entregar</span>
@@ -533,7 +610,11 @@ export function VentaEmitidaModal({ venta, vuelto = 0, renglones = [], onNuevoTi
       )}
 
       <div className={s['detalle-grid']}>
-        <Di label="Comprobante"><VentaTag tipo={venta.tipo} /> <span className={s.mono}>{nroComprobante(venta)}</span></Di>
+        <Di label="Comprobante">
+          {venta.offline
+            ? <strong>Provisorio — pendiente de sincronizar</strong>
+            : <><VentaTag tipo={venta.tipo} /> <span className={s.mono}>{nroComprobante(venta)}</span></>}
+        </Di>
         <Di label="Cliente">{cliente?.nombre || '—'}</Di>
         <Di label="Condición">{venta.condicionPago === 'contado' ? 'Contado' : 'Cuenta corriente'}</Di>
       </div>

@@ -25,6 +25,7 @@ export function ComprasPage() {
       <InventoryShell
         title="Compras"
         subtitle="Catálogo de productos, ingresos de mercadería y existencias"
+        ayudaCategoriaId="compras"
       />
     </ProductosProvider>
   );

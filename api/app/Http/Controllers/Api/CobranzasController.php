@@ -31,6 +31,11 @@ class CobranzasController extends Controller
         return response()->json($this->svc->get($id));
     }
 
+    public function pendientesResumen(): JsonResponse
+    {
+        return response()->json($this->svc->pendientesResumen());
+    }
+
     public function store(GuardarCobranzaRequest $request, Sesion $sesion): JsonResponse
     {
         $d = $request->validated();

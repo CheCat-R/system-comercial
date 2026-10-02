@@ -24,6 +24,7 @@ export function ProveedoresPage() {
       <ProveedoresShell
         title="Proveedores"
         subtitle="Pedidos, cuentas corrientes, echeqs y estados de cuenta"
+        ayudaCategoriaId="proveedores"
       />
     </ProveedoresProvider>
   );

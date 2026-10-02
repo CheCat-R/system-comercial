@@ -149,8 +149,10 @@ export const ventasApi = {
   volverRelevo: (operadorNombre, cajaSesionId) =>
     httpClient.post('/relevos/volver', { operadorNombre, cajaSesionId }),
 
-  /* Caja */
-  cajaActual: (sucursalId) => httpClient.get(`/caja/actual/${sucursalId}`),
+  /* Caja. La API envuelve en `{ turno }` para que un `null` no se confunda
+   * con "no hay turno" al serializar — acá se desenvuelve, porque todo el
+   * panel espera que `caja` SEA el turno (o null), no el sobre. */
+  cajaActual: (sucursalId) => httpClient.get(`/caja/actual/${sucursalId}`).then((r) => r.turno),
   cajaTurnos: (filtros) => httpClient.get(`/caja${qs(filtros)}`),
   cajaArqueo: (id) => httpClient.get(`/caja/${id}/arqueo`),
   abrirCaja: (data) => httpClient.post('/caja/abrir', data),
@@ -164,12 +166,14 @@ export const ventasApi = {
 
   /* Cobranzas */
   cobranzas: (filtros) => httpClient.get(`/cobranzas${qs(filtros)}`),
+  cobranzasPendientesResumen: () => httpClient.get('/cobranzas/pendientes-resumen'),
   cobranza: (id) => httpClient.get(`/cobranzas/${id}`),
   crearCobranza: (data) => httpClient.post('/cobranzas', data),
   anularCobranza: (id, motivo) => httpClient.post(`/cobranzas/${id}/anular`, { motivo }),
 
   /* Presupuestos (pedidos mayoristas: WhatsApp hoy, tienda web mañana) */
   presupuestos: () => httpClient.get('/presupuestos'),
+  presupuestosPendientesResumen: () => httpClient.get('/presupuestos/pendientes-resumen'),
   crearPresupuesto: (data) => httpClient.post('/presupuestos', data),
   enviarPresupuesto: (id) => httpClient.post(`/presupuestos/${id}/enviar`, {}),
   reabrirPresupuesto: (id) => httpClient.post(`/presupuestos/${id}/reabrir`, {}),

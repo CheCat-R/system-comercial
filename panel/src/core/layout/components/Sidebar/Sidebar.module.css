@@ -20,27 +20,17 @@
 }
 
 .brandMark {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--crm-radius-md);
-  /* Sólido, no degradé: la marca es "sin gradientes, sin glow". */
-  background: var(--crm-color-primary);
-  color: #fff;
-  font-weight: 800;
-  font-size: 0.8rem;
+  /* El avatar de la marca (el del favicon). Sólido, no degradé: "sin gradientes, sin glow". */
   flex-shrink: 0;
+  border-radius: 10px;
   box-shadow: var(--crm-shadow-sm);
 }
 
 .brandName {
-  font-weight: 700;
-  font-size: var(--crm-font-size-md);
+  /* Las siglas en blanco y el nombre completo en el gris del menú (siempre oscuro, en claro y en oscuro). */
   color: var(--crm-color-sidebar-text-active);
-  white-space: nowrap;
+  --marca-sub: var(--crm-color-sidebar-text);
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .navScroll {
@@ -155,7 +145,10 @@
 }
 
 .footer {
-  padding: var(--crm-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--crm-space-2);
+  padding: var(--crm-space-3) var(--crm-space-4) var(--crm-space-4);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 

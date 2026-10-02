@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { useProductos } from '../context/ProductosContext.jsx';
 import { Table, PanelHead, Btn, usePaginado, s } from '../components/ui.jsx';
+import { ExportarMenu } from '../components/ExportarMenu.jsx';
+
+const COLUMNAS_EXPORT = [
+  { h: 'Nombre comercial', tipo: 'texto', ancho: 36 },
+  { h: 'CUIT', tipo: 'texto', ancho: 16 },
+  { h: 'Teléfono', tipo: 'texto', ancho: 18 },
+  { h: 'Productos', tipo: 'entero', ancho: 12 },
+];
 
 /**
  * Lo OPERATIVO de compras por proveedor: operaciones, costos por producto
@@ -24,6 +32,9 @@ export function ProveedoresPanel() {
 
   const pag = usePaginado(proveedores, 'proveedores', q);
 
+  /** Todos los proveedores filtrados (todas las páginas). */
+  const filasParaExportar = () => proveedores.map((p) => [p.nombre, p.cuit || '', p.telefono || '', usoDe(p.id)]);
+
   const filas = pag.visibles.map((p) => (
     <tr key={p.id} className={s.clickable} onClick={() => openModal('detalleProveedor', { provId: p.id })}>
       <td>{p.nombre}</td>
@@ -46,6 +57,14 @@ export function ProveedoresPanel() {
       />
       <div className={s.toolbar}>
         <input type="search" placeholder="Buscar por nombre o CUIT..." value={q} onChange={(e) => setQ(e.target.value)} />
+        <ExportarMenu
+          archivo="proveedores-costos"
+          titulo="Proveedores"
+          columnas={COLUMNAS_EXPORT}
+          obtenerFilas={filasParaExportar}
+          filtros={q.trim() ? `Búsqueda: ${q.trim()}` : ''}
+          disabled={!proveedores.length}
+        />
       </div>
       <Table
         cols={[

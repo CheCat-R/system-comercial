@@ -3,6 +3,7 @@ import { Button, Snackbar, Alert } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { PageHeader } from '@shared/components/PageHeader/PageHeader.jsx';
 import { FullScreenLoader } from '@shared/components/FullScreenLoader/FullScreenLoader.jsx';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { cx } from '@shared/utils/classNames.js';
 import { useProveedores } from '../context/ProveedoresContext.jsx';
 import { ModalHost } from '../components/ModalHost.jsx';
@@ -24,7 +25,7 @@ const PANEL_COMPONENTS = {
 };
 
 /** Shell del módulo Proveedores: misma estructura que Gastos y Ventas. */
-export function ProveedoresShell({ title, subtitle }) {
+export function ProveedoresShell({ title, subtitle, ayudaCategoriaId }) {
   const {
     loaded, loadError, recargar, panels, panel, goPanel, contadores,
     toastState, closeToast, toast,
@@ -63,11 +64,14 @@ export function ProveedoresShell({ title, subtitle }) {
       <PageHeader
         title={title}
         subtitle={subtitle}
-        actions={
-          <Button variant="outlined" startIcon={<RefreshIcon />} onClick={onRefresh} disabled={refrescando}>
-            Actualizar
-          </Button>
-        }
+        actions={(
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Button variant="outlined" startIcon={<RefreshIcon />} onClick={onRefresh} disabled={refrescando}>
+              Actualizar
+            </Button>
+            {ayudaCategoriaId && <AyudaButton categoriaId={ayudaCategoriaId} />}
+          </div>
+        )}
       />
 
       <div className={s.shell}>

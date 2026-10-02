@@ -24,7 +24,6 @@ export const env = Object.freeze({
    * pantalla carga y ninguna llamada funciona.
    */
   apiBaseUrl: raw.VITE_API_BASE_URL || '/api',
-  appName: raw.VITE_APP_NAME ?? 'CRM Dashboard',
   defaultTheme: raw.VITE_DEFAULT_THEME ?? 'light',
 
   /** Comma-separated allow-list of module ids; empty means "all registered". */

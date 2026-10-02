@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>CheCAT Commerce — hoja de marca</title>
+<style>
+  body { margin:0; font-family: system-ui, sans-serif; background:#0B0E14; color:#e6e9ef; }
+  h1 { font-size:20px; margin:0; padding:22px 24px 4px; }
+  h2 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:#8d96a6; margin:26px 24px 10px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; padding:0 24px; }
+  .caja { border:1px solid #2a2f3a; border-radius:12px; padding:18px; display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .caja small { color:#8d96a6; font-size:11px; }
+  .osc { background:#11141c; color:#F2F2F2; }
+  .cla { background:#fff; color:#373435; }
+  .fila { display:flex; align-items:flex-end; gap:16px; }
+  .fila > div { display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .fila span { font-size:10px; opacity:.6; }
+  .ticket { background:#fff; color:#000; width:230px; padding:14px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:10px; text-align:center; }
+  .ticket hr { border:none; border-top:1px dashed #999; margin:8px 0; }
+  .login { background:#1C2030; border:1px solid #2a2f3a; border-radius:14px; padding:24px; width:260px; text-align:center; color:#e6e9ef; }
+  .barra { display:flex; align-items:center; gap:10px; background:#11141c; border-radius:8px; padding:8px 12px; font-size:13px; width:230px; }
+  .badge { width:34px; height:34px; border-radius:9px; overflow:hidden; display:inline-flex; }
+  img { display:block; }
+</style>
+</head>
+<body>
+<h1>CheCAT Commerce — hoja de marca</h1>
+
+<h2>Isotipo</h2>
+<div class="grid">
+  <div class="caja osc"><img src="isotipo-claro.svg" width="150" height="150"><small>isotipo-claro.svg · fondos oscuros</small></div>
+  <div class="caja cla"><img src="isotipo-oscuro.svg" width="150" height="150"><small>isotipo-oscuro.svg · fondos claros</small></div>
+  <div class="caja osc"><img src="logo-horizontal-claro.svg" width="250"><small>logo-horizontal-claro.svg</small></div>
+</div>
+
+<h2>Favicon y app</h2>
+<div class="grid">
+  <div class="caja osc">
+    <div class="fila">
+      <div><img src="icon-512.png" width="112" height="112"><span>512</span></div>
+      <div><img src="icon-192.png" width="64" height="64"><span>192</span></div>
+      <div><img src="apple-touch-icon.png" width="40" height="40"><span>180</span></div>
+      <div><img src="favicon-32.png" width="32" height="32"><span>32</span></div>
+      <div><img src="favicon-32.png" width="16" height="16"><span>16</span></div>
+    </div>
+    <small>favicon.svg y los PNG derivados</small>
+  </div>
+  <div class="caja osc">
+    <div class="barra"><span class="badge"><img src="favicon.svg" width="34" height="34"></span> Almacén · CheCAT Commerce</div>
+    <small>barra lateral</small>
+  </div>
+</div>
+
+<h2>En contexto</h2>
+<div class="grid">
+  <div class="caja osc">
+    <div class="login">
+      <img src="isotipo-claro.svg" width="64" height="64" style="margin:0 auto 12px">
+      <div style="font-weight:700;font-size:17px">CheCAT Commerce Systems</div>
+      <div style="font-size:12px;opacity:.65;margin-top:4px">Ingresá con tu usuario y elegí la sucursal.</div>
+    </div>
+    <small>login</small>
+  </div>
+  <div class="caja">
+    <div class="ticket">
+      <img src="isotipo-mono.svg" width="54" height="54" style="margin:0 auto 6px">
+      <div><b>ALMACEN DON JOSE</b></div>
+      <div>Ticket 0001-00001234</div>
+      <hr>
+      <div style="text-align:left">2 x Yerba 1kg&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.600,00<br>1 x Azúcar 1kg&nbsp;&nbsp;&nbsp;&nbsp;1.450,00</div>
+      <hr>
+      <div style="text-align:right"><b>TOTAL&nbsp;&nbsp;9.050,00</b></div>
+    </div>
+    <small>isotipo-mono.svg · impresión térmica</small>
+  </div>
+</div>
+
+<div style="height:40px"></div>
+</body>
+</html>

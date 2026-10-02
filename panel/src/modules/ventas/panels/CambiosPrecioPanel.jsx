@@ -6,6 +6,7 @@
  * dos lados — no hay forma de que el modal y el panel muestren cosas distintas.
  */
 import { CambiosPrecioVista } from '@modules/consultas/vistas.jsx';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { PanelHead } from '../components/ui.jsx';
 
 export function CambiosPrecioPanel() {
@@ -14,6 +15,7 @@ export function CambiosPrecioPanel() {
       <PanelHead
         title="Cambios de precio"
         desc="Cada vez que el precio de góndola de una lista cambió: cuánto valía, cuánto pasó a valer, la variación y qué lo movió. Se abre desde cualquier pantalla con Alt+F5."
+        actions={<AyudaButton categoriaId="cambios-precio" />}
       />
       <CambiosPrecioVista />
     </div>

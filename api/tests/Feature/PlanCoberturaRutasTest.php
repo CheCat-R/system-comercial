@@ -31,12 +31,16 @@ class PlanCoberturaRutasTest extends TestCase
     {
         return [
             ['GET', '/api/terminales', 'sistema.terminales'],
+            ['GET', '/api/sistema/respaldos/automaticos', 'sistema.respaldos_auto'],
             ['GET', '/api/transferencias', 'almacen.transferencias'],
+            ['GET', '/api/transferencias/pendientes-resumen', 'almacen.transferencias'],
             ['GET', '/api/incidencias', 'almacen.incidencias'],
             ['GET', '/api/conteos', 'almacen.conteos'],
             ['POST', '/api/operaciones/fraccionar', 'almacen.fraccionamiento'],
             ['GET', '/api/cobranzas', 'ventas.cobranzas'],
+            ['GET', '/api/cobranzas/pendientes-resumen', 'ventas.cobranzas'],
             ['GET', '/api/presupuestos', 'ventas.presupuestos'],
+            ['GET', '/api/presupuestos/pendientes-resumen', 'ventas.presupuestos'],
             ['POST', '/api/ofertas', 'ventas.ofertas'],
             ['GET', '/api/compromisos', 'proveedores.ctasctes'],
             ['GET', '/api/echeqs', 'proveedores.echeqs'],

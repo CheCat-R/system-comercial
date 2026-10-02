@@ -15,11 +15,10 @@ class AuthTest extends TestCase
         $this->getJson('/api/health')->assertOk()->assertJson(['ok' => true]);
 
         $res = $this->getJson('/api/auth/opciones')->assertOk();
-        $this->assertNotEmpty($res->json('usuarios'));
         $this->assertNotEmpty($res->json('sucursales'));
-        // Público: ni permisos ni si tiene contraseña.
-        $this->assertArrayNotHasKey('permisos', $res->json('usuarios.0'));
-        $this->assertArrayNotHasKey('tienePassword', $res->json('usuarios.0'));
+        // Público y SIN la lista de usuarios: el usuario se escribe, y publicar los nombres era regalar quién tiene cuenta.
+        $this->assertArrayNotHasKey('usuarios', $res->json());
+        $this->assertStringNotContainsString('Administrador', $res->getContent());
     }
 
     public function test_todo_lo_demas_esta_cerrado_sin_token(): void
@@ -33,7 +32,7 @@ class AuthTest extends TestCase
     {
         $admin = $this->superadmin();
         $res = $this->postJson('/api/auth/login', [
-            'usuarioId' => $admin->id, 'password' => 'admin1234', 'sucursalId' => $this->central()->id,
+            'usuario' => $admin->nombre, 'password' => 'admin1234', 'sucursalId' => $this->central()->id,
         ])->assertOk()->assertJsonStructure(['ok', 'token', 'usuario' => ['id', 'nombre', 'rolClave', 'rolNombre', 'permisos'], 'sucursal', 'terminal']);
 
         $this->assertSame(['*'], $res->json('usuario.permisos'));
@@ -55,17 +54,66 @@ class AuthTest extends TestCase
     public function test_contrasena_incorrecta_es_401_con_mensaje(): void
     {
         $admin = $this->superadmin();
-        $this->postJson('/api/auth/login', ['usuarioId' => $admin->id, 'password' => 'nope', 'sucursalId' => $this->central()->id])
-            ->assertStatus(401)->assertJson(['message' => 'Contraseña incorrecta.']);
+        $this->postJson('/api/auth/login', ['usuario' => $admin->nombre, 'password' => 'nope', 'sucursalId' => $this->central()->id])
+            ->assertStatus(401)->assertJson(['message' => 'Usuario o contraseña incorrectos.']);
+    }
+
+    /** El usuario se ESCRIBE: da igual cómo lo tipee, mayúsculas, tildes o espacios de más. */
+    public function test_el_usuario_se_escribe_sin_importar_mayusculas_tildes_ni_espacios(): void
+    {
+        $this->crearUsuario('María  Pérez', 'cajero');
+        foreach (['maria perez', 'MARÍA PÉREZ', '  María Pérez  ', 'Maria   Perez'] as $tipeado) {
+            $this->postJson('/api/auth/login', ['usuario' => $tipeado, 'password' => 'clave1234', 'sucursalId' => $this->central()->id])
+                ->assertOk()->assertJsonPath('usuario.nombre', 'María  Pérez');
+        }
+    }
+
+    /** Un nombre que no existe y una contraseña mala contestan EXACTAMENTE lo mismo: no hay forma de sondear qué cuentas existen. */
+    public function test_usuario_inexistente_y_clave_mala_son_indistinguibles(): void
+    {
+        $admin = $this->superadmin();
+        $inexistente = $this->postJson('/api/auth/login', ['usuario' => 'nadie', 'password' => 'x', 'sucursalId' => $this->central()->id]);
+        $claveMala = $this->postJson('/api/auth/login', ['usuario' => $admin->nombre, 'password' => 'x', 'sucursalId' => $this->central()->id]);
+        $inexistente->assertStatus(401);
+        $this->assertSame($claveMala->status(), $inexistente->status());
+        $this->assertSame($claveMala->json('message'), $inexistente->json('message'));
+        // Y un nombre vacío no es un 500: es un error de validación.
+        $this->postJson('/api/auth/login', ['usuario' => '', 'password' => 'x'])->assertStatus(422);
+    }
+
+    public function test_un_usuario_desactivado_solo_se_entera_quien_acerto_la_clave(): void
+    {
+        $this->crearUsuario('Pedro', 'cajero', 'clave1234', false);
+        $this->postJson('/api/auth/login', ['usuario' => 'Pedro', 'password' => 'mala', 'sucursalId' => $this->central()->id])
+            ->assertStatus(401)->assertJson(['message' => 'Usuario o contraseña incorrectos.']);
+        $this->postJson('/api/auth/login', ['usuario' => 'Pedro', 'password' => 'clave1234', 'sucursalId' => $this->central()->id])
+            ->assertStatus(401)->assertJsonFragment(['message' => 'Ese usuario está desactivado — hablá con el superadmin.']);
+    }
+
+    public function test_no_puede_haber_dos_usuarios_con_el_mismo_nombre_para_el_login(): void
+    {
+        $this->crearUsuario('Lucas Pérez', 'cajero');
+        $super = $this->conToken($this->loguear($this->superadmin(), 'admin1234'));
+        $rol = $this->rol('cajero');
+
+        // Ni igual, ni con otra tilde, ni con otras mayúsculas: para el login serían la misma persona.
+        foreach (['Lucas Pérez', 'lucas perez', 'LUCAS  PEREZ'] as $repetido) {
+            $super->postJson('/api/usuarios', ['nombre' => $repetido, 'rolId' => $rol->id, 'password' => 'clave1234'])
+                ->assertStatus(422)->assertJsonValidationErrors('nombre');
+        }
+        $otro = $this->crearUsuario('Ana', 'cajero');
+        $super->patchJson('/api/usuarios/'.$otro->id, ['nombre' => 'lucas PEREZ'])->assertStatus(422)->assertJsonValidationErrors('nombre');
+        // Renombrarse a sí mismo (otra capitalización) sí se puede.
+        $super->patchJson('/api/usuarios/'.$otro->id, ['nombre' => 'ANA'])->assertOk();
     }
 
     public function test_el_cajero_necesita_sucursal_y_el_superadmin_no(): void
     {
         $cajero = $this->crearUsuario('Lucas', 'cajero');
-        $this->postJson('/api/auth/login', ['usuarioId' => $cajero->id, 'password' => 'clave1234'])
+        $this->postJson('/api/auth/login', ['usuario' => $cajero->nombre, 'password' => 'clave1234'])
             ->assertStatus(401)->assertJson(['message' => 'Elegí la sucursal con la que vas a operar.']);
 
-        $res = $this->postJson('/api/auth/login', ['usuarioId' => $this->superadmin()->id, 'password' => 'admin1234'])
+        $res = $this->postJson('/api/auth/login', ['usuario' => $this->superadmin()->nombre, 'password' => 'admin1234'])
             ->assertOk();
         $this->assertSame($this->central()->id, $res->json('sucursal.id'));
     }
@@ -82,7 +130,7 @@ class AuthTest extends TestCase
 
         $cajero = $this->crearUsuario('Lucas', 'cajero');
         $res = $this->postJson('/api/auth/login', [
-            'usuarioId' => $cajero->id, 'password' => 'clave1234',
+            'usuario' => $cajero->nombre, 'password' => 'clave1234',
             'sucursalId' => $this->central()->id, // se ignora
             'terminalToken' => $token,
         ])->assertOk();
@@ -151,17 +199,21 @@ class AuthTest extends TestCase
         RateLimiter::clear('login:ip:127.0.0.1');
         $admin = $this->superadmin();
         for ($i = 0; $i < 5; $i++) {
-            $this->postJson('/api/auth/login', ['usuarioId' => $admin->id, 'password' => 'mal', 'sucursalId' => $this->central()->id])->assertStatus(401);
+            $this->postJson('/api/auth/login', ['usuario' => $admin->nombre, 'password' => 'mal', 'sucursalId' => $this->central()->id])->assertStatus(401);
         }
-        $this->postJson('/api/auth/login', ['usuarioId' => $admin->id, 'password' => 'admin1234', 'sucursalId' => $this->central()->id])
+        $this->postJson('/api/auth/login', ['usuario' => $admin->nombre, 'password' => 'admin1234', 'sucursalId' => $this->central()->id])
+            ->assertStatus(429);
+
+        // Escribirlo distinto ("ADMINISTRADOR") no regala cupo nuevo: el freno cuenta por el nombre normalizado.
+        $this->postJson('/api/auth/login', ['usuario' => strtoupper($admin->nombre), 'password' => 'admin1234', 'sucursalId' => $this->central()->id])
             ->assertStatus(429);
 
         // Otro usuario desde la misma IP no está frenado (el cupo es por usuario+IP).
         $cajero = $this->crearUsuario('Lucas', 'cajero');
-        $this->postJson('/api/auth/login', ['usuarioId' => $cajero->id, 'password' => 'clave1234', 'sucursalId' => $this->central()->id])->assertOk();
+        $this->postJson('/api/auth/login', ['usuario' => $cajero->nombre, 'password' => 'clave1234', 'sucursalId' => $this->central()->id])->assertOk();
 
         // Pasada la espera, entra y queda limpio.
         $this->travel(6)->minutes();
-        $this->postJson('/api/auth/login', ['usuarioId' => $admin->id, 'password' => 'admin1234', 'sucursalId' => $this->central()->id])->assertOk();
+        $this->postJson('/api/auth/login', ['usuario' => $admin->nombre, 'password' => 'admin1234', 'sucursalId' => $this->central()->id])->assertOk();
     }
 }

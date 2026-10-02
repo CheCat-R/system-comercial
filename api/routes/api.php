@@ -100,9 +100,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/terminales/{terminal}', [TerminalesController::class, 'destroy']);
     });
 
+    Route::get('/sistema/respaldos/estado', [RespaldosController::class, 'estado']);
     Route::prefix('sistema/respaldos')->middleware('permiso:sistema.respaldos')->group(function () {
         Route::get('/info', [RespaldosController::class, 'info']);
         Route::get('/descargar', [RespaldosController::class, 'descargar']);
+        // Copia diaria automática del servidor: solo Pymes y Corporativo.
+        Route::middleware('plan:sistema.respaldos_auto')->group(function () {
+            Route::get('/automaticos', [RespaldosController::class, 'automaticos']);
+            Route::get('/automaticos/{archivo}', [RespaldosController::class, 'descargarAutomatico']);
+        });
         Route::get('/limpieza/ensayo', [RespaldosController::class, 'ensayoLimpieza']);
         Route::post('/limpieza', [RespaldosController::class, 'limpiar']);
     });
@@ -197,6 +203,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('transferencias')->middleware(['permiso:almacen.transferencias', 'plan:almacen.transferencias'])->group(function () {
         Route::get('/', [TransferenciasController::class, 'index']);
+        Route::get('/pendientes-resumen', [TransferenciasController::class, 'pendientesResumen']);
         Route::get('/{id}', [TransferenciasController::class, 'show'])->whereNumber('id');
         Route::middleware('permiso:pedidos')->group(function () {
             Route::get('/novedades', [TransferenciasController::class, 'novedades']);
@@ -300,6 +307,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [VentasController::class, 'show'])->whereNumber('id')->middleware('permiso:ventas.pos,ventas.listado,ventas.cobranzas');
         // Ver el punto de venta y COBRAR son dos permisos: escribir pide la acción `ventas`.
         Route::middleware('permiso:ventas')->group(function () {
+            // Fija, antes de /{id}/... — sincroniza el lote de ventas que se armaron sin conexión.
+            Route::post('/offline-lote', [VentasController::class, 'sincronizarOffline']);
             Route::post('/', [VentasController::class, 'store']);
             Route::put('/{id}', [VentasController::class, 'update']);
             Route::post('/{id}/confirmar', [VentasController::class, 'confirmar']);
@@ -315,6 +324,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/anular', [CobranzasController::class, 'anular'])->middleware('permiso:devoluciones');
         Route::middleware(['permiso:ventas.cobranzas', 'plan:ventas.cobranzas'])->group(function () {
             Route::get('/', [CobranzasController::class, 'index']);
+            // Ruta fija ANTES de la de {id}: 'pendientes-resumen' no es un id.
+            Route::get('/pendientes-resumen', [CobranzasController::class, 'pendientesResumen']);
             Route::get('/{id}', [CobranzasController::class, 'show']);
             Route::post('/', [CobranzasController::class, 'store']);
         });
@@ -323,6 +334,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('presupuestos')->middleware(['permiso:ventas.presupuestos,presupuestos,ventas.ordenes', 'plan:ventas.presupuestos,ventas.ordenes'])->group(function () {
         Route::get('/', [PresupuestosController::class, 'index']);
         Route::get('/ordenes/pendientes', [PresupuestosController::class, 'ordenesPendientes']);
+        Route::get('/pendientes-resumen', [PresupuestosController::class, 'pendientesResumen']);
         Route::get('/{id}', [PresupuestosController::class, 'show'])->whereNumber('id');
         Route::post('/{id}/aceptar', [PresupuestosController::class, 'aceptar']);
         Route::post('/{id}/cancelar', [PresupuestosController::class, 'cancelar']);

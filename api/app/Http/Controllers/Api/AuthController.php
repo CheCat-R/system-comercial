@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Auth\FrenoLogin;
+use App\Auth\NombreUsuario;
 use App\Auth\PlanCatalogo;
 use App\Auth\Sesion;
 use App\Auth\Sesiones;
@@ -39,16 +40,61 @@ class AuthController extends Controller
         return ['id' => $plan, 'claves' => PlanCatalogo::claves($plan)];
     }
     /**
-     * Lo mínimo para poder ELEGIR en la pantalla de login, y nada más. Es
-     * público por necesidad, así que devuelve lo justo: ni permisos, ni quién
-     * es superadmin, ni qué cuentas están sin contraseña.
+     * Lo mínimo para la pantalla de login, y nada más: las sucursales, para
+     * poder elegir donde hay más de una. Es público por necesidad.
+     *
+     * YA NO DEVUELVE LOS USUARIOS. El login tenía un desplegable con todos los
+     * nombres, o sea que cualquiera que abriera la URL leía quién tiene cuenta
+     * en este negocio. Ahora el usuario se ESCRIBE: la lista no hace falta y no
+     * se publica.
      */
     public function opciones(): JsonResponse
     {
         return response()->json([
-            'usuarios' => Usuario::query()->where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
             'sucursales' => Sucursal::query()->orderBy('id')->get(['id', 'nombre']),
         ]);
+    }
+
+    /** Un hash cualquiera, para gastar el mismo tiempo cuando el usuario no existe (ver `resolverUsuario`). */
+    private const HASH_DE_RELLENO = '$2y$12$S5sZA.m7.ro564Bbk1C/FOVrCYwLlEaQtIaJuexew6Dvjx9XZS/gG';
+
+    /**
+     * QUIÉN ES el que escribió ese nombre y esa contraseña.
+     *
+     * NO SE DICE QUÉ FALLÓ. "No existe ese usuario" y "contraseña incorrecta"
+     * devuelven lo mismo: con un campo de texto libre, la diferencia entre los
+     * dos mensajes sería una herramienta para descubrir qué nombres tienen
+     * cuenta. Y cuando el nombre no existe se hace igual un `Hash::check`
+     * contra un hash de relleno: sin eso, el login de un nombre inexistente
+     * contesta en milisegundos y el de uno real en 50 — misma pista, por el
+     * reloj.
+     *
+     * "Desactivado" SOLO se avisa a quien acertó la contraseña: a esa persona
+     * sí hay que explicarle por qué no entra, y ya demostró ser quien dice.
+     */
+    private function resolverUsuario(string $claveNombre, string $password, string $ip): Usuario
+    {
+        $candidatos = $claveNombre === ''
+            ? collect()
+            : Usuario::query()->with('rol')->get()->filter(fn (Usuario $u) => NombreUsuario::normalizar($u->nombre) === $claveNombre);
+
+        if ($candidatos->isEmpty()) {
+            Hash::check($password, self::HASH_DE_RELLENO);
+        }
+
+        // Dos usuarios con el mismo nombre normalizado no se pueden dar de alta, pero uno viejo pudo haber quedado: gana el que acierta la contraseña.
+        $acertaron = $candidatos->filter(fn (Usuario $u) => $u->tienePassword() && Hash::check($password, $u->password));
+        $activo = $acertaron->first(fn (Usuario $u) => $u->activo);
+        if ($activo) {
+            return $activo;
+        }
+        if ($acertaron->isNotEmpty()) {
+            throw new UnauthorizedHttpException('Bearer', 'Ese usuario está desactivado — hablá con el superadmin.');
+        }
+
+        // Este fallo GASTA INTENTO: si no, sondear nombres sería gratis.
+        FrenoLogin::fallo($claveNombre, $ip);
+        throw new UnauthorizedHttpException('Bearer', 'Usuario o contraseña incorrectos.');
     }
 
     /**
@@ -57,7 +103,8 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        $usuarioId = (int) $request->input('usuarioId');
+        // El freno cuenta por NOMBRE NORMALIZADO: "Maria", "MARÍA" y " maria " son el mismo cupo, no tres.
+        $claveNombre = NombreUsuario::normalizar((string) $request->input('usuario'));
         $ip = (string) $request->ip();
         $userAgent = (string) $request->userAgent();
 
@@ -71,27 +118,10 @@ class AuthController extends Controller
         $sucursalId = $terminal ? $terminal->sucursal_id : (int) $request->input('sucursalId');
 
         // El freno va ANTES de mirar la contraseña.
-        FrenoLogin::revisar($usuarioId, $ip);
+        FrenoLogin::revisar($claveNombre, $ip);
 
-        $usuario = Usuario::query()->with('rol')->find($usuarioId);
-        // Estas ramas también GASTAN INTENTO: si no, sondear cuentas sería gratis.
-        if (! $usuario) {
-            FrenoLogin::fallo($usuarioId, $ip);
-            throw new UnauthorizedHttpException('Bearer', 'Elegí un usuario válido.');
-        }
-        if (! $usuario->activo) {
-            FrenoLogin::fallo($usuarioId, $ip);
-            throw new UnauthorizedHttpException('Bearer', 'Ese usuario está desactivado — hablá con el superadmin.');
-        }
-        if (! $usuario->tienePassword()) {
-            FrenoLogin::fallo($usuarioId, $ip);
-            throw new UnauthorizedHttpException('Bearer', $usuario->nombre.' no tiene contraseña definida — el superadmin se la asigna desde Seguridad.');
-        }
-        if (! Hash::check((string) $request->input('password'), $usuario->password)) {
-            FrenoLogin::fallo($usuarioId, $ip);
-            throw new UnauthorizedHttpException('Bearer', 'Contraseña incorrecta.');
-        }
-        FrenoLogin::exito($usuarioId, $ip);
+        $usuario = $this->resolverUsuario($claveNombre, (string) $request->input('password'), $ip);
+        FrenoLogin::exito($claveNombre, $ip);
 
         /*
          * EL SUPERADMIN ENTRA SIN ELEGIR SUCURSAL: opera sobre todo el negocio

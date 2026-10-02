@@ -1,13 +1,33 @@
 import { useMemo, useState } from 'react';
 import { cx } from '@shared/utils/classNames.js';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { appConfig } from '@core/config/app.config.js';
 import { useVentas } from '../context/VentasContext.jsx';
 import { useResource } from '../hooks/useResource.js';
 import { ventasApi } from '../services/ventas.api.js';
-import { CONDICIONES_IVA, docLegible, norm } from '../domain/constants.js';
+import {
+  CONDICIONES_IVA, docLegible, norm, telefonoWa,
+} from '../domain/constants.js';
 import {
   Table, PanelHead, Stat, Btn, CondIvaBadge, ModalShell, usePaginado, money, fmtFechaHora, s,
 } from '../components/ui.jsx';
+import { ExportarMenu } from '@modules/productos/components/ExportarMenu.jsx';
+
+/** Lo que sale en el Excel/PDF: más que la tabla de pantalla (contacto completo, descuento), sin acciones ni la columna web. */
+const COLUMNAS_EXPORT = [
+  { h: 'Cliente', tipo: 'texto', ancho: 34 },
+  { h: 'Nombre de fantasía', tipo: 'texto', ancho: 26 },
+  { h: 'Documento', tipo: 'texto', ancho: 20 },
+  { h: 'Condición IVA', tipo: 'texto', ancho: 20 },
+  { h: 'Cta. cte.', tipo: 'texto', ancho: 14 },
+  { h: 'Límite cta. cte.', tipo: 'moneda', ancho: 16 },
+  { h: 'Descuento %', tipo: 'numero', ancho: 12 },
+  { h: 'Teléfono', tipo: 'texto', ancho: 18 },
+  { h: 'Email', tipo: 'texto', ancho: 28 },
+  { h: 'Dirección', tipo: 'texto', ancho: 30 },
+  { h: 'Localidad', tipo: 'texto', ancho: 20 },
+  { h: 'Estado', tipo: 'texto', ancho: 10 },
+];
 
 const ESTADOS_WEB = {
   pendiente: { label: 'Pendiente', pill: 'est-pendiente' },
@@ -16,6 +36,34 @@ const ESTADOS_WEB = {
   cerrado: { label: 'Cerrado (venta)', pill: 'est-recibida' },
   cancelado: { label: 'Rechazado', pill: 'est-cancelada' },
 };
+
+/**
+ * El teléfono del cliente como LINK a WhatsApp — un clic en vez de copiar el
+ * número a mano. Si lo que cargó no llega a un número argentino completo, se
+ * muestra el texto tal cual (sin link): un link roto abre un chat inexistente
+ * y confunde más de lo que ayuda.
+ */
+function TelefonoCliente({ cliente }) {
+  const tel = String(cliente.telefono ?? '').trim();
+  if (!tel) return <span className={s.muted}>—</span>;
+
+  const wa = telefonoWa(tel);
+  if (!wa) {
+    return <span title="No parece un número argentino completo: escribile a mano">{tel}</span>;
+  }
+
+  return (
+    <a
+      href={`https://wa.me/${wa}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Escribirle a ${cliente.nombre || tel} por WhatsApp`}
+      style={{ color: '#25D366', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}
+    >
+      💬 {tel}
+    </a>
+  );
+}
 
 /** Historial de pedidos que ESTE cliente hizo por el sitio web. */
 function PedidosWebModal({ cliente, pedidos, onCerrar }) {
@@ -99,6 +147,18 @@ export function ClientesPanel() {
 
   const stop = (e) => e.stopPropagation();
 
+  /** Todos los clientes filtrados (todas las páginas). */
+  const filasParaExportar = () => filtrados.map((c) => [
+    c.nombre, c.nombreFantasia || '', c.numeroDoc ? docLegible(c) : '',
+    CONDICIONES_IVA[c.condicionIva]?.label || '',
+    !c.ctaCteHabilitada ? 'No' : (c.limiteCredito > 0 ? 'Sí' : 'Sí (sin tope)'),
+    c.ctaCteHabilitada && c.limiteCredito > 0 ? Number(c.limiteCredito) : null,
+    Number(c.descuento) > 0 ? Number(c.descuento) : null,
+    c.telefono || '', c.email || '', c.direccion || '', c.localidad || '',
+    c.activo ? 'Activo' : 'Baja',
+  ]);
+  const filtrosTexto = [q && `Búsqueda: ${q}`, verInactivos && 'Incluye dados de baja'].filter(Boolean).join(' · ');
+
   const pag = usePaginado(filtrados, 'clientes', `${q}|${verInactivos}`);
 
   const filas = pag.visibles.map((c) => {
@@ -123,22 +183,24 @@ export function ClientesPanel() {
             ? (c.limiteCredito > 0 ? money(c.limiteCredito) : 'Sin tope')
             : <span className={s.muted}>—</span>}
         </td>
-        <td className={s.num} onClick={stop}>
-          {pedidosWeb.length
-            ? (
-              <button
-                type="button"
-                className={cx(s.pill, s['est-preparada'])}
-                style={{ cursor: 'pointer', border: 'none' }}
-                title="Ver el historial de pedidos web"
-                onClick={() => setHistorialDe(c)}
-              >
-                🌐 {pedidosWeb.length}
-              </button>
-            )
-            : <span className={s.muted}>—</span>}
-        </td>
-        <td>{c.telefono || <span className={s.muted}>—</span>}</td>
+        {appConfig.features.webHabilitado && (
+          <td className={s.num} onClick={stop}>
+            {pedidosWeb.length
+              ? (
+                <button
+                  type="button"
+                  className={cx(s.pill, s['est-preparada'])}
+                  style={{ cursor: 'pointer', border: 'none' }}
+                  title="Ver el historial de pedidos web"
+                  onClick={() => setHistorialDe(c)}
+                >
+                  🌐 {pedidosWeb.length}
+                </button>
+              )
+              : <span className={s.muted}>—</span>}
+          </td>
+        )}
+        <td onClick={stop}><TelefonoCliente cliente={c} /></td>
         <td>{c.localidad || <span className={s.muted}>—</span>}</td>
         <td className={s['actions-col']}>
           <div className={s['row-actions']} onClick={stop}>
@@ -163,7 +225,12 @@ export function ClientesPanel() {
       <PanelHead
         title="Clientes"
         desc="Clic en una fila para ver el detalle: cuenta corriente, comprobantes y datos comerciales."
-        actions={<Btn variant="btn-primary" onClick={() => openModal('clienteForm', {})}>+ Nuevo cliente</Btn>}
+        actions={(
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Btn variant="btn-primary" onClick={() => openModal('clienteForm', {})}>+ Nuevo cliente</Btn>
+            <AyudaButton categoriaId="clientes" />
+          </div>
+        )}
       />
 
       <div className={s.stats}>
@@ -186,12 +253,21 @@ export function ClientesPanel() {
           <input type="checkbox" checked={verInactivos} onChange={(e) => setVerInactivos(e.target.checked)} />
           Ver dados de baja
         </label>
+        <ExportarMenu
+          archivo="clientes"
+          titulo="Clientes"
+          columnas={COLUMNAS_EXPORT}
+          obtenerFilas={filasParaExportar}
+          filtros={filtrosTexto}
+          disabled={!filtrados.length}
+        />
       </div>
 
       <Table
         cols={[
           { h: 'Cliente' }, { h: 'Documento' }, { h: 'IVA' }, { h: 'Lista' },
-          { h: 'Límite cta. cte.', num: true }, { h: 'Web', num: true },
+          { h: 'Límite cta. cte.', num: true },
+          ...(appConfig.features.webHabilitado ? [{ h: 'Web', num: true }] : []),
           { h: 'Teléfono' }, { h: 'Localidad' },
           { h: 'Acciones', cls: 'actions-col' },
         ]}
@@ -203,8 +279,10 @@ export function ClientesPanel() {
 
       <div className={s.hint}>
         La condición frente al IVA ({Object.values(CONDICIONES_IVA).map((c) => c.corto).join(' · ')}) define
-        la letra del comprobante que se emite en la caja. La columna <strong>Web</strong> cuenta
-        los pedidos que el cliente hizo desde el sitio — clic para ver el historial.
+        la letra del comprobante que se emite en la caja.
+        {appConfig.features.webHabilitado && (
+          <> La columna <strong>Web</strong> cuenta los pedidos que el cliente hizo desde el sitio — clic para ver el historial.</>
+        )}
       </div>
 
       {historialDe && (

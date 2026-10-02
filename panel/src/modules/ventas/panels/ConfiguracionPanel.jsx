@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cx } from '@shared/utils/classNames.js';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { useVentas } from '../context/VentasContext.jsx';
 import { ventasApi } from '../services/ventas.api.js';
 import { CONDICIONES_IVA, MEDIOS_PAGO, OPCIONES_REDONDEO, OPCIONES_REDONDEO_PRECIO } from '../domain/constants.js';
@@ -354,11 +355,12 @@ export function ConfiguracionPanel() {
         title="Configuración de Ventas"
         desc="Reglas del circuito comercial. Rigen para la caja, los presupuestos y la cuenta corriente."
         actions={
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Btn onClick={() => setDraft(config)} disabled={!sucio || guardando}>Descartar</Btn>
             <Btn variant="btn-primary" onClick={guardar} disabled={!sucio || guardando}>
               {guardando ? 'Guardando…' : 'Guardar cambios'}
             </Btn>
+            <AyudaButton categoriaId="configuracion-ventas" />
           </div>
         }
       />

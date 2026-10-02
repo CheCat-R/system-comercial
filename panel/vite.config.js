@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 
 /**
@@ -48,7 +49,70 @@ export default defineConfig(({ mode }) => {
   const PUERTO = Number(env.VITE_DEV_PORT) || 3000;
 
   return {
-    plugins: [react(), ...(HTTPS ? [basicSsl()] : [])],
+    plugins: [
+      react(),
+      ...(HTTPS ? [basicSsl()] : []),
+      /*
+       * INSTALABLE COMO APP (notebook y celular) — solo el "cascarón"
+       * (JS/CSS/HTML/íconos) queda en caché; la API NUNCA se cachea acá.
+       * `navigateFallbackDenylist` excluye `/api/*` del fallback de SPA, así
+       * que una llamada de red real jamás recibe `index.html` en su lugar.
+       * Sin `runtimeCaching`: una vez que el cascarón cargó, cada pedido a
+       * `/api` sale a la red tal cual — el service worker ni se entera, así
+       * que un plan "offline de datos" (ventas/caja sin internet) queda
+       * totalmente fuera de esto, es un proyecto aparte.
+       */
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: ['favicon.svg', 'favicon-16.png', 'favicon-32.png', 'apple-touch-icon.png'],
+        manifest: {
+          name: 'CCS · checat commerce systems',
+          short_name: 'CCS',
+          description: 'Sistema de gestión para comercios: ventas, stock, compras y caja.',
+          lang: 'es-AR',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          background_color: '#f1f5f9',
+          theme_color: '#121826',
+          icons: [
+            { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          ],
+        },
+        workbox: {
+          navigateFallbackDenylist: [/^\/api\//],
+          /*
+           * El bundle principal ya pasó los 2 MiB que workbox precarga por
+           * defecto (2,1 MB al 2/10/2026), y sin este tope el BUILD FALLA con
+           * "is 2.1 MB, and won't be precached". Es el cascarón de la app:
+           * tiene que quedar precargado para que el POS abra sin conexión.
+           * Si vuelve a crecer, la salida de fondo es partirlo por módulo
+           * (carga perezosa por ruta), no subir este número otra vez.
+           */
+          maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+          /*
+           * Las librerías de exportar a PDF (jsPDF y sus dependencias
+           * opcionales) pesan ~600 kB y se cargan SOLO al exportar: precargarlas
+           * le haría bajar ese peso a cada instalación de la app para algo que
+           * casi nunca se usa (y `html2canvas`/`purify` ni siquiera se ejecutan).
+           */
+          globIgnores: ['**/assets/jspdf*', '**/assets/html2canvas*', '**/assets/purify*'],
+        },
+        /*
+         * Sin esto, el service worker SOLO existe en el build de producción
+         * (`vite build` + `vite preview`) — en `npm run dev` (el día a día de
+         * acá) no se registra nada, así que el botón de instalar nunca
+         * aparece aunque el código esté bien. Con `devOptions` también se
+         * registra en desarrollo, en la misma URL de siempre (`:3000`).
+         */
+        devOptions: {
+          enabled: true,
+          type: 'module',
+        },
+      }),
+    ],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -62,9 +126,22 @@ export default defineConfig(({ mode }) => {
     server: {
       port: PUERTO,
       open: true,
-      // Con HTTPS el servidor escucha en toda la red: el celular entra por la IP
-      // de la máquina y ahí la cámara SÍ funciona (contexto seguro).
-      host: HTTPS ? true : undefined,
+      /*
+       * `127.0.0.1` explícito, NO `undefined` — sin esto Vite/Node resuelven
+       * "localhost" a IPv6 (`::1`) en esta máquina, pero `php artisan serve`
+       * solo escucha en IPv4 (`127.0.0.1`). El panel cargaba igual (ambos
+       * responden a "localhost" para la página en sí), pero cada llamada a
+       * la API fallaba con "no se pudo conectar" cada vez que el navegador
+       * resolvía esa segunda conexión por IPv6: del otro lado no había nadie
+       * escuchando ahí. Mismo motivo por el que `VITE_API_BASE_URL` en el
+       * `.env` de ejemplo apunta a `http://localhost:8000` — las dos partes
+       * tienen que hablar la MISMA familia de IP.
+       *
+       * Con HTTPS sigue en `true` (todas las interfaces): ahí el celular
+       * necesita entrar por la IP de la máquina en la red local, no por
+       * loopback.
+       */
+      host: HTTPS ? true : '127.0.0.1',
     },
     build: {
       outDir: 'dist',

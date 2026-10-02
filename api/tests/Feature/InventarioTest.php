@@ -299,4 +299,62 @@ class InventarioTest extends TestCase
 
         $this->assertFalse($porProducto->has($viejo->id), 'lo anterior al piso histórico no es novedad');
     }
+
+    public function test_transferencias_pendientes_resumen_cuenta_por_estado_y_excluye_cerradas(): void
+    {
+        $this->ops->compra(['productoId' => $this->gaseosa->id, 'cantidad' => 20, 'usuarioId' => $this->uid]);
+
+        // Pendiente: recién pedida, nadie la tomó.
+        $pendiente = $this->tr->crear(['origenId' => $this->central->id, 'destinoId' => $this->express->id,
+            'items' => [['productoId' => $this->gaseosa->id, 'cantidad' => 2]]]);
+
+        // Preparada: el origen la tomó pero todavía no confirmó listas.
+        $preparada = $this->tr->crear(['origenId' => $this->central->id, 'destinoId' => $this->express->id,
+            'items' => [['productoId' => $this->gaseosa->id, 'cantidad' => 2]]]);
+        $this->tr->avanzar($preparada['id'], $this->uid, 'pendiente');
+
+        // Transito: preparada, confirmada y despachada.
+        $transito = $this->tr->crear(['origenId' => $this->central->id, 'destinoId' => $this->express->id,
+            'items' => [['productoId' => $this->gaseosa->id, 'cantidad' => 2]]]);
+        $this->tr->avanzar($transito['id'], $this->uid, 'pendiente');
+        $this->tr->confirmarLista($transito['id'], ['tipo' => 'enteros', 'listo' => true, 'usuarioId' => $this->uid]);
+        $this->tr->avanzar($transito['id'], $this->uid, 'preparada');
+
+        // Recibida: ya se cerró — no debe contar.
+        $recibida = $this->tr->crear(['origenId' => $this->central->id, 'destinoId' => $this->express->id,
+            'items' => [['productoId' => $this->gaseosa->id, 'cantidad' => 2]]]);
+        $this->tr->avanzar($recibida['id'], $this->uid, 'pendiente');
+        $this->tr->confirmarLista($recibida['id'], ['tipo' => 'enteros', 'listo' => true, 'usuarioId' => $this->uid]);
+        $this->tr->avanzar($recibida['id'], $this->uid, 'preparada');
+        $this->tr->recibir($recibida['id'], ['usuarioId' => $this->uid]);
+
+        // Cancelada: tampoco cuenta.
+        $cancelada = $this->tr->crear(['origenId' => $this->central->id, 'destinoId' => $this->express->id,
+            'items' => [['productoId' => $this->gaseosa->id, 'cantidad' => 1]]]);
+        $this->tr->cancelar($cancelada['id'], $this->uid);
+
+        // Borrador: todavía no es un compromiso — tampoco cuenta.
+        $this->tr->borrador(['origenId' => $this->central->id, 'destinoId' => $this->express->id]);
+
+        $resumen = $this->tr->pendientesResumen();
+        $this->assertSame(1, $resumen['pendiente']);
+        $this->assertSame(1, $resumen['preparada']);
+        $this->assertSame(1, $resumen['transito']);
+        $this->assertCount(3, $resumen['masAntiguas'], 'la recibida, la cancelada y el borrador no entran');
+
+        // Ordenadas de más vieja a más nueva: la pendiente se creó primero.
+        $this->assertSame($pendiente['id'], $resumen['masAntiguas'][0]['id']);
+        $this->assertSame($preparada['id'], $resumen['masAntiguas'][1]['id']);
+        $this->assertSame($transito['id'], $resumen['masAntiguas'][2]['id']);
+        $this->assertSame($this->central->nombre, $resumen['masAntiguas'][0]['origenNombre']);
+        $this->assertSame($this->express->nombre, $resumen['masAntiguas'][0]['destinoNombre']);
+
+        // Sin nada pendiente que toque esa sucursal, el resumen sale vacío.
+        $otra = Sucursal::query()->create(['nombre' => 'Sucursal Sin Movimiento', 'tipo' => 'express']);
+        $vacio = $this->tr->pendientesResumen($otra->id);
+        $this->assertSame(0, $vacio['pendiente']);
+        $this->assertSame(0, $vacio['preparada']);
+        $this->assertSame(0, $vacio['transito']);
+        $this->assertCount(0, $vacio['masAntiguas']);
+    }
 }

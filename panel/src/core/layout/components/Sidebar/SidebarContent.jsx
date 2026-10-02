@@ -1,10 +1,68 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Tooltip } from '@mui/material';
+import {
+  Tooltip, Popover, Box, Typography, Stack,
+} from '@mui/material';
 import CircleIcon from '@mui/icons-material/Circle';
+import InstallDesktopIcon from '@mui/icons-material/InstallDesktop';
+import IosShareIcon from '@mui/icons-material/IosShare';
+import AddBoxIcon from '@mui/icons-material/AddBox';
 import { useNavigation } from '@core/navigation/useNavigation.js';
 import { appConfig } from '@core/config/app.config.js';
+import { useInstallPrompt } from '@core/pwa/useInstallPrompt.js';
 import { cx } from '@shared/utils/classNames.js';
+import { AvatarMarca, NombreMarca } from '@core/branding/Marca.jsx';
 import styles from './Sidebar.module.css';
+
+/**
+ * "INSTALAR APP" — en el pie de la Sidebar, con texto, no un ícono suelto en
+ * el Topbar: ahí nadie sabía que existía. Solo aparece cuando hay algo real
+ * para ofrecer (`useInstallPrompt`) — Chrome/Edge disparan el diálogo nativo,
+ * Safari (sin esa API) abre los pasos manuales.
+ */
+function InstalarAppBoton() {
+  const { modo, instalar } = useInstallPrompt();
+  const [anchorIOS, setAnchorIOS] = useState(null);
+
+  if (!modo) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        className={styles.navItem}
+        style={{
+          width: '100%', border: 'none', background: 'none', font: 'inherit', textAlign: 'left', cursor: 'pointer',
+        }}
+        onClick={modo === 'nativo' ? instalar : (e) => setAnchorIOS(e.currentTarget)}
+      >
+        <span className={styles.navIcon}><InstallDesktopIcon fontSize="small" /></span>
+        <span className={styles.navLabel}>Instalar app</span>
+      </button>
+      <Popover
+        open={Boolean(anchorIOS)}
+        anchorEl={anchorIOS}
+        onClose={() => setAnchorIOS(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        <Box sx={{ p: 2.5, maxWidth: 280 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1.5 }}>Instalar en iPhone / iPad</Typography>
+          <Stack spacing={1.25}>
+            <Stack direction="row" spacing={1.25} alignItems="center">
+              <IosShareIcon fontSize="small" color="action" />
+              <Typography variant="body2">Tocá el botón Compartir, abajo en Safari.</Typography>
+            </Stack>
+            <Stack direction="row" spacing={1.25} alignItems="center">
+              <AddBoxIcon fontSize="small" color="action" />
+              <Typography variant="body2">Elegí &quot;Agregar a inicio&quot;.</Typography>
+            </Stack>
+          </Stack>
+        </Box>
+      </Popover>
+    </>
+  );
+}
 
 /**
  * The actual navigation content, shared by the desktop sidebar and the mobile
@@ -21,8 +79,8 @@ export function SidebarContent({ collapsed = false, onNavigate }) {
   return (
     <nav className={styles.nav} aria-label="Navegación principal">
       <div className={styles.brand}>
-        <span className={styles.brandMark}>C</span>
-        {!collapsed && <span className={styles.brandName}>{appConfig.name}</span>}
+        <AvatarMarca size={38} className={styles.brandMark} />
+        {!collapsed && <NombreMarca className={styles.brandName} />}
       </div>
 
       <div className={cx(styles.navScroll, 'crm-scroll-area')}>
@@ -75,6 +133,7 @@ export function SidebarContent({ collapsed = false, onNavigate }) {
 
       {!collapsed && (
         <div className={styles.footer}>
+          <InstalarAppBoton />
           <span className={styles.version}>v{appConfig.version}</span>
         </div>
       )}

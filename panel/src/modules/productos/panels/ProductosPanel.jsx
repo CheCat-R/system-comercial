@@ -5,6 +5,25 @@ import { num } from '../domain/format.js';
 import {
   Table, PanelHead, TipoBadge, EstadoProductoBadge, Btn, usePaginado, s,
 } from '../components/ui.jsx';
+import { ExportarMenu } from '../components/ExportarMenu.jsx';
+
+/** Lo que sale en el Excel/PDF: más que la tabla de pantalla (estado, código de barras, unidad), sin la columna de acciones. */
+const COLUMNAS_EXPORT = [
+  { h: 'ID', tipo: 'id', ancho: 8, anchoPdf: 12 },
+  { h: 'Producto', tipo: 'texto', ancho: 46 },
+  { h: 'Marca', tipo: 'texto', ancho: 20 },
+  { h: 'Tipo', tipo: 'texto', ancho: 12 },
+  { h: 'Categoría', tipo: 'texto', ancho: 20 },
+  { h: 'Estado', tipo: 'texto', ancho: 14 },
+  { h: 'IVA %', tipo: 'numero', ancho: 8 },
+  { h: 'Código de barras', tipo: 'texto', ancho: 18 },
+  { h: 'Disponible', tipo: 'numero', ancho: 12 },
+  { h: 'Unidad', tipo: 'texto', ancho: 8 },
+];
+const ESTADO_LABEL = { activo: 'Activo', discontinuado: 'Discontinuado', archivado: 'Archivado' };
+const ESTADO_FILTRO_LABEL = {
+  vigentes: 'En juego (activos + discontinuados)', activo: 'Solo activos', discontinuado: 'Solo discontinuados', archivado: 'Solo archivados', '': 'Todos, incluso archivados',
+};
 
 /** Texto comparable: sin mayúsculas ni acentos. */
 const norm = (v) => (v || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
@@ -123,6 +142,32 @@ export function ProductosPanel() {
   const hayFiltro = !!(q || tipo || marca || categoria || proveedorId || estadoF !== 'vigentes');
   const stop = (e) => e.stopPropagation();
 
+  /** La lista COMPLETA filtrada (todas las páginas), una fila por producto y una por cada fraccionado — igual que la pantalla. */
+  const filasParaExportar = () => filasLista.map(({ p, pr }) => {
+    if (pr) {
+      return [
+        p.id, `${p.nombre} · ${store.presLabel(p, pr.id)}`, p.marca || '', 'Fraccionado', p.categoria || '',
+        ESTADO_LABEL[p.estado || 'activo'], p.iva ?? 21, pr.codigoBarras || '',
+        store.suma({ productoId: p.id, presentacionId: pr.id, estado: 'disponible' }), 'paq.',
+      ];
+    }
+    const granel = p.tipo === 'granel';
+    return [
+      p.id, p.nombre, p.marca || '', granel ? 'A granel' : 'Entero', p.categoria || '',
+      ESTADO_LABEL[p.estado || 'activo'], p.iva ?? 21, p.codigoBarras || '',
+      granel ? store.suma({ productoId: p.id, presentacionId: null, estado: 'disponible' }) : store.suma({ productoId: p.id, estado: 'disponible' }),
+      granel ? 'kg' : 'u.',
+    ];
+  });
+  const filtrosTexto = [
+    ESTADO_FILTRO_LABEL[estadoF],
+    q && `Búsqueda: ${q}`,
+    tipo && `Tipo: ${tipo === 'granel' ? 'A granel' : 'Enteros'}`,
+    marca && `Marca: ${marca}`,
+    categoria && `Categoría: ${categoria}`,
+    proveedorId && `Proveedor: ${store.state.proveedores.find((x) => x.id === Number(proveedorId))?.nombre ?? proveedorId}`,
+  ].filter(Boolean).join(' · ');
+
   const pag = usePaginado(filasLista, 'productos', `${q}|${tipo}|${marca}|${categoria}|${proveedorId}|${estadoF}`);
 
   const filas = pag.visibles.map(({ clave, p, pr }) => {
@@ -239,6 +284,14 @@ export function ProductosPanel() {
             Limpiar
           </Btn>
         )}
+        <ExportarMenu
+          archivo="productos"
+          titulo="Productos"
+          columnas={COLUMNAS_EXPORT}
+          obtenerFilas={filasParaExportar}
+          filtros={filtrosTexto}
+          disabled={!filasLista.length}
+        />
       </div>
       {hayFiltro && (
         <div className={s.hint} style={{ margin: 0 }}>

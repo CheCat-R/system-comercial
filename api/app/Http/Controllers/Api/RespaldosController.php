@@ -8,8 +8,10 @@ use App\Services\RespaldosService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class RespaldosController extends Controller
 {
@@ -29,6 +31,29 @@ class RespaldosController extends Controller
             "respaldo-checat-{$sello}.sql",
             ['Content-Type' => 'application/sql; charset=utf-8'],
         );
+    }
+
+    /** Insignia del menú: ruta fuera de `permiso:` a propósito — a quien no tiene el permiso le contesta "nada que avisar" en vez de 403. */
+    public function estado(Sesion $sesion): JsonResponse
+    {
+        return response()->json($this->svc->estado($sesion->puede('sistema.respaldos')));
+    }
+
+    /** Las copias diarias que el servidor guarda solo (Pymes y Corporativo — la ruta lleva `plan:`). */
+    public function automaticos(): JsonResponse
+    {
+        return response()->json($this->svc->automatico());
+    }
+
+    public function descargarAutomatico(string $archivo, Sesion $sesion): BinaryFileResponse
+    {
+        $ruta = $this->svc->rutaAutomatico($archivo);
+        if ($ruta === null) {
+            throw new NotFoundHttpException('Esa copia ya no existe (se conservan solo las últimas).');
+        }
+        $this->svc->registrarDescargaAutomatico($archivo, $sesion->usuarioId);
+
+        return response()->download($ruta, $archivo, ['Content-Type' => 'application/gzip']);
     }
 
     /** La limpieza de fin de práctica es DEL SUPERADMIN y de nadie más: no es un permiso delegable — borra la operatoria entera. */

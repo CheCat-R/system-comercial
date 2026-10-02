@@ -83,6 +83,56 @@ class PresupuestosService
         return [...Fila::camel($p), 'vencido' => $vencido, 'items' => Fila::camelTodos($items)];
     }
 
+    /**
+     * Resumen para el Dashboard: cuántos presupuestos hay en cada estado y
+     * cuáles vencen antes. Mismo cálculo de "vencido" que `publico()`
+     * (vencimiento pasado, todavía en `enviado`) — acá sin pedir los
+     * renglones de cada uno, que para un conteo no hacen falta.
+     */
+    public function pendientesResumen(?int $sucursalId = null, int $top = 5): array
+    {
+        $qb = DB::table('presupuestos as p')->leftJoin('clientes as c', 'c.id', '=', 'p.cliente_id')
+            ->whereIn('p.estado', ['borrador', 'enviado', 'confirmado'])
+            ->select('p.id', 'p.estado', 'p.vencimiento', 'p.total', 'c.nombre as cliente_nombre');
+        if ($sucursalId) {
+            $qb->where('p.sucursal_id', $sucursalId);
+        }
+        $filas = $qb->get();
+
+        $borrador = 0;
+        $confirmado = 0;
+        $vencidos = 0;
+        $vigentes = [];
+        foreach ($filas as $p) {
+            if ($p->estado === 'borrador') {
+                $borrador++;
+
+                continue;
+            }
+            if ($p->estado === 'confirmado') {
+                $confirmado++;
+
+                continue;
+            }
+            // enviado: vigente o vencido.
+            if ($p->vencimiento && strtotime($p->vencimiento) < time()) {
+                $vencidos++;
+            } else {
+                $vigentes[] = $p;
+            }
+        }
+        usort($vigentes, fn ($a, $b) => strcmp((string) $a->vencimiento, (string) $b->vencimiento));
+
+        return [
+            'borrador' => $borrador, 'confirmado' => $confirmado,
+            'enviadoVigente' => count($vigentes), 'enviadoVencido' => $vencidos,
+            'porVencer' => array_map(fn ($p) => [
+                'id' => (int) $p->id, 'clienteNombre' => $p->cliente_nombre ?? '—',
+                'vencimiento' => $p->vencimiento, 'total' => Pricing::money((float) $p->total),
+            ], array_slice($vigentes, 0, $top)),
+        ];
+    }
+
     public function listar(array $f): array
     {
         $qb = DB::table('presupuestos as p')->leftJoin('clientes as c', 'c.id', '=', 'p.cliente_id')->leftJoin('usuarios as u', 'u.id', '=', 'p.vendedor_id')

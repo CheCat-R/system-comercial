@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { cx } from '@shared/utils/classNames.js';
+import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { useVentas } from '../context/VentasContext.jsx';
 import { useResource } from '../hooks/useResource.js';
 import { ventasApi } from '../services/ventas.api.js';
@@ -69,6 +70,7 @@ export function CajaPanel() {
       <PanelHead
         title="Caja"
         desc="El turno de tu sucursal y el historial de arqueos. Clic en una fila para ver el detalle por medio de pago."
+        actions={<AyudaButton categoriaId="caja" />}
       />
 
       {/* ---------------- Turno actual de mi sucursal ---------------- */}
