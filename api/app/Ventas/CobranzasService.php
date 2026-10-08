@@ -208,6 +208,12 @@ class CobranzasService
                     if (VentasService::esNotaCredito($doc->tipo)) {
                         throw new ErrorDeNegocio('No se le imputa una cobranza a una nota de crédito: la nota ya descuenta de la cuenta del cliente.');
                     }
+                    // Solo la venta en cuenta corriente deja saldo para cobrar: una de contado ya se pagó al
+                    // emitirla (sus pagos no entran en `saldosEnTx`), y un recibo contra ella dejaría al
+                    // cliente con "saldo a favor" que no existe y la venta bloqueada para anular.
+                    if (($doc->condicion_pago ?? 'contado') !== 'cuenta_corriente') {
+                        throw new ErrorDeNegocio('El comprobante '.$doc->punto_venta.'-'.str_pad((string) $doc->numero, 8, '0', STR_PAD_LEFT).' se pagó al contado: no tiene saldo para cobrar.');
+                    }
                     if ($i['importe'] > $entry['saldo'] + self::EPS) {
                         throw new ErrorDeNegocio('El comprobante '.$doc->punto_venta.'-'.str_pad((string) $doc->numero, 8, '0', STR_PAD_LEFT).' debe $'.number_format($entry['saldo'], 2, '.', '').' y estás imputando $'.number_format($i['importe'], 2, '.', '').'.');
                     }

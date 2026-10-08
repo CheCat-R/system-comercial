@@ -1033,6 +1033,36 @@ class VentasService
         return $this->get($id);
     }
 
+    /** Lo que identifica el contenido de un renglón, para comparar dos lecturas del mismo ticket. */
+    private static function firmaItems(array $items): string
+    {
+        $f = fn (array $it) => [
+            (int) ($it['productoId'] ?? 0), (int) ($it['presentacionId'] ?? 0), round((float) ($it['cantidad'] ?? 0), 3),
+            round((float) ($it['precioUnitario'] ?? 0), 2), round((float) ($it['descuento'] ?? 0), 2), round((float) ($it['ofertaDescuento'] ?? 0), 2),
+        ];
+        $filas = array_map($f, $items);
+        sort($filas);
+
+        return json_encode($filas);
+    }
+
+    /**
+     * El ticket que se está cobrando tiene que ser el que se leyó: mismo total y
+     * mismos renglones. Un autoguardado (u otra pestaña) que lo re-guarde en el
+     * medio dejaría la venta con el contenido nuevo pero el stock, los pagos y la
+     * factura del viejo.
+     */
+    private function exigirSinCambios(int $id, array $borrador, ?object $fresca = null): void
+    {
+        $fresca ??= DB::table('ventas')->where('id', $id)->first();
+        $cambio = ! $fresca
+            || abs((float) $fresca->total - (float) $borrador['total']) > 0.004
+            || self::firmaItems($this->itemsGuardados($id)) !== self::firmaItems($borrador['items']);
+        if ($cambio) {
+            throw new ErrorDeNegocio('El ticket cambió mientras se cobraba (se editó desde otra pantalla o se guardó de nuevo). Revisalo y volvé a cobrar: lo que se iba a cobrar ya no coincide con lo guardado.');
+        }
+    }
+
     /** Cierra el borrador: número, stock, pagos. Lo que se confirma es exactamente lo último guardado. */
     public function confirmar(int $id, array $dto, array $opciones): array
     {
@@ -1095,6 +1125,9 @@ class VentasService
         };
         $this->validarMediosFacturar($pedido, $pagos, $config);
 
+        // Antes de pedir un CAE (que tarda y no se devuelve): que el ticket siga como se lo está cobrando.
+        $this->exigirSinCambios($id, $borrador);
+
         /* ARCA, ANTES de la transacción. Este es el camino del mostrador: se reserva el número. */
         $fiscal = $this->resolverFiscal(str_starts_with($pedido, 'factura'), $cliente, $config,
             ['total' => $borrador['total'], 'neto' => $borrador['subtotalNeto'], 'iva' => $borrador['ivaTotal'], 'items' => $borrador['items'], 'extras' => $borrador['extras'], 'fecha' => $fecha],
@@ -1108,6 +1141,9 @@ class VentasService
             if (! $fresca || $fresca->estado !== 'borrador') {
                 throw new ErrorDeNegocio('Este ticket ya se cerró mientras se estaba cobrando: alguien lo confirmó desde otra pantalla (o se reintentó el cobro). Buscalo en Ventas antes de rehacerlo — la venta ya existe.');
             }
+            // Lo que se valida (pagos, factura, stock) es lo que se leyó ANTES del candado: si el ticket se
+            // re-guardó en el medio, se cobraría un contenido y quedaría registrado otro.
+            $this->exigirSinCambios($id, $borrador, $fresca);
             if ($turno) {
                 $sesion = DB::table('caja_sesiones')->where('id', $turno->id)->lockForUpdate()->first();
                 if (! $sesion || $sesion->estado !== 'abierta') {
@@ -1355,6 +1391,20 @@ class VentasService
     }
 
     /**
+     * Una venta con nota de crédito vigente no se anula: la anulación reingresa
+     * TODO el stock y saca la venta del arqueo, pero la nota ya había devuelto
+     * parte de la mercadería (y, a veces, plata del cajón). Quedaría el stock
+     * duplicado y un egreso sin venta. Lo que falta se corrige con otra nota.
+     */
+    private static function exigirSinNotasDeCredito(int $ventaId): void
+    {
+        $hay = DB::table('ventas')->where('ref_venta_id', $ventaId)->where('estado', '!=', 'anulada')->exists();
+        if ($hay) {
+            throw new ErrorDeNegocio('Esta venta ya tiene notas de crédito: devolvieron parte de la mercadería (y quizá de la plata), así que anularla la devolvería dos veces. Corregí lo que falte con otra nota de crédito.');
+        }
+    }
+
+    /**
      * ANULACIÓN: devuelve la mercadería y saca la venta del arqueo. Pide motivo,
      * guarda quién y cuándo, y NO se anula contra un turno cerrado ni un
      * comprobante con CAE (eso se corrige con nota de crédito).
@@ -1377,6 +1427,7 @@ class VentasService
         if ($v['cobrado'] > 0.009) {
             throw new ErrorDeNegocio('Tiene cobranzas imputadas. Anulá primero la cobranza.');
         }
+        self::exigirSinNotasDeCredito($id);
         $this->exigirSucursal($v, $opciones, 'Esa venta');
         $razon = trim($motivo);
         if ($razon === '') {
@@ -1394,6 +1445,7 @@ class VentasService
             if (! $fresca || $fresca->estado === 'anulada') {
                 throw new ErrorDeNegocio('Esta venta ya se anuló recién desde otra pantalla.');
             }
+            self::exigirSinNotasDeCredito($id);
             if ($v['cajaSesionId'] && empty($opciones['esJefe'])) {
                 $sesion = DB::table('caja_sesiones')->where('id', $v['cajaSesionId'])->lockForUpdate()->first();
                 if ($sesion && $sesion->estado !== 'abierta') {

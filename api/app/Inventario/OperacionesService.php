@@ -71,11 +71,9 @@ class OperacionesService extends StockCore
             if (! ($c > 0)) {
                 throw new ErrorDeNegocio('Ingresá la cantidad.');
             }
-            $disp = $this->cant($prod->id, $sucId, $presId, 'disponible');
-            if ($c > $disp + self::EPS) {
-                throw new ErrorDeNegocio('Stock insuficiente. Disponible: '.$this->fmtCant($prod->tipo->value, $presId, $disp).'.');
+            if (! $this->restarSiHay($this->coord($prod->id, $sucId, $presId, 'disponible'), $c)) {
+                throw new ErrorDeNegocio('Stock insuficiente. Disponible: '.$this->fmtCant($prod->tipo->value, $presId, $this->cant($prod->id, $sucId, $presId, 'disponible')).'.');
             }
-            $this->addDelta($this->coord($prod->id, $sucId, $presId, 'disponible'), -$c);
             $precioU = $presId ? $this->precioPres($presId) : $this->precioBase($prod->id);
             $importe = $c * $precioU;
             $esGranelSuelto = $prod->esGranel() && ! $presId;
@@ -114,11 +112,9 @@ class OperacionesService extends StockCore
             if ($total <= 0) {
                 throw new ErrorDeNegocio('Indicá al menos un paquete a fraccionar.');
             }
-            $disp = $this->cant($prod->id, $sucId, null, 'disponible');
-            if ($total > $disp + self::EPS) {
-                throw new ErrorDeNegocio('No alcanza el granel disponible. Disponible: '.$this->num($disp).' kg, necesario: '.$this->num($total).' kg.');
+            if (! $this->restarSiHay($this->coord($prod->id, $sucId, null, 'disponible'), $total)) {
+                throw new ErrorDeNegocio('No alcanza el granel disponible. Disponible: '.$this->num($this->cant($prod->id, $sucId, null, 'disponible')).' kg, necesario: '.$this->num($total).' kg.');
             }
-            $this->addDelta($this->coord($prod->id, $sucId, null, 'disponible'), -$total);
             foreach ($asign as ['pres' => $pres, 'q' => $q]) {
                 $this->addDelta($this->coord($prod->id, $sucId, $pres->id, 'disponible'), $q);
             }
@@ -169,8 +165,14 @@ class OperacionesService extends StockCore
                     throw new ErrorDeNegocio('Para llegar a '.$real.' paquetes hacen falta '.$this->num($kg).' kg de granel y hay '.$this->fmtCant('granel', null, $granel).'.');
                 }
             }
+            if ($delta > 0) {
+                if (! $this->restarSiHay($this->coord($prod->id, $sucId, null, 'disponible'), $kg)) {
+                    throw new ErrorDeNegocio('Para llegar a '.$real.' paquetes hacen falta '.$this->num($kg).' kg de granel y hay '.$this->fmtCant('granel', null, $this->cant($prod->id, $sucId, null, 'disponible')).'.');
+                }
+            } else {
+                $this->addDelta($this->coord($prod->id, $sucId, null, 'disponible'), $kg);
+            }
             $this->addDelta($this->coord($prod->id, $sucId, $pres->id, 'disponible'), $delta);
-            $this->addDelta($this->coord($prod->id, $sucId, null, 'disponible'), $delta > 0 ? -$kg : $kg);
 
             $tam = $this->fmtTam((float) $pres->tam_kg);
             $m = $this->mov([
@@ -213,12 +215,12 @@ class OperacionesService extends StockCore
             $signo = (int) ($o['signo'] ?? 0) === 1 ? 1 : -1;
         }
         if ($signo < 0) {
-            $disp = $this->cant($prod->id, $sucId, $presId, 'disponible');
-            if ($c > $disp + self::EPS) {
-                throw new ErrorDeNegocio('Stock disponible insuficiente. Disponible: '.$this->fmtCant($prod->tipo->value, $presId, $disp).'.');
+            if (! $this->restarSiHay($this->coord($prod->id, $sucId, $presId, 'disponible'), $c)) {
+                throw new ErrorDeNegocio('Stock disponible insuficiente. Disponible: '.$this->fmtCant($prod->tipo->value, $presId, $this->cant($prod->id, $sucId, $presId, 'disponible')).'.');
             }
+        } else {
+            $this->addDelta($this->coord($prod->id, $sucId, $presId, 'disponible'), $c);
         }
-        $this->addDelta($this->coord($prod->id, $sucId, $presId, 'disponible'), $signo * $c);
         $estadoHacia = $signo > 0 ? 'disponible' : null;
         if ($tipo === 'vencido' || $tipo === 'defectuoso') {
             $this->addDelta($this->coord($prod->id, $sucId, $presId, $tipo), $c);
@@ -297,11 +299,14 @@ class OperacionesService extends StockCore
             if (! $prod) {
                 throw new ErrorDeNegocio('Producto inválido en el detalle.');
             }
-            $disp = $this->cant($prod->id, (int) $o['sucursalId'], $presId, $estado);
-            if (empty($o['permitirNegativo']) && $cantidad > $disp + self::EPS) {
-                throw new ErrorDeNegocio('Stock insuficiente de '.$prod->nombre.'. Disponible: '.$this->fmtCant($prod->tipo->value, $presId, $disp).'.');
+            $coord = $this->coord($prod->id, (int) $o['sucursalId'], $presId, $estado);
+            if (empty($o['permitirNegativo'])) {
+                if (! $this->restarSiHay($coord, $cantidad)) {
+                    throw new ErrorDeNegocio('Stock insuficiente de '.$prod->nombre.'. Disponible: '.$this->fmtCant($prod->tipo->value, $presId, $this->cant($prod->id, (int) $o['sucursalId'], $presId, $estado)).'.');
+                }
+            } else {
+                $this->addDelta($coord, -$cantidad);
             }
-            $this->addDelta($this->coord($prod->id, (int) $o['sucursalId'], $presId, $estado), -$cantidad);
             $esGranelSuelto = $prod->esGranel() && ! $presId;
             $this->mov([
                 'tipo' => $tipoMov ?: ($esGranelSuelto ? 'venta_granel' : 'venta_fraccionada'),
@@ -443,13 +448,32 @@ class OperacionesService extends StockCore
             ->when(! empty($q['productoId']), fn ($b) => $b->where('producto_id', (int) $q['productoId']))
             ->when(! empty($q['sucursalId']), fn ($b) => $b->where('sucursal_id', (int) $q['sucursalId']))
             ->when(! empty($q['tipo']), fn ($b) => $b->where('tipo', $q['tipo']))
-            ->when($this->fechaLocal($q['desde'] ?? null), fn ($b, $d) => $b->where('fecha', '>=', $d))
-            ->when(! empty($q['hasta']), fn ($b) => $b->where('fecha', '<=', Carbon::parse($q['hasta'])->endOfDay()))
+            ->when($this->limiteDeDia($q['desde'] ?? null, false), fn ($b, $d) => $b->where('fecha', '>=', $d))
+            ->when($this->limiteDeDia($q['hasta'] ?? null, true), fn ($b, $d) => $b->where('fecha', '<=', $d))
             ->orderByDesc('id')
             ->limit($limit)
             ->get();
     }
 
+    /**
+     * 'YYYY-MM-DD' → el inicio (o el fin) de ESE día en hora argentina, expresado en UTC,
+     * que es como se guarda `fecha`. Parsear sin zona cortaba el día a las 21:00 locales:
+     * la merma de las 22:30 del día 5 aparecía en "el 6".
+     */
+    protected function limiteDeDia(mixed $v, bool $fin): ?Carbon
+    {
+        $s = trim((string) ($v ?? ''));
+        if ($s === '') {
+            return null;
+        }
+        try {
+            $d = Carbon::parse($s, 'America/Argentina/Buenos_Aires');
+
+            return ($fin ? $d->endOfDay() : $d->startOfDay())->utc();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
     /** 'YYYY-MM-DD' → inicio del día local, o null. */
     protected function fechaLocal(mixed $v): ?Carbon
     {
