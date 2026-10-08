@@ -7,4 +7,5 @@
 Thumbs.db
 /.idea
 /.vscode
-/.claude/
+/.claude/*
+!/.claude/agents/
