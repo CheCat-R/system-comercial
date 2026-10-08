@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import { authService } from './auth.service.js';
+import { sincronizadorOffline } from '../offline/sincronizador.js';
 
 const AuthContext = createContext(null);
 
@@ -41,6 +42,8 @@ export function AuthProvider({ children }) {
     const u = await authService.login(credentials);
     setUser(u);
     setStatus('authenticated');
+    // Si quedaron ventas cobradas sin conexión de antes, salen apenas hay sesión.
+    sincronizadorOffline.intentar();
     return u;
   }, []);
 

@@ -15,7 +15,9 @@ use App\Services\ConfiguracionService;
 use App\Services\ListasService;
 use App\Services\OfertasService;
 use App\Support\Fila;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -726,7 +728,7 @@ class VentasService
             throw new ErrorDeNegocio('Tipo de comprobante inválido.');
         }
         $puntoVenta = (string) ($config['puntoVenta'] ?: '0001');
-        $fecha = self::fechaDeDocumento($dto['fecha'] ?? null, ! empty($opciones['esJefe']));
+        $fecha = self::fechaDeDocumento($dto['fecha'] ?? null, ! empty($opciones['esJefe']) || ! empty($opciones['esOffline']));
         $cab = [
             'tipo' => $tipo, 'punto_venta' => $puntoVenta, 'fecha' => $fecha, 'cliente_id' => $cliente->id, 'sucursal_id' => $sucursalId, 'usuario_id' => $autor,
             'condicion_pago' => $condicionPago, 'presupuesto_id' => $dto['presupuestoId'] ?? null, 'lista_precio' => $dto['listaPrecio'] ?? '',
@@ -765,7 +767,8 @@ class VentasService
             $numero = $fiscal['cbteNro'] ?? $this->siguienteNumero($tipoFinal, $puntoVentaFinal);
             $id = DB::table('ventas')->insertGetId([...$cab, 'tipo' => $tipoFinal, 'punto_venta' => $puntoVentaFinal, 'numero' => $numero, 'estado' => 'confirmada',
                 'caja_sesion_id' => $turno?->id, 'vencimiento_pago' => $vencimientoPago, 'cae' => $fiscal['cae'], 'cae_vencimiento' => $fiscal['caeVencimiento'],
-                'facturar_pendiente' => $fiscal['facturarPendiente'], 'facturar_motivo' => $fiscal['facturarMotivo']]);
+                'facturar_pendiente' => $fiscal['facturarPendiente'], 'facturar_motivo' => $fiscal['facturarMotivo'],
+                'idempotencia_offline' => $opciones['idempotenciaOffline'] ?? null]);
             $this->insertarHijas($id, $tot, $pagos);
             if (! empty($dto['presupuestoId'])) {
                 $this->cerrarPresupuesto((int) $dto['presupuestoId'], $id, (int) $sucursalId, $cliente->id, $autor);
@@ -782,6 +785,47 @@ class VentasService
         });
 
         return $this->get($id);
+    }
+
+    /**
+     * De la fila que armó el POS a la venta que se crea. Lo que decide el
+     * servidor no se toma de la fila (ver `SincronizarOfflineRequest`).
+     *
+     *  · REDONDEO: los pagos del POS ya incluyen el redondeo del cobro; acá
+     *    se materializa como el extra "Redondeo" (IVA 0), igual que en `confirmar()`.
+     *  · FECHA: la del cobro en el mostrador, no la de la sincronización — acotada
+     *    (nunca futura, hasta 3 días atrás: más viejo no lo acepta ARCA).
+     *  · AUTORÍA: firma la sesión que sincroniza (el relevo no se acepta del
+     *    cliente); quién cobró de verdad y cuándo queda escrito en las observaciones.
+     */
+    private function filaOffline(array $v): array
+    {
+        $extras = $v['extras'] ?? [];
+        $redondeo = Pricing::money((float) ($v['redondeo'] ?? 0));
+        if ($redondeo > 0) {
+            $extras[] = ['concepto' => 'Redondeo', 'importe' => $redondeo, 'iva' => 0];
+        }
+
+        $fecha = null;
+        $nota = 'Cobrada sin conexión';
+        if (! empty($v['cobradaEn'])) {
+            try {
+                $cobro = Carbon::parse($v['cobradaEn']);
+                $ahora = Carbon::now();
+                if ($cobro->lte($ahora->copy()->addMinutes(5)) && $cobro->gte($ahora->copy()->subDays(3))) {
+                    $fecha = $cobro->copy()->utc()->toDateTimeString();
+                }
+                $nota .= ' el '.$cobro->copy()->timezone('America/Argentina/Buenos_Aires')->format('d/m/Y H:i');
+            } catch (\Throwable) {
+                // fecha ilegible: se usa la de la sincronización
+            }
+        }
+        if (! empty($v['cobradoPor'])) {
+            $nota .= ' por '.trim((string) $v['cobradoPor']);
+        }
+        $observaciones = trim(implode(' · ', array_filter([trim((string) ($v['observaciones'] ?? '')), $nota])));
+
+        return [...$v, 'extras' => $extras, 'fecha' => $fecha, 'observaciones' => $observaciones, 'estado' => 'confirmada', 'condicionPago' => 'contado'];
     }
 
     /**
@@ -815,31 +859,68 @@ class VentasService
 
         foreach ($ventas as $v) {
             $idLocal = (string) $v['idLocal'];
-            $existente = DB::table('ventas')->where('idempotencia_offline', $idLocal)->first();
-            if ($existente) {
-                // Por si el lote anterior creó la venta pero se cortó antes de descartar el borrador.
-                $this->descartarBorradorDeOffline($v, $opciones);
-                $resultados[] = ['idLocal' => $idLocal, 'ok' => true, 'yaExistia' => true, 'ventaId' => $existente->id, 'numero' => $existente->numero];
-                $sucursalesTocadas[(int) $existente->sucursal_id] = true;
 
-                continue;
-            }
-
-            $medios = array_unique(array_map(fn ($p) => $p['medio'] ?? '', $v['pagos'] ?? []));
-            if ($medios !== ['efectivo']) {
-                $resultados[] = ['idLocal' => $idLocal, 'ok' => false, 'motivo' => 'El modo offline solo sincroniza ventas cobradas en efectivo.'];
+            // Un candado por venta: dos reintentos simultáneos (otra pestaña, otro equipo, una recarga con la
+            // request todavía en viaje) no la procesan a la vez. Se toma ANTES de cualquier llamada a ARCA.
+            $candado = Cache::lock('venta-offline:'.$idLocal, 120);
+            if (! $candado->get()) {
+                $resultados[] = ['idLocal' => $idLocal, 'ok' => false, 'reintentar' => true, 'motivo' => 'Se está procesando desde otro lado: se reintenta solo.'];
 
                 continue;
             }
 
             try {
-                $venta = $this->create([...$v, 'estado' => 'confirmada', 'condicionPago' => 'contado'], [...$opciones, 'forzarStockNegativo' => true, 'esOffline' => true]);
-                DB::table('ventas')->where('id', $venta['id'])->update(['idempotencia_offline' => $idLocal]);
-                $this->descartarBorradorDeOffline($v, $opciones);
-                $resultados[] = ['idLocal' => $idLocal, 'ok' => true, 'yaExistia' => false, 'ventaId' => $venta['id'], 'numero' => $venta['numero']];
-                $sucursalesTocadas[(int) $venta['sucursalId']] = true;
-            } catch (ErrorDeNegocio $e) {
-                $resultados[] = ['idLocal' => $idLocal, 'ok' => false, 'motivo' => $e->getMessage()];
+                $existente = DB::table('ventas')->where('idempotencia_offline', $idLocal)->first();
+                if ($existente) {
+                    // Por si el lote anterior creó la venta pero se cortó antes de descartar el borrador.
+                    $this->descartarBorradorDeOffline($v, $opciones);
+                    $resultados[] = ['idLocal' => $idLocal, 'ok' => true, 'yaExistia' => true, 'ventaId' => $existente->id, 'numero' => $existente->numero];
+                    $sucursalesTocadas[(int) $existente->sucursal_id] = true;
+
+                    continue;
+                }
+
+                $medios = array_unique(array_map(fn ($p) => $p['medio'] ?? '', $v['pagos'] ?? []));
+                if ($medios !== ['efectivo']) {
+                    $resultados[] = ['idLocal' => $idLocal, 'ok' => false, 'motivo' => 'El modo offline solo sincroniza ventas cobradas en efectivo.'];
+
+                    continue;
+                }
+
+                // Sin turno abierto la venta NO se rechaza: ya está cobrada. Espera en la cola y entra sola
+                // cuando se abra la caja (si no, quedaría "con error" para siempre por un cierre a destiempo).
+                $sucursalVenta = (int) ($opciones['sucursalSesion'] ?? 0);
+                if ($sucursalVenta && ! empty($this->cfg->get('ventas')['cajaObligatoria']) && ! $this->caja->exigirTurno($sucursalVenta, false)) {
+                    $resultados[] = ['idLocal' => $idLocal, 'ok' => false, 'reintentar' => true, 'motivo' => 'No hay un turno de caja abierto en esta sucursal: abrí la caja y esta venta se registra sola.'];
+
+                    continue;
+                }
+
+                try {
+                    $venta = $this->create($this->filaOffline($v), [...$opciones, 'forzarStockNegativo' => true, 'esOffline' => true, 'idempotenciaOffline' => $idLocal]);
+                    $this->descartarBorradorDeOffline($v, $opciones);
+                    $resultados[] = ['idLocal' => $idLocal, 'ok' => true, 'yaExistia' => false, 'ventaId' => $venta['id'], 'numero' => $venta['numero']];
+                    $sucursalesTocadas[(int) $venta['sucursalId']] = true;
+                } catch (ErrorDeNegocio $e) {
+                    $resultados[] = ['idLocal' => $idLocal, 'ok' => false, 'motivo' => $e->getMessage()];
+                } catch (QueryException $e) {
+                    // Otro proceso la grabó entre el chequeo y el INSERT (el índice único la frena): ya existe.
+                    $ya = DB::table('ventas')->where('idempotencia_offline', $idLocal)->first();
+                    if (! $ya) {
+                        report($e);
+                        $resultados[] = ['idLocal' => $idLocal, 'ok' => false, 'motivo' => 'No se pudo registrar esta venta (error interno).'];
+
+                        continue;
+                    }
+                    $resultados[] = ['idLocal' => $idLocal, 'ok' => true, 'yaExistia' => true, 'ventaId' => $ya->id, 'numero' => $ya->numero];
+                    $sucursalesTocadas[(int) $ya->sucursal_id] = true;
+                } catch (\Throwable $e) {
+                    // Una fila rota no tira abajo a las demás: las anteriores ya están grabadas.
+                    report($e);
+                    $resultados[] = ['idLocal' => $idLocal, 'ok' => false, 'motivo' => 'No se pudo registrar esta venta (error interno).'];
+                }
+            } finally {
+                $candado->release();
             }
         }
 

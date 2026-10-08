@@ -13,6 +13,7 @@ use App\Ventas\CatalogoPos;
 use App\Ventas\VentasService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 /**
  * VENTAS — el mostrador. Todo lo que decide QUIÉN y DÓNDE sale de la sesión y
@@ -114,9 +115,22 @@ class VentasController extends Controller
     /** El lote de ventas que el POS armó sin conexión, recién mandado al volver internet. */
     public function sincronizarOffline(SincronizarOfflineRequest $request, Sesion $sesion): JsonResponse
     {
-        $d = $request->validated();
+        // El pedido ya validó el sobre; cada fila se valida sola, y una mal armada no frena a las demás.
+        $validas = [];
+        $rechazadas = [];
+        foreach ($request->input('ventas') as $fila) {
+            $v = Validator::make($fila, SincronizarOfflineRequest::reglasDeFila());
+            if ($v->fails()) {
+                $rechazadas[] = ['idLocal' => (string) $fila['idLocal'], 'ok' => false, 'motivo' => 'La venta está mal armada: '.$v->errors()->first()];
 
-        return response()->json($this->svc->sincronizarOffline($d['ventas'], $this->opciones($sesion)));
+                continue;
+            }
+            $validas[] = $v->validated();
+        }
+        $r = $validas ? $this->svc->sincronizarOffline($validas, $this->opciones($sesion)) : ['resultados' => [], 'stockNegativo' => []];
+        $r['resultados'] = [...$rechazadas, ...$r['resultados']];
+
+        return response()->json($r);
     }
 
     public function confirmar(ConfirmarVentaRequest $request, int $id, Sesion $sesion): JsonResponse

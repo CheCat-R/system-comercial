@@ -10,6 +10,7 @@ import {
 import { Table, Btn, Di, ModalShell, VentaTag, money, fmtFechaHora, s } from '../ui.jsx';
 import { configImpresion, imprimirVenta } from '@core/services/imprimir.js';
 import { agregarVentaPendiente } from '@core/offline/colaVentas.js';
+import { leerSesion } from '@core/auth/sesion.js';
 import p from '../../styles/Pos.module.css';
 
 /**
@@ -202,6 +203,12 @@ export function CobroModal({
         extras: extrasParaApi(ticket.extras),
         descuentos: descuentosParaApi(ticket),
         observaciones,
+        // Lo que el servidor necesita para registrarla como se cobró aunque se sincronice horas
+        // después o desde otra sesión: el redondeo (los pagos ya lo incluyen), el turno, cuándo y quién.
+        redondeo: redondeo > 0.009 ? redondeo : undefined,
+        cajaSesionId: cajaSesionId ?? undefined,
+        cobradaEn: new Date().toISOString(),
+        cobradoPor: leerSesion()?.usuario?.nombre,
         pagos: [{ medio: 'efectivo', importe: totalCobrar }],
       });
       const ventaLocal = {
