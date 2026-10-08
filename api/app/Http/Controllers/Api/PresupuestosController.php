@@ -17,7 +17,7 @@ class PresupuestosController extends Controller
 
     private function opciones(Sesion $s): array
     {
-        return ['soloSuSucursal' => $s->soloSuSucursal()];
+        return ['soloSuSucursal' => $s->soloSuSucursal(), 'puedePisarPrecio' => $s->puede('precio_manual')];
     }
 
     public function index(Request $request, Sesion $sesion): JsonResponse
@@ -55,7 +55,7 @@ class PresupuestosController extends Controller
         $d = $request->validated();
         $sucursalId = $sesion->sucursalDeOperacion((int) ($d['sucursalId'] ?? 0) ?: null);
 
-        return response()->json($this->svc->crear($d, $sucursalId, $sesion->usuarioId), 201);
+        return response()->json($this->svc->crear($d, $sucursalId, $sesion->usuarioId, $sesion->puede('precio_manual')), 201);
     }
 
     public function update(GuardarPresupuestoRequest $request, int $id, Sesion $sesion): JsonResponse

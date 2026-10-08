@@ -9,6 +9,7 @@ use App\Precios\OpcionesPrecio;
 use App\Precios\Pricing;
 use App\Services\ListasService;
 use App\Services\OfertasService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -36,6 +37,10 @@ class Portero
     {
         if (($o['tipo'] ?? '') === 'combo') {
             return collect($o['componentes'] ?? [])->contains(fn ($c) => (int) $c['productoId'] === (int) $r['productoId']);
+        }
+        // "% al ticket" no tiene alcances: toca a todo renglón que corra en sus listas (eso se mira aparte).
+        if (($o['tipo'] ?? '') === 'ticket') {
+            return true;
         }
         $esPaquete = ! empty($r['presentacionId']);
         foreach ($o['alcances'] ?? [] as $a) {
@@ -94,9 +99,40 @@ class Portero
                 $ahorro = $lleva * $p - self::netoDe((float) ($o['precio'] ?? 0), $iva);
 
                 return $ahorro <= 0 ? 0.0 : Pricing::money(floor($c / $lleva) * $ahorro);
+            case 'ticket':
+                // Un % sobre lo que el renglón paga de verdad; el mínimo del ticket se mira aparte.
+                return Pricing::money($c * $p * $porc / 100);
             default:
                 return null;
         }
+    }
+
+    /** Zona en la que se cargan vigencias y días de las ofertas: la del local, no la del servidor. */
+    public const ZONA = 'America/Argentina/Buenos_Aires';
+
+    /**
+     * ¿Esta oferta corre AHORA, en esta sucursal? Mismas reglas que `ofertaVigente`
+     * del POS (desde, hasta, días, sucursales). Devuelve el motivo o null.
+     * `desde` y `hasta` se guardan como hora de pared del local, sin zona.
+     */
+    public static function motivoFueraDeVigencia(array $o, Carbon $ahora, ?int $sucursalId): ?string
+    {
+        if (! empty($o['desde']) && $ahora->lt(Carbon::parse($o['desde'], self::ZONA))) {
+            return 'todavía no empezó';
+        }
+        if (! empty($o['hasta']) && $ahora->gt(Carbon::parse($o['hasta'], self::ZONA))) {
+            return 'ya venció';
+        }
+        $dias = (string) ($o['dias'] ?? '');
+        if (strlen($dias) === 7 && ($dias[$ahora->dayOfWeekIso - 1] ?? '1') !== '1') {
+            return 'no corre hoy';
+        }
+        $sucs = array_filter(array_map('trim', explode(',', (string) ($o['sucursales'] ?? ''))));
+        if ($sucs && $sucursalId !== null && ! in_array((string) $sucursalId, $sucs, true)) {
+            return 'no corre en esta sucursal';
+        }
+
+        return null;
     }
 
     /**
@@ -180,7 +216,7 @@ class Portero
      * iva, precio, lista, origen, oferta acotada, descuento nombrado y costo
      * congelado.
      */
-    public function resolverRenglones(array $items, int $clienteId, array $config, bool $puedePisarPrecio, array $congelados = [], array $descuentosPorLista = []): array
+    public function resolverRenglones(array $items, int $clienteId, array $config, bool $puedePisarPrecio, array $congelados = [], array $descuentosPorLista = [], ?int $sucursalId = null, bool $verVigencia = true, array $extras = []): array
     {
         if (! $items) {
             return [];
@@ -222,12 +258,36 @@ class Portero
             }
             $modalidadesDeMarca[$r['marcaId']][$r['modalidadId']] = true;
         }
-        $brutoTicket = array_sum(array_map(fn ($it) => (float) ($it['cantidad'] ?? 0) * (float) ($it['precioUnitario'] ?? $it['precioLista'] ?? 0), $items));
+        // El monto del ticket se mide con los precios que resuelve el SERVIDOR (lista de piso), nunca con importes del body.
+        $brutoTicket = 0.0;
+        foreach ($items as $it) {
+            $c = (float) ($it['cantidad'] ?? 0);
+            $prodP = $prods->get((int) $it['productoId']);
+            if ($c <= 0 || ! $prodP) {
+                continue;
+            }
+            $presP = ! empty($it['presentacionId']) ? $press->get((int) $it['presentacionId']) : null;
+            if (! empty($it['presentacionId']) && (! $presP || (int) $presP->producto_id !== (int) $prodP->id)) {
+                continue;
+            }
+            $suyasP = $filas->filter(fn ($f) => (int) $f->producto_id === (int) $prodP->id && ((int) ($f->presentacion_id ?? 0) ?: null) === ($presP ? (int) $presP->id : null) && $listaDe->has($f->lista_id))
+                ->map(fn ($f) => ['fila' => $f, 'lista' => $listaDe->get($f->lista_id)])->sortBy(fn ($s) => $s['lista']['orden'])->values();
+            if ($suyasP->isEmpty()) {
+                continue;
+            }
+            $pisoP = $suyasP->first(fn ($s) => $s['lista']['id'] === $baseId) ?? $suyasP->last();
+            $ivaP = (float) $prodP->iva;
+            $cfP = Pricing::costosFormato(($act = Pricing::formatoActivo(($provs->get($prodP->id) ?? collect())->all())) ? CostoEntry::desde((array) $act) : null, $ivaP);
+            $costoP = $presP ? Pricing::costoNetoPresentacion($cfP->costoPrecioUnitario, (float) $presP->tam_kg) : $cfP->costoPrecioUnitario;
+            $brutoTicket += $c * Pricing::money(Pricing::precioVentaFila($costoP, FilaVenta::desde((array) $pisoP['fila']), new OpcionesPrecio($ivaP, (float) ($prodP->redondeo ?? $redondeo)))->netoUnitario);
+        }
         $modalidadPorMonto = ((float) ($config['montoMinimoMayorista'] ?? 0) > 0 && ! empty($config['modalidadMontoId']) && $brutoTicket + 1e-9 >= (float) $config['montoMinimoMayorista'])
             ? (int) $config['modalidadMontoId'] : null;
 
         $declaranOferta = collect($items)->contains(fn ($it) => (float) ($it['ofertaDescuento'] ?? 0) > 0);
         $ofertasActivas = $declaranOferta ? collect($this->ofertas->activas())->keyBy('id') : collect();
+        $ahora = Carbon::now(self::ZONA);
+        $usoDeOfertas = [];   // ofertaId → renglones que la declaran (para los topes del ticket completo)
 
         $resueltos = [];
         foreach ($items as $it) {
@@ -312,6 +372,11 @@ class Portero
                 if (! self::ofertaAlcanza($of, ['productoId' => (int) $prod->id, 'presentacionId' => $presId, 'marcaId' => $prod->marca_id, 'categoriaId' => $prod->categoria_id, 'etiquetas' => $misEtq])) {
                     throw new ErrorDeNegocio($etiqueta.': la oferta "'.$of['nombre'].'" no incluye este artículo.');
                 }
+                // Activa no alcanza: tiene que correr AHORA y en ESTA sucursal. El lote offline no lo mira
+                // (la venta ya pasó en el mostrador, con la oferta vigente de ese momento): sí mantiene los topes.
+                if ($verVigencia && ($fuera = self::motivoFueraDeVigencia($of, $ahora, $sucursalId))) {
+                    throw new ErrorDeNegocio($etiqueta.': la oferta "'.$of['nombre'].'" '.$fuera.'.');
+                }
                 $listasOferta = array_filter(array_map('intval', explode(',', (string) ($of['listas'] ?? ''))));
                 if ($listasOferta && ! in_array((int) $elegida['fila']->lista_id, $listasOferta, true)) {
                     throw new ErrorDeNegocio($etiqueta.': la oferta "'.$of['nombre'].'" no corre sobre la lista '.($elegida['lista']['etiqueta'] ?: $elegida['lista']['nombre']).'.');
@@ -320,6 +385,7 @@ class Portero
                 if ($techo !== null && $ofertaDesc > $techo + 0.01) {
                     throw new ErrorDeNegocio($etiqueta.': la oferta "'.$of['nombre'].'" descuenta hasta $'.number_format($techo, 2, '.', '').' y se está aplicando $'.number_format($ofertaDesc, 2, '.', '').'.');
                 }
+                $usoDeOfertas[$ofertaId] = true;
             } else {
                 $ofertaId = null;
                 $ofertaDesc = 0.0;
@@ -351,6 +417,16 @@ class Portero
             ];
         }
 
+        // Las ofertas que se miden sobre el ticket ENTERO (combo, % al ticket) no se acotan renglón por renglón.
+        foreach (array_keys($usoDeOfertas) as $ofertaId) {
+            $of = $ofertasActivas->get($ofertaId);
+            if ($of['tipo'] === 'combo') {
+                $this->exigirTopeDeCombo($of, $resueltos);
+            } elseif ($of['tipo'] === 'ticket') {
+                $this->exigirMinimoDeTicket($of, $resueltos, $extras);
+            }
+        }
+
         // Un descuento no puede quedar colgado de una lista que el ticket no usa.
         foreach ($descuentosPorLista as $d) {
             if (! collect($resueltos)->contains(fn ($r) => $r['listaId'] === $d['listaId'])) {
@@ -359,6 +435,68 @@ class Portero
         }
 
         return $resueltos;
+    }
+
+    /**
+     * EL TECHO DE UN COMBO. Se descuenta la diferencia entre lo que valen los
+     * conjuntos COMPLETOS que hay en el ticket y el precio del combo; los
+     * renglones que declaran el combo no pueden sumar más que eso (en final,
+     * con IVA). Espejo del motor del POS, tomando el precio más alto de cada
+     * componente: el servidor acota, no recalcula el reparto.
+     */
+    private function exigirTopeDeCombo(array $of, array $resueltos): void
+    {
+        $comps = $of['componentes'] ?? [];
+        $ids = array_filter(array_map('intval', explode(',', (string) ($of['listas'] ?? ''))));
+        $validos = array_values(array_filter($resueltos, fn ($r) => ! $ids || in_array($r['listaId'], $ids, true)));
+        $sets = INF;
+        foreach ($comps as $c) {
+            $disp = array_sum(array_map(fn ($r) => $r['productoId'] === (int) $c['productoId'] ? $r['cantidad'] : 0, $validos));
+            $sets = min($sets, floor($disp / max((float) $c['cantidad'], 1e-9)));
+        }
+        if (count($comps) < 2 || ! is_finite($sets) || $sets < 1) {
+            throw new ErrorDeNegocio('El combo "'.$of['nombre'].'" necesita todos sus componentes en el ticket.');
+        }
+        $valorMax = 0.0;
+        foreach ($comps as $c) {
+            $unit = 0.0;
+            foreach ($validos as $r) {
+                if ($r['productoId'] === (int) $c['productoId']) {
+                    $unit = max($unit, $r['precioUnitario'] * (1 + $r['iva'] / 100));
+                }
+            }
+            $valorMax += (float) $c['cantidad'] * $sets * $unit;
+        }
+        $ahorroMax = max(0.0, $valorMax - $sets * (float) $of['precio']);
+        $mios = array_filter($resueltos, fn ($r) => $r['ofertaId'] === (int) $of['id']);
+        $declarado = array_sum(array_map(fn ($r) => $r['ofertaDescuento'] * (1 + $r['iva'] / 100), $mios));
+        if ($declarado > $ahorroMax + 0.02 * count($mios)) {
+            throw new ErrorDeNegocio('El combo "'.$of['nombre'].'" descuenta hasta $'.number_format($ahorroMax, 2, '.', '').' con lo que hay en el ticket y se está aplicando $'.number_format($declarado, 2, '.', '').'.');
+        }
+    }
+
+    /**
+     * La oferta "% al ticket" vale desde un monto. Se mide el ticket SIN ese
+     * descuento (con el IVA, extras incluidos), como lo ve el cajero al
+     * ofrecerla. El tope por renglón ya lo pone `techoDeOferta`.
+     */
+    private function exigirMinimoDeTicket(array $of, array $resueltos, array $extras): void
+    {
+        $minimo = (float) ($of['montoMinimo'] ?? 0);
+        $total = 0.0;
+        foreach ($resueltos as $r) {
+            $neto = $r['cantidad'] * $r['precioUnitario'] * (1 - $r['descuento'] / 100);
+            if ($r['ofertaId'] !== (int) $of['id']) {
+                $neto -= min(max(0.0, (float) $r['ofertaDescuento']), $neto);
+            }
+            $total += $neto * (1 + $r['iva'] / 100);
+        }
+        foreach ($extras as $e) {
+            $total += (float) ($e['importe'] ?? 0) * (1 + (isset($e['iva']) ? (float) $e['iva'] : 21.0) / 100);
+        }
+        if ($total + 0.02 < $minimo) {
+            throw new ErrorDeNegocio('La oferta "'.$of['nombre'].'" pide un ticket de al menos $'.number_format($minimo, 2, '.', '').' y este llega a $'.number_format($total, 2, '.', '').'.');
+        }
     }
 
     /**

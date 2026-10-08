@@ -173,7 +173,7 @@ Route::middleware(['auth:sanctum', 'cambio.password', 'licencia'])->group(functi
     Route::get('/listas', [ListasController::class, 'catalogo']);
     Route::get('/listas/reglas-marca', [ListasController::class, 'reglas']);
     Route::put('/listas/cliente/{clienteId}', [ListasController::class, 'setCliente'])
-        ->whereNumber('clienteId')->middleware('permiso:ventas.listas,ventas.clientes');
+        ->whereNumber('clienteId')->middleware('permiso:ventas.listas,precios');
     Route::middleware('permiso:ventas.listas,precios')->group(function () {
         Route::post('/listas/modalidades', [ListasController::class, 'crearModalidad']);
         Route::patch('/listas/modalidades/{modalidad}', [ListasController::class, 'editarModalidad']);

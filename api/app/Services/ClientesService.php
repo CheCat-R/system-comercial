@@ -26,6 +26,8 @@ class ClientesService
     /** Longitud exigida por tipo de documento (0 = sin validación). */
     private const LARGO_DOC = ['cuit' => 11, 'cuil' => 11, 'dni' => 0, 'sin_identificar' => 0];
 
+    public const SIN_LLAVE_LISTAS = 'Asignar listas de precios a un cliente pide la llave "Formato de venta" o "Precios" (Gerencia › Usuarios y roles): le habilita precios mayoristas en la caja. El resto de la ficha se guarda igual si no tocás las listas.';
+
     public const SIN_LLAVE_CREDITO = 'Habilitar la cuenta corriente y fijar su límite pide la llave "Cuenta corriente" (Gerencia › Usuarios y roles). El resto de la ficha se guarda igual si no tocás esos campos.';
 
     /* ------------------------------ Lectura ------------------------------ */
@@ -142,10 +144,14 @@ class ClientesService
         }
     }
 
-    public function crear(array $d, bool $puedeCredito): Cliente
+    public function crear(array $d, bool $puedeCredito, bool $puedeListas = true): Cliente
     {
         if (trim($d['nombre'] ?? '') === '') {
             throw new ErrorDeNegocio('Ingresá el nombre o razón social.');
+        }
+        // Las listas del cliente son una puerta a precios más bajos: tienen su propia llave.
+        if (! $puedeListas && array_filter(array_map('intval', $d['listas'] ?? []))) {
+            throw new AccessDeniedHttpException(self::SIN_LLAVE_LISTAS);
         }
         // Sin la llave, un alta con crédito ya cargado se rechaza con nombre y apellido.
         if (! $puedeCredito && (! empty($d['ctaCteHabilitada']) || (float) ($d['limiteCredito'] ?? 0) > 0 || (int) ($d['diasPlazo'] ?? 0) > 0)) {
@@ -161,9 +167,19 @@ class ClientesService
         });
     }
 
-    public function editar(int $id, array $d, bool $puedeCredito): Cliente
+    public function editar(int $id, array $d, bool $puedeCredito, bool $puedeListas = true): Cliente
     {
         $actual = $this->get($id);
+        // Sin la llave las listas se pueden reenviar tal cual están, pero no cambiar.
+        if (! $puedeListas && isset($d['listas'])) {
+            $pedidas = array_values(array_unique(array_filter(array_map('intval', $d['listas']))));
+            $hoy = DB::table('cliente_listas')->where('cliente_id', $actual->id)->pluck('lista_id')->map(fn ($x) => (int) $x)->all();
+            sort($pedidas);
+            sort($hoy);
+            if ($pedidas !== $hoy) {
+                throw new AccessDeniedHttpException(self::SIN_LLAVE_LISTAS);
+            }
+        }
         if (trim($d['nombre'] ?? '') === '') {
             throw new ErrorDeNegocio('Ingresá el nombre o razón social.');
         }

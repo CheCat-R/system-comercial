@@ -715,7 +715,7 @@ class VentasService
         }
         $congelados = $this->portero->congeladosDePresupuesto(! empty($dto['presupuestoId']) ? (int) $dto['presupuestoId'] : null, $cliente->id, (int) $sucursalId);
         $descuentosPorLista = $this->portero->resolverDescuentos($dto['descuentos'] ?? [], (int) $sucursalId, ! empty($opciones['puedePisarPrecio']));
-        $resueltos = $this->portero->resolverRenglones($items, $cliente->id, $config, ! empty($opciones['puedePisarPrecio']), $congelados, $descuentosPorLista);
+        $resueltos = $this->portero->resolverRenglones($items, $cliente->id, $config, ! empty($opciones['puedePisarPrecio']), $congelados, $descuentosPorLista, (int) $sucursalId, empty($opciones['esOffline']), $dto['extras'] ?? []);
         $tot = Portero::calcularTotales($resueltos, $dto['extras'] ?? []);
         $condicionPago = $dto['condicionPago'] ?? 'contado';
         if (! $esBorrador && ! ($tot['total'] > 0)) {
@@ -833,7 +833,7 @@ class VentasService
             }
 
             try {
-                $venta = $this->create([...$v, 'estado' => 'confirmada', 'condicionPago' => 'contado'], [...$opciones, 'forzarStockNegativo' => true]);
+                $venta = $this->create([...$v, 'estado' => 'confirmada', 'condicionPago' => 'contado'], [...$opciones, 'forzarStockNegativo' => true, 'esOffline' => true]);
                 DB::table('ventas')->where('id', $venta['id'])->update(['idempotencia_offline' => $idLocal]);
                 $this->descartarBorradorDeOffline($v, $opciones);
                 $resultados[] = ['idLocal' => $idLocal, 'ok' => true, 'yaExistia' => false, 'ventaId' => $venta['id'], 'numero' => $venta['numero']];
@@ -935,7 +935,7 @@ class VentasService
         $congelados = $this->portero->congeladosDePresupuesto($actual['presupuestoId'] ? (int) $actual['presupuestoId'] : null, $cliente->id, (int) $actual['sucursalId']);
         $yaAplicados = array_values(array_unique(array_filter(array_map(fn ($it) => (int) ($it['descuentoId'] ?? 0), $actual['items']))));
         $descuentosPorLista = $this->portero->resolverDescuentos($dto['descuentos'] ?? [], (int) $actual['sucursalId'], ! empty($opciones['puedePisarPrecio']), $yaAplicados);
-        $resueltos = $this->portero->resolverRenglones($items, $cliente->id, $config, ! empty($opciones['puedePisarPrecio']), $congelados, $descuentosPorLista);
+        $resueltos = $this->portero->resolverRenglones($items, $cliente->id, $config, ! empty($opciones['puedePisarPrecio']), $congelados, $descuentosPorLista, (int) $actual['sucursalId'], empty($opciones['esOffline']), $dto['extras'] ?? []);
         $tot = Portero::calcularTotales($resueltos, $dto['extras'] ?? []);
 
         DB::transaction(function () use ($id, $cliente, $autor, $dto, $actual, $tot) {
