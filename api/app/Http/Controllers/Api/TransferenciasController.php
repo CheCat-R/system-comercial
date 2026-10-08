@@ -20,9 +20,15 @@ class TransferenciasController extends Controller
         return response()->json($this->svc->listar($sesion->soloSuSucursal()));
     }
 
-    public function show(int $id): JsonResponse
+    public function show(int $id, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->get($id));
+        $t = $this->svc->get($id);
+        // Una transferencia es de las DOS puntas: la que pide y la que despacha.
+        if ($sesion->soloSuSucursal() !== null && (int) ($t['origen_id'] ?? 0) !== $sesion->soloSuSucursal() && (int) ($t['destino_id'] ?? 0) !== $sesion->soloSuSucursal()) {
+            throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException('Esa transferencia es de otras sucursales.');
+        }
+
+        return response()->json($t);
     }
 
     public function pendientesResumen(Sesion $sesion): JsonResponse
@@ -85,6 +91,9 @@ class TransferenciasController extends Controller
             'items' => ['required', 'array', 'max:300'], 'items.*.productoId' => ['required', 'integer'], 'items.*.presId' => ['nullable', 'integer'],
             'items.*.cantidad' => ['required', 'numeric', 'min:0', 'max:'.self::MAX_CANT],
         ]);
+
+        // Igual que el borrador: quien pide es SU sucursal. El jefe sí arma pedidos de cualquiera.
+        $d['destinoId'] = $sesion->sucursalDeOperacion((int) $d['destinoId']);
 
         return response()->json($this->svc->crear([...$d, 'usuarioId' => $sesion->usuarioId]), 201);
     }

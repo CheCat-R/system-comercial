@@ -60,7 +60,10 @@ function MejoraTuPlan({ seccion }) {
 /* ---------------- Modal de usuario (alta / edición) ---------------- */
 
 function UsuarioModal({ usuario, roles, onGuardar, onCerrar }) {
+  const { user } = useAuth();
   const esAlta = !usuario;
+  /* La propia contraseña se cambia en "Mi perfil" (pide la actual): acá el servidor no la acepta. */
+  const esPropio = !esAlta && usuario.id === user?.id;
   const [nombre, setNombre] = useState(usuario?.nombre ?? '');
   const [rolId, setRolId] = useState(usuario?.rolId ?? roles.find((r) => r.clave === 'cajero')?.id ?? roles[0]?.id);
   const [activo, setActivo] = useState(usuario?.activo ?? true);
@@ -76,7 +79,7 @@ function UsuarioModal({ usuario, roles, onGuardar, onCerrar }) {
     const ok = await onGuardar({
       nombre, rolId: Number(rolId), activo,
       relevoCaja,
-      ...(password ? { password } : {}),
+      ...(password && !esPropio ? { password } : {}),
       ...(pin ? { pin } : {}),
     });
     setGuardando(false);
@@ -112,8 +115,10 @@ function UsuarioModal({ usuario, roles, onGuardar, onCerrar }) {
             type="password"
             value={password}
             placeholder={esAlta ? 'Mínimo 8 caracteres' : 'Dejar vacío para no cambiarla'}
+            disabled={esPropio}
             onChange={(e) => setPassword(e.target.value)}
           />
+          {esPropio && <div className={s.hint}>La tuya se cambia desde Mi perfil.</div>}
         </div>
       </div>
       {!esAlta && (

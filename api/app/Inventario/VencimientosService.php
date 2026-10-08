@@ -54,6 +54,33 @@ class VencimientosService extends StockCore
         parent::__construct($cfg);
     }
 
+    /** null = sin límite (el jefe); un id = esta sesión solo ve y toca los registros de SU sucursal. */
+    private ?int $soloSuc = null;
+
+    /**
+     * El servicio acotado a una sucursal: listar, resumen, reportes, editar, eliminar, procesar y
+     * ofertas pasan SOLO por los registros de esa sucursal (el de otra responde "inexistente").
+     * Antes cualquiera con la pantalla de vencimientos veía —con sus costos— y podía procesar
+     * (dar de baja stock, asentar la pérdida) los de las demás sucursales, por id.
+     */
+    public function paraSucursal(?int $soloSuc): static
+    {
+        $c = clone $this;
+        $c->soloSuc = $soloSuc;
+
+        return $c;
+    }
+
+    private function vencimientos(): \Illuminate\Database\Eloquent\Builder
+    {
+        return Vencimiento::query()->when($this->soloSuc, fn ($q, $suc) => $q->where('vencimientos.sucursal_id', $suc));
+    }
+
+    private function sesionesDeControl(): \Illuminate\Database\Eloquent\Builder
+    {
+        return VencimientoSesion::query()->when($this->soloSuc, fn ($q, $suc) => $q->where('vencimiento_sesiones.sucursal_id', $suc));
+    }
+
     private static function r2(float $n): float
     {
         return round($n * 100) / 100;
@@ -180,7 +207,7 @@ class VencimientosService extends StockCore
     {
         $hoy = self::hoyAr();
 
-        return Vencimiento::query()
+        return $this->vencimientos()
             ->selectRaw('*, DATEDIFF(fecha_vencimiento, ?) as dias_para_vencer', [$hoy])
             ->orderBy('fecha_vencimiento')->orderBy('id')
             ->get()
@@ -190,7 +217,7 @@ class VencimientosService extends StockCore
 
     public function editar(int $id, array $datos): Vencimiento
     {
-        $reg = Vencimiento::query()->find($id);
+        $reg = $this->vencimientos()->find($id);
         if (! $reg) {
             throw new NotFoundHttpException('Registro inexistente.');
         }
@@ -219,7 +246,7 @@ class VencimientosService extends StockCore
 
     public function eliminar(int $id): array
     {
-        $reg = Vencimiento::query()->find($id);
+        $reg = $this->vencimientos()->find($id);
         if (! $reg) {
             throw new NotFoundHttpException('Registro inexistente.');
         }
@@ -242,7 +269,7 @@ class VencimientosService extends StockCore
     public function procesar(int $id, array $datos, Sesion $sesion): array
     {
         return DB::transaction(function () use ($id, $datos, $sesion) {
-            $reg = Vencimiento::query()->whereKey($id)->lockForUpdate()->first();
+            $reg = $this->vencimientos()->whereKey($id)->lockForUpdate()->first();
             if (! $reg) {
                 throw new NotFoundHttpException('Registro inexistente.');
             }
@@ -293,7 +320,7 @@ class VencimientosService extends StockCore
     public function borradorOferta(int $id): array
     {
         $hoy = self::hoyAr();
-        $reg = Vencimiento::query()
+        $reg = $this->vencimientos()
             ->selectRaw('vencimientos.*, DATEDIFF(fecha_vencimiento, ?) as dias', [$hoy])
             ->find($id);
         if (! $reg) {
@@ -377,7 +404,7 @@ class VencimientosService extends StockCore
      */
     public function vincularOferta(int $id, int $ofertaId): array
     {
-        $reg = Vencimiento::query()->find($id);
+        $reg = $this->vencimientos()->find($id);
         if (! $reg) {
             throw new NotFoundHttpException('Registro inexistente.');
         }
@@ -504,7 +531,7 @@ class VencimientosService extends StockCore
         $todas = $this->ofertas->listar();
         $prods = $this->productosParaAlcance();
         $porId = collect($prods)->keyBy('id');
-        $abiertos = Vencimiento::query()
+        $abiertos = $this->vencimientos()
             ->selectRaw('vencimientos.*, DATEDIFF(fecha_vencimiento, ?) as dias', [$hoy])
             ->where('procesado', false)
             ->orderBy('fecha_vencimiento')->orderBy('id')
@@ -601,7 +628,7 @@ class VencimientosService extends StockCore
     public function resumen(): array
     {
         $hoy = self::hoyAr();
-        $abiertos = Vencimiento::query()
+        $abiertos = $this->vencimientos()
             ->selectRaw("
                 case
                     when DATEDIFF(fecha_vencimiento, ?) < 0 then 'vencido'
@@ -615,12 +642,12 @@ class VencimientosService extends StockCore
             ->groupBy('rango')
             ->get();
 
-        $proc = Vencimiento::query()
+        $proc = $this->vencimientos()
             ->selectRaw('count(*) as n, coalesce(sum(unidades_vendidas), 0) as vendidas, coalesce(sum(cantidad - unidades_vendidas), 0) as perdidas, coalesce(sum((cantidad - unidades_vendidas) * costo_unitario), 0) as perdida_real')
             ->where('procesado', true)
             ->first();
 
-        $ultimos = Vencimiento::query()
+        $ultimos = $this->vencimientos()
             ->selectRaw('*, DATEDIFF(fecha_vencimiento, ?) as dias_para_vencer', [$hoy])
             ->orderByDesc('id')->limit(5)->get()
             ->map(fn (Vencimiento $v) => [...$v->toArray(), 'diasParaVencer' => (int) $v->getAttribute('dias_para_vencer')]);
@@ -658,7 +685,7 @@ class VencimientosService extends StockCore
 
         $perdidaRealExpr = '(cantidad - unidades_vendidas) * costo_unitario';
 
-        $general = Vencimiento::query()
+        $general = $this->vencimientos()
             ->where('created_at', '>=', $desde)
             ->selectRaw("
                 count(*) as registros, coalesce(sum(cantidad), 0) as unidades, coalesce(sum(cantidad * costo_unitario), 0) as estimada,
@@ -670,6 +697,7 @@ class VencimientosService extends StockCore
 
         // Mermas del período: merma + defectuoso + vencido SUELTO (no nacido de procesar).
         $mermasG = DB::table('movimientos')
+            ->when($this->soloSuc, fn ($q, $suc) => $q->where('sucursal_id', $suc))
             ->whereIn('tipo', ['merma', 'defectuoso', 'vencido'])
             ->where('fecha', '>=', $desde)
             ->whereNotIn('id', function ($q) {
@@ -678,12 +706,13 @@ class VencimientosService extends StockCore
             ->selectRaw('count(*) as registros, coalesce(sum(cantidad), 0) as unidades, coalesce(sum(cantidad * costo_unitario), 0) as plata')
             ->first();
 
-        $porSucursalVenc = Vencimiento::query()
+        $porSucursalVenc = $this->vencimientos()
             ->where('created_at', '>=', $desde)
             ->selectRaw("sucursal_id, count(*) as registros, coalesce(sum(cantidad), 0) as unidades, coalesce(sum(cantidad * costo_unitario), 0) as estimada, coalesce(sum(case when procesado then {$perdidaRealExpr} else 0 end), 0) as `real`")
             ->groupBy('sucursal_id')->get();
 
         $porSucursalMerma = DB::table('movimientos')
+            ->when($this->soloSuc, fn ($q, $suc) => $q->where('sucursal_id', $suc))
             ->whereIn('tipo', ['merma', 'defectuoso', 'vencido'])
             ->where('fecha', '>=', $desde)
             ->whereNotIn('id', function ($q) {
@@ -692,7 +721,7 @@ class VencimientosService extends StockCore
             ->selectRaw('sucursal_id, count(*) as registros, coalesce(sum(cantidad * costo_unitario), 0) as plata')
             ->groupBy('sucursal_id')->get()->keyBy('sucursal_id');
 
-        $porCategoria = Vencimiento::query()
+        $porCategoria = $this->vencimientos()
             ->join('productos', 'productos.id', '=', 'vencimientos.producto_id')
             ->leftJoin('categorias', 'categorias.id', '=', 'productos.categoria_id')
             ->where('vencimientos.created_at', '>=', $desde)
@@ -702,25 +731,25 @@ class VencimientosService extends StockCore
             ->get();
 
         // Los que MÁS vencen — histórico completo: la señal para comprar distinto.
-        $frecuentes = Vencimiento::query()
+        $frecuentes = $this->vencimientos()
             ->selectRaw('producto_id, presentacion_id, nombre, count(*) as veces, coalesce(sum(cantidad), 0) as unidades, coalesce(sum(cantidad * costo_unitario), 0) as plata')
             ->groupBy('producto_id', 'presentacion_id', 'nombre')
             ->orderByDesc('plata')->orderByDesc('unidades')
             ->limit(10)->get();
 
         $seisMeses = $hoy->copy()->subMonths(6);
-        $historial = Vencimiento::query()
+        $historial = $this->vencimientos()
             ->where('created_at', '>=', $seisMeses)
             ->selectRaw("DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '-03:00'), '%Y-%m') as mes, count(*) as registros, coalesce(sum(cantidad), 0) as unidades, coalesce(sum(cantidad * costo_unitario), 0) as estimada, coalesce(sum(case when procesado then {$perdidaRealExpr} else 0 end), 0) as `real`")
             ->groupBy('mes')->orderByDesc('mes')
             ->get();
 
-        $sesionesStats = VencimientoSesion::query()
+        $sesionesStats = $this->sesionesDeControl()
             ->where('fecha', '>=', $desde)
             ->selectRaw('count(*) as sesiones, coalesce(sum(total_items), 0) as items, coalesce(sum(total_unidades), 0) as unidades')
             ->first();
 
-        $sesiones = VencimientoSesion::query()
+        $sesiones = $this->sesionesDeControl()
             ->leftJoin('usuarios', 'usuarios.id', '=', 'vencimiento_sesiones.usuario_id')
             ->join('sucursales', 'sucursales.id', '=', 'vencimiento_sesiones.sucursal_id')
             ->orderByDesc('vencimiento_sesiones.id')->limit(20)

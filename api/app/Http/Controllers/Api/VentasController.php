@@ -36,6 +36,20 @@ class VentasController extends Controller
         ];
     }
 
+    /** Los costos del renglón (el margen) viajan solo a quien tiene la llave de precios o de productos. */
+    private const COSTOS = ['costoUnitario', 'ivaAbsorbidoUnitario', 'porcSinFactura'];
+
+    /** La venta tal como sale hacia ESTA sesión: sin los costos de los renglones si no tiene la llave. */
+    private function salida(array $v, Sesion $s): array
+    {
+        if ($s->puede('precios', 'compras.productos', 'compras.proveedores') || ! isset($v['items']) || ! is_array($v['items'])) {
+            return $v;
+        }
+        $v['items'] = array_map(fn ($it) => is_array($it) ? array_diff_key($it, array_flip(self::COSTOS)) : $it, $v['items']);
+
+        return $v;
+    }
+
     private static function uno(?string $v, array $validos, string $campo): ?string
     {
         if ($v === null || $v === '') {
@@ -86,30 +100,35 @@ class VentasController extends Controller
     {
         $q = $request->query();
 
-        return response()->json($this->svc->list([
+        $filas = $this->svc->list([
             'clienteId' => $q['clienteId'] ?? null,
             'sucursalId' => $sesion->esJefe() ? ($q['sucursalId'] ?? null) : $sesion->sucursalId,
             'estado' => self::uno($q['estado'] ?? null, self::ESTADOS, 'Estado'),
             'desde' => $q['desde'] ?? null, 'hasta' => $q['hasta'] ?? null, 'limit' => $q['limit'] ?? null,
             'incluirItems' => ($q['incluirItems'] ?? '') === 'true',
-        ]));
+        ]);
+
+        return response()->json(array_map(fn ($v) => $this->salida((array) $v, $sesion), $filas));
     }
 
-    public function show(int $id): JsonResponse
+    public function show(int $id, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->get($id));
+        $v = $this->svc->get($id);
+        $sesion->exigirSucursal($v['sucursalId'] ?? null, 'Esa venta');
+
+        return response()->json($this->salida($v, $sesion));
     }
 
     public function store(GuardarVentaRequest $request, Sesion $sesion): JsonResponse
     {
         $d = $request->validated();
 
-        return response()->json($this->svc->create($d, $this->opciones($sesion, (int) ($d['sucursalId'] ?? 0) ?: null)), 201);
+        return response()->json($this->salida($this->svc->create($d, $this->opciones($sesion, (int) ($d['sucursalId'] ?? 0) ?: null)), $sesion), 201);
     }
 
     public function update(GuardarVentaRequest $request, int $id, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->actualizar($id, $request->validated(), $this->opciones($sesion)));
+        return response()->json($this->salida($this->svc->actualizar($id, $request->validated(), $this->opciones($sesion)), $sesion));
     }
 
     /** El lote de ventas que el POS armó sin conexión, recién mandado al volver internet. */
@@ -135,7 +154,7 @@ class VentasController extends Controller
 
     public function confirmar(ConfirmarVentaRequest $request, int $id, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->confirmar($id, $request->validated(), $this->opciones($sesion)));
+        return response()->json($this->salida($this->svc->confirmar($id, $request->validated(), $this->opciones($sesion)), $sesion));
     }
 
     public function delegar(Request $request, int $id, Sesion $sesion): JsonResponse
@@ -147,14 +166,14 @@ class VentasController extends Controller
 
     public function facturar(int $id, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->facturarAhora($id, $this->opciones($sesion)));
+        return response()->json($this->salida($this->svc->facturarAhora($id, $this->opciones($sesion)), $sesion));
     }
 
     public function anular(Request $request, int $id, Sesion $sesion): JsonResponse
     {
         $d = $request->validate(['motivo' => ['required', 'string', 'max:300']]);
 
-        return response()->json($this->svc->anular($id, $d['motivo'], $this->opciones($sesion)));
+        return response()->json($this->salida($this->svc->anular($id, $d['motivo'], $this->opciones($sesion)), $sesion));
     }
 
     public function notaCredito(NotaCreditoRequest $request, int $id, Sesion $sesion): JsonResponse

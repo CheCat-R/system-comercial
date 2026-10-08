@@ -70,8 +70,8 @@ class ContrasenaInicialTest extends TestCase
         $admin->patchJson('/api/usuarios/'.$otro->id, ['password' => 'temporal-123'])->assertOk();
         $this->assertTrue((bool) $otro->fresh()->debe_cambiar_password);
 
-        // Cambiarse la suya desde la misma pantalla de usuarios no es "restablecer": no obliga a nada.
-        $admin->patchJson('/api/usuarios/'.$super->id, ['password' => 'mi-nueva-clave-1'])->assertOk();
+        // La propia NO se cambia desde esa pantalla (no pide la actual): se hace en "Mi perfil", por /auth/password.
+        $admin->patchJson('/api/usuarios/'.$super->id, ['password' => 'mi-nueva-clave-1'])->assertStatus(422)->assertJsonValidationErrors('password');
         $this->assertFalse((bool) $super->fresh()->debe_cambiar_password);
     }
 

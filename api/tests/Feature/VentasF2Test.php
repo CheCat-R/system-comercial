@@ -178,7 +178,9 @@ class VentasF2Test extends TestCase
         $this->assertSame('auto', $v['items'][0]['listaOrigen']);
         $this->assertEqualsWithDelta($precioMay, $v['items'][0]['precioUnitario'], 0.01);
         $this->assertEquals(21.0, $v['items'][0]['iva']);
-        $this->assertNotNull($v['items'][0]['costoUnitario'], 'el costo se congela al armar el renglón');
+        // El costo se congela en la base al armar el renglón, y NO viaja al cajero (no tiene la llave de precios).
+        $this->assertArrayNotHasKey('costoUnitario', $v['items'][0]);
+        $this->assertNotNull(DB::table('venta_items')->where('venta_id', $v['id'])->value('costo_unitario'), 'el costo se congela al armar el renglón');
         // El superadmin pisa precio (precio_manual vía comodín).
         $this->admin()->putJson('/api/ventas/'.$v['id'], ['items' => [['productoId' => $p['id'], 'cantidad' => 2, 'listaId' => $mostrador['id'], 'precioUnitario' => 500]]])->assertOk()->assertJsonPath('items.0.listaOrigen', 'manual');
         // Vuelve a 2 kg de mostrador para cobrar.
