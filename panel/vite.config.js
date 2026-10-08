@@ -150,7 +150,8 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      sourcemap: true,
+      // Sin mapas: publicarlos entrega el código fuente completo del panel (rutas, claves de permisos, lógica) a cualquiera.
+      sourcemap: false,
     },
   };
 });

@@ -10,6 +10,7 @@ import { appConfig } from '@core/config/app.config.js';
 import { httpClient } from '@core/services/httpClient.js';
 import { leerTokenTerminal } from '@core/auth/terminal.js';
 import { AvatarMarca, NombreMarca } from '@core/branding/Marca.jsx';
+import { rutaInterna } from './rutaInterna.js';
 import { PanelMarca } from '@core/branding/PanelMarca.jsx';
 
 /**
@@ -57,7 +58,7 @@ export function LoginPage() {
   /** `null` = todavía no se preguntó; `false` = este equipo no está registrado. */
   const [terminal, setTerminal] = useState(null);
 
-  const from = location.state?.from ?? appConfig.routes.defaultAuthenticatedRoute;
+  const from = rutaInterna(location.state?.from) ?? appConfig.routes.defaultAuthenticatedRoute;
   // Un mensaje que dejó otra pantalla al mandarte acá (ej. "Contraseña actualizada").
   const aviso = location.state?.aviso ?? '';
 

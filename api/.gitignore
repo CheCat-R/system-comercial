@@ -25,3 +25,6 @@ Thumbs.db
 
 # Claves privadas de licencias: NUNCA al repositorio (ver deploy/LICENCIAS.md)
 *.pem
+
+# Semilla aleatoria que deja OpenSSL en Windows al generar claves
+.rnd

@@ -84,6 +84,16 @@ class ConfiguracionService
         ],
     ];
 
+    /**
+     * Las listas de OBJETOS cuyo default es `[]` (sin una fila de ejemplo): su plantilla vive acá. Sin esto la
+     * lista se trataba como una lista de textos y un slide (que es un objeto) reventaba con "Array to string".
+     */
+    private const PLANTILLAS_LISTA = [
+        'web.slides' => ['id' => 0, 'badge' => '', 'titulo' => '', 'texto' => '', 'cta' => '', 'ctaUrl' => '', 'posicion' => 'left'],
+    ];
+
+    private const MAX_SLIDES = 20;
+
     private const FORMATOS_PAPEL = ['rollo80', 'rollo58', 'a4', 'carta'];
 
     private const FORMATOS_ETIQUETA = [
@@ -173,7 +183,7 @@ class ConfiguracionService
         foreach ($defaults as $k => $def) {
             $v = $src[$k] ?? null;
             if (is_array($def)) {
-                $template = $def[0] ?? null;
+                $template = $def[0] ?? (self::PLANTILLAS_LISTA[$clave.'.'.$k] ?? null);
                 if (is_array($template)) {
                     $out[$k] = is_array($v)
                         ? array_values(array_filter(array_map(fn ($x) => $this->sanitizeItem($template, $x), $v)))
@@ -182,6 +192,9 @@ class ConfiguracionService
                     $out[$k] = is_array($v)
                         ? array_values(array_filter(array_map(fn ($x) => trim((string) $x), $v), fn ($s) => $s !== ''))
                         : $def;
+                }
+                if ($clave.'.'.$k === 'web.slides') {
+                    $out[$k] = $this->limpiarSlides($out[$k]);
                 }
                 $out[$k] = $this->aplicarRegla($clave, $k, $out[$k], $def);
             } elseif (is_bool($def)) {
@@ -196,6 +209,27 @@ class ConfiguracionService
         }
 
         return $out;
+    }
+
+    /**
+     * Los slides van a la portada del sitio público: el enlace del botón solo puede ser una ruta del propio sitio o
+     * una URL https (nunca `javascript:`), los textos tienen tope, la posición es una de las tres, y no son más de 20.
+     */
+    private function limpiarSlides(array $slides): array
+    {
+        $limpios = [];
+        foreach (array_slice($slides, 0, self::MAX_SLIDES) as $sl) {
+            foreach (['badge', 'titulo', 'cta'] as $c) {
+                $sl[$c] = mb_substr((string) ($sl[$c] ?? ''), 0, 120);
+            }
+            $sl['texto'] = mb_substr((string) ($sl['texto'] ?? ''), 0, 400);
+            $url = trim((string) ($sl['ctaUrl'] ?? ''));
+            $sl['ctaUrl'] = (preg_match('#^/(?![/\\\\])#', $url) || preg_match('#^https://#i', $url)) ? mb_substr($url, 0, 300) : '';
+            $sl['posicion'] = in_array($sl['posicion'] ?? '', ['left', 'center', 'right'], true) ? $sl['posicion'] : 'left';
+            $limpios[] = $sl;
+        }
+
+        return $limpios;
     }
 
     private function sanitizeItem(array $template, mixed $raw): ?array

