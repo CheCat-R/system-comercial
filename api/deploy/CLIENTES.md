@@ -82,7 +82,7 @@ Un solo cron del hosting, una vez por día (el hosting usa UTC: 06:00 UTC son la
 ```
 
 Hace la copia de cada cliente de a uno (no en paralelo, por el límite de procesos PHP). Los Emprendedor no tienen copia diaria por plan.
-**Las copias quedan en el mismo servidor**: falta copiarlas a otro lugar.
+**Las copias del servidor quedan en el mismo servidor.** Para tener una copia **afuera** (cifrada, en tu Google Drive, de todos los clientes) configurá las copias externas una vez: ver [COPIAS_EXTERNAS.md](COPIAS_EXTERNAS.md). Con eso, este mismo cron las sube a Drive.
 
 ## Baja de un cliente
 

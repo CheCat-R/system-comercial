@@ -4,6 +4,7 @@ namespace App\Console\Commands\Clientes;
 
 use App\Clientes\Ejecutor;
 use App\Clientes\Registro;
+use App\CopiasExternas\CopiaExterna;
 use Illuminate\Console\Command;
 
 /**
@@ -43,6 +44,12 @@ class ClientesCron extends Command
                 $mal++;
                 $this->error($n.': FALLÓ — '.$salida);
             }
+        }
+
+        // Después de las copias del servidor, la de afuera (Google Drive), si está configurada.
+        if (CopiaExterna::activa()) {
+            $this->line('— Copias externas (Google Drive) —');
+            $mal += $this->call('ccs:copias-subir') === self::SUCCESS ? 0 : 1;
         }
 
         return $mal ? self::FAILURE : self::SUCCESS;

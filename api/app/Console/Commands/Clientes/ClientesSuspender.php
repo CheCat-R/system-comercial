@@ -5,6 +5,7 @@ namespace App\Console\Commands\Clientes;
 use App\Clientes\Ejecutor;
 use App\Clientes\Registro;
 use App\Clientes\SelectorDeCliente;
+use App\CopiasExternas\CopiaExterna;
 use Illuminate\Console\Command;
 
 /**
@@ -42,6 +43,11 @@ class ClientesSuspender extends Command
                 return self::FAILURE;
             }
             $this->line(trim($p->getOutput()));
+            // Y, si hay copias externas, esta última también va a Drive: es la que queda de un cliente que se va.
+            if (CopiaExterna::activa()) {
+                $e = Ejecutor::artisan($n, ['ccs:copia-externa']);
+                $e->isSuccessful() ? $this->line(trim($e->getOutput())) : $this->warn('No se pudo subir la copia a Drive: '.trim($e->getErrorOutput() ?: $e->getOutput()));
+            }
         }
 
         file_put_contents(Registro::carpeta($n).'/.suspendido', json_encode(['desde' => now()->toIso8601String(), 'motivo' => (string) $this->option('motivo')], JSON_UNESCAPED_UNICODE));

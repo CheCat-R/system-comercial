@@ -222,6 +222,32 @@ class RespaldosService
         return ['archivo' => $archivo, 'bytes' => $bytes, 'resumen' => $r['resumen']];
     }
 
+    /**
+     * Un volcado comprimido en la ruta que se pida, para la COPIA EXTERNA (Google Drive). No poda ni anota nada de la copia diaria,
+     * y se hace sea cual sea el plan: es la copia del que opera el servicio, no una función del cliente.
+     *
+     * @return array{tablas:int, filas:int, bytes:int, resumen:string}
+     */
+    public function volcarComprimidoEn(string $ruta): array
+    {
+        $gz = @gzopen($ruta, 'wb6');
+        if ($gz === false) {
+            throw new \RuntimeException("No se pudo escribir la copia en {$ruta}.");
+        }
+        try {
+            $r = $this->escribirVolcado(function (string $s) use ($gz) {
+                gzwrite($gz, $s);
+            });
+        } catch (\Throwable $e) {
+            gzclose($gz);
+            @unlink($ruta);
+            throw $e;
+        }
+        gzclose($gz);
+
+        return $r;
+    }
+
     private function podarAutomaticos(): void
     {
         $viejos = array_slice($this->archivosAutomaticos(), $this->retencion());
@@ -527,7 +553,7 @@ class RespaldosService
         $this->audit->registrar([[
             'entidad' => 'sistema', 'entidadId' => 0, 'ambito' => 'Limpieza',
             'campo' => 'Fin del período de prueba', 'usuarioId' => $usuarioId,
-            'despues' => 'Se vaciaron '.number_format($antes['total'], 0, ',', '.').' filas de '.count($antes['detalle'])." tablas (stock, ventas, compras, caja, cobranzas y demás operatoria de práctica). "
+            'despues' => 'Se vaciaron '.number_format($antes['total'], 0, ',', '.').' filas de '.count($antes['detalle']).' tablas (stock, ventas, compras, caja, cobranzas y demás operatoria de práctica). '
                 .'El catálogo, los proveedores, los clientes y la configuración quedaron intactos.',
         ]]);
 

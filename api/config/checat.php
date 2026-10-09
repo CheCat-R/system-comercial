@@ -25,6 +25,12 @@ return [
     ],
 
     /*
+     * Dónde se guarda la configuración de las copias externas (Google Drive). Vacío = `clientes/_copias.json` en una instalación
+     * multi-cliente, o `storage/app/copias-externas.json` en una común. Existe sobre todo para los tests.
+     */
+    'copias_archivo' => env('CCS_COPIAS_ARCHIVO'),
+
+    /*
      * Copia diaria automática de la base (planes Pymes y Corporativo).
      * `carpeta`: vacía = `storage/app/respaldos` (fuera de `public/`).
      * `retencion`: cuántas copias se conservan; las más viejas se borran.

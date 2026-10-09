@@ -1,5 +1,7 @@
 <?php
 
+use App\Clientes\Registro;
+use App\CopiasExternas\CopiaExterna;
 use App\Services\LicenciaService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -35,4 +37,7 @@ Artisan::command('licencia:plan {plan?}', function (LicenciaService $svc, ?strin
  *     * * * * * cd /ruta/api && php artisan schedule:run >> /dev/null 2>&1
  */
 // La zona se pone a propósito: la app corre en UTC, y sin ella "las 3:00" serían las 0:00 de Argentina.
+// Copia externa (Google Drive) de una instalación común. En una multi-cliente la dispara `ccs:cron`.
+Schedule::command('ccs:copia-externa')->dailyAt('03:30')->timezone('America/Argentina/Buenos_Aires')->withoutOverlapping()
+    ->when(fn () => CopiaExterna::activa() && Registro::raiz() === null);
 Schedule::command('respaldos:automatico')->dailyAt('03:00')->timezone('America/Argentina/Buenos_Aires')->withoutOverlapping();
