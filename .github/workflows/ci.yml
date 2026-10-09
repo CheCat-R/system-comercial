@@ -25,7 +25,8 @@ jobs:
         working-directory: api
 
     services:
-      # MariaDB, igual que el desarrollo local (XAMPP). Los tests usan la base `checat_comercio_test`.
+      # MariaDB, igual que el desarrollo local (XAMPP). Los tests usan la base `checat_comercio_test`; los de varios clientes y copias
+      # externas crean y borran además sus propias bases `ccs_*` (por eso el usuario es root).
       db:
         image: mariadb:10.11
         env:

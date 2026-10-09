@@ -189,10 +189,10 @@ export function PanelArca({ habilitado }) {
         <div className={cx(s.callout, s.warn)}>
           <strong>No se puede facturar:</strong> {est.motivo}
           <div className={s.hint} style={{ marginTop: 6 }}>
-            Estas cinco variables van en el <span className={s.mono}>.env</span> del servidor
-            (los certificados en un volumen montado, nunca adentro de la imagen). Después de subir
-            o <strong>renombrar</strong> un certificado, volvé a abrir esta pantalla: relee el
-            disco sin reiniciar la API.
+            El CUIT, el modo (homologación o producción) y el punto de venta general los carga quien
+            instaló el sistema, en el <span className={s.mono}>.env</span> del servidor. El certificado
+            y su clave se tramitan desde esta pantalla. Después de subir o <strong>renombrar</strong> un
+            certificado, volvé a abrir esta pantalla: relee el disco sin reiniciar la API.
           </div>
         </div>
       )}
@@ -230,8 +230,9 @@ export function PanelArca({ habilitado }) {
         <div className={cx(s.callout, s.info)}>
           Para tramitar el certificado desde acá faltan{' '}
           <span className={s.mono}>ARCA_CERT_PATH</span> y{' '}
-          <span className={s.mono}>ARCA_KEY_PATH</span>: son las rutas del volumen montado donde
-          se guardan, y se configuran en el servidor.
+          <span className={s.mono}>ARCA_KEY_PATH</span>: son las rutas donde se guardan el
+          certificado y la clave, y las configura quien instaló el sistema en el servidor
+          (en una instalación con varios clientes se asignan solas).
         </div>
       )}
 

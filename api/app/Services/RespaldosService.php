@@ -13,9 +13,11 @@ use Illuminate\Support\Facades\Schema;
  * La versión CHICA y honesta: los backups automáticos del hosting no son cosa
  * de esta pantalla. Lo que agrega es lo que el hosting solo no cubre:
  *
- *   1. LA COPIA EXTERNA: un botón que genera el volcado completo de la base y
+ *   1. LA COPIA DESCARGADA: un botón que genera el volcado completo de la base y
  *      lo baja a la máquina del dueño. Si el servidor (o el proveedor) se cae
- *      con sus backups adentro, la copia de afuera es la que salva.
+ *      con sus backups adentro, la copia descargada es la que salva. (No
+ *      confundir con las COPIAS EXTERNAS a Google Drive, que sube el servicio
+ *      solo: ver `App\CopiasExternas`.)
  *   2. EL RASTRO: cada descarga queda en `auditoria` (quién, cuándo, tamaño),
  *      y la pantalla muestra la última — "hace tres meses que nadie baja una
  *      copia" es un dato que tiene que estar a la vista.
@@ -31,7 +33,7 @@ use Illuminate\Support\Facades\Schema;
  */
 class RespaldosService
 {
-    /** Días sin bajar una copia externa a partir de los cuales el panel avisa. */
+    /** Días sin bajar una copia a partir de los cuales el panel avisa. */
     public const UMBRAL_AVISO_DIAS = 7;
 
     /** Clave de plan de la copia diaria automática (Pymes y Corporativo). */
@@ -116,8 +118,8 @@ class RespaldosService
     }
 
     /**
-     * EL AVISO DE LA COPIA EXTERNA (todos los planes). La copia automática vive
-     * en el mismo servidor que la base, así que no reemplaza a la de afuera:
+     * EL AVISO DE LA DESCARGA (todos los planes). La copia automática vive
+     * en el mismo servidor que la base, así que no reemplaza a la descargada:
      * lo que se vigila es cuánto hace que alguien se llevó un archivo.
      *
      * Una instalación recién armada, sin nada cargado, no tiene qué proteger
@@ -126,7 +128,7 @@ class RespaldosService
      *
      * @return array{ultimaDescarga:?string, dias:?int, avisar:bool}
      */
-    public function avisoCopiaExterna(): array
+    public function avisoDescarga(): array
     {
         $fecha = DB::table('auditoria')->where('entidad', 'sistema')->where('ambito', 'Respaldos')
             ->where('campo', 'Descarga del respaldo')->max('fecha');
@@ -152,7 +154,7 @@ class RespaldosService
         if (! $puedeVer) {
             return ['avisar' => false, 'automaticoFalla' => false, 'problemas' => 0];
         }
-        $avisar = $this->avisoCopiaExterna()['avisar'];
+        $avisar = $this->avisoDescarga()['avisar'];
         $falla = $this->automaticoIncluido() && $this->automatico()['problema'];
 
         return ['avisar' => $avisar, 'automaticoFalla' => $falla, 'problemas' => (int) $avisar + (int) $falla];
@@ -365,7 +367,7 @@ class RespaldosService
                 'clientes' => DB::table('clientes')->count(),
             ],
             'descargas' => $descargas->all(),
-            'aviso' => $this->avisoCopiaExterna(),
+            'aviso' => $this->avisoDescarga(),
             // `null` en Emprendedor: el panel no muestra la sección ni la menciona.
             'automatico' => $this->automaticoIncluido() ? $this->automatico() : null,
         ];

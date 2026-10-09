@@ -1,7 +1,7 @@
 /**
  * CAPA DE API DEL MÓDULO PROVEEDORES (0068)
  * ============================================================================
- * Funciones puras contra `crm-api`. El módulo gira alrededor de la relación
+ * Funciones puras contra la API (`api/`). El módulo gira alrededor de la relación
  * con el proveedor — la deuda misma nace en Compras (comprobantes) y se
  * cancela en pagos: acá se la mira (EDOC), se la promete (compromisos y
  * echeqs) y se coordina el pedirle (kanban).

@@ -3,7 +3,9 @@
 Una instalación = un servidor (o cuenta de hosting) con **su propia base y su propio `.env`**. El plan
 (Emprendedor, Pymes, Corporativo) se fija con un comando, no con otro build.
 
-> Este documento cubre la **configuración**. El armado del servidor (nginx, PHP, base de datos) depende
+> Este documento cubre la **configuración de una instalación de un solo cliente** (por ejemplo, un
+> Corporativo en su propio servidor). Para **varios clientes en un mismo servidor** —un código, una base
+> por cliente— ver [CLIENTES.md](CLIENTES.md). El armado del servidor (nginx, PHP, base de datos) depende
 > de dónde se aloje cada cliente y todavía no está escrito.
 
 ## 1. Primera vez
@@ -31,6 +33,9 @@ La copia diaria automática solo corre si el servidor ejecuta el programador de 
 ```
 
 Sin eso no hay copias, y el panel lo avisa a las 36 horas. En Emprendedor no hace falta.
+
+En una instalación con varios clientes no se usa el programador: un solo cron diario corre `php artisan ccs:cron`
+(ver [CLIENTES.md](CLIENTES.md)).
 
 ## 3. Qué revisa `produccion:verificar`
 
@@ -76,7 +81,8 @@ php artisan produccion:verificar
 - El `.env`.
 - Los **tickets de acceso a ARCA** y las **sesiones abiertas** (tablas `arca_tokens` y `personal_access_tokens`): son credenciales vivas y no tienen que viajar en un archivo que se descarga y se guarda en una PC o un mail. Al restaurar, todos vuelven a entrar y el sistema pide un ticket de ARCA nuevo.
 - Las copias automáticas viven en el mismo servidor que la base: no reemplazan a la descarga manual
-  (Sistema › Respaldos), que es la copia de afuera.
+  (Sistema › Respaldos), que es la copia que se lleva una persona. Para una copia **cifrada y automática fuera del servidor**
+  (Google Drive): [COPIAS_EXTERNAS.md](COPIAS_EXTERNAS.md).
 
 ## 7. Licencia
 

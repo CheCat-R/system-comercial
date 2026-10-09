@@ -94,8 +94,8 @@ export function FacturacionPanel() {
    * una todo lo que se le debe, que es la verdad operativa: la plata que se le
    * paga es una sola), así que el filtro tiene que estar acá y no en una pestaña.
    *
-   * Como todo lo de permisos del sistema, esto esconde — no prohíbe. La API no
-   * valida quién pregunta hasta que haya sesiones con token.
+   * La pantalla lo esconde y la API también lo hace cumplir: sin el permiso, el
+   * listado no trae las liquidaciones aunque se las pida por tipo.
    */
   // Sin `isAdmin ||` a propósito: con él, revocarle el permiso a un admin no
   // haría nada. El superadmin queda cubierto por el comodín `*` de su rol.

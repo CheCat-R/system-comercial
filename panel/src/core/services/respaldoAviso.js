@@ -2,7 +2,7 @@
  * AVISO DE RESPALDOS — cuántas cosas del respaldo piden atención.
  * ============================================================================
  * Alimenta la insignia del módulo Sistema en el menú: se prende cuando hace
- * 7 días o más que nadie baja una copia externa, o cuando la copia diaria
+ * 7 días o más que nadie baja una copia de la base, o cuando la copia diaria
  * automática (Pymes y Corporativo) falló o dejó de generarse.
  *
  * Mismo molde que `ordenesWeb.js`: un poller que arranca recién cuando alguien

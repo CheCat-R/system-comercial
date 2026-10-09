@@ -1,7 +1,7 @@
 /**
  * VOCABULARIO DEL CIRCUITO DE VENTA
  * ============================================================================
- * Espejo exacto de los enums del backend (`crm-api/src/db/schema.ts`). Si allá
+ * Espejo de los valores que acepta la API (enums en `api/app/Enums` y validaciones en `api/app/Http/Requests`). Si allá
  * se agrega un valor, se agrega acá: son las dos puntas del mismo contrato.
  *
  * `pill`/`tag` son claves de clase del CSS del módulo — se resuelven con

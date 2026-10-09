@@ -1,18 +1,14 @@
-# CheCAT — Sistema de Gestión Integral Comercial
+# CCS — checat commerce systems
+
+Sistema de gestión integral para comercios: punto de venta, compras, stock, proveedores, gastos y facturación electrónica ARCA.
+Un mismo sistema en tres planes (**Emprendedor**, **Pymes**, **Corporativo**): el plan es un dato de cada instalación, no otro build.
 
 Monorepo:
 
-- [`api/`](api/) — API REST/JSON. **Laravel 12 + Sanctum + MySQL/MariaDB.** Pensada para hosting compartido (Hostinger).
-- [`panel/`](panel/) — Panel de administración. **React 19 + Vite + MUI v9.** SPA que consume la API con tokens.
+- [`api/`](api/) — API REST/JSON. **Laravel 12 + Sanctum + MySQL/MariaDB.** Pensada para hosting compartido.
+- [`panel/`](panel/) — La aplicación que se usa (PWA). **React 18 + Vite + MUI.** Consume la API con tokens y sigue vendiendo sin conexión.
 
 Cada carpeta tiene su propio README con la puesta en marcha.
-
-## Despliegue (resumen)
-
-| Subdominio | Carpeta | Document root |
-|---|---|---|
-| `api.tudominio.com` | `api/` | `api/public/` |
-| `panel.tudominio.com` | `panel/` | contenido de `panel/dist/` (build) |
 
 ## Levantar en local (XAMPP)
 
@@ -21,52 +17,52 @@ Requiere MySQL/MariaDB de XAMPP corriendo, PHP 8.2+ y Node 22+.
 ```bash
 # API (desde api/): primera vez
 composer install && cp .env.example .env && php artisan key:generate
-php artisan migrate --seed          # base checat_comercio; crea Central, Sucursal 1 y el superadmin
+php artisan cliente:aprovisionar --plan=corporativo   # migra, siembra y fija el plan (base checat_comercio)
 php artisan serve --port=8000
 
 # Panel (desde panel/): primera vez
-npm install && cp .env.example .env # VITE_API_URL=http://localhost:8000/api
-npm run dev                         # http://localhost:5173
+npm install && cp .env.example .env                    # VITE_API_BASE_URL=http://localhost:8000/api
+npm run dev                                            # http://localhost:3000
 ```
 
-Entrada: usuario **Administrador**, contraseña **admin1234** (o lo que diga `SUPERADMIN_PASSWORD` en `api/.env`). Cambiarla apenas se entra.
+Entrada: usuario **Administrador**, contraseña **admin1234** (o lo que diga `SUPERADMIN_PASSWORD` en `api/.env`). El sistema pide
+cambiarla en el primer ingreso.
 
-## Estado
+## Pruebas
 
-**Fase 1 (base operativa) — lista.** Sesiones y permisos, usuarios/roles, sucursales y equipos,
-catálogo de productos (formatos de compra, presentaciones, listas de venta, precios y márgenes con
-historial), proveedores, inventario (stock, movimientos, fraccionado, transferencias, incidencias,
-controles de stock), configuración y chat interno.
+```bash
+cd api   && vendor/bin/phpunit      # la API (necesita MySQL; los tests de varios clientes crean y borran bases propias)
+cd panel && npm test                # el núcleo del panel
+```
 
-**Fase 2 (mostrador) — lista.** Punto de venta con borradores y autoguardado, listas por
-cantidad/marca/monto/cliente, ofertas (%, precio fijo, N×M, 2ª unidad, pack, combo, ticket),
-descuentos con nombre, cobro con varios medios y redondeo, tickets y facturas A/B/C, notas de
-crédito total/parcial, anulación con rastro, caja (turnos, arqueo, controles, movimientos),
-cuenta corriente y cobranzas, clientes, presupuestos (reserva de stock y cierre en el POS) y
-facturación electrónica ARCA (WSAA/WSFE, QR RG 4892, trámite del certificado, diagnóstico).
-ARCA se enciende con las variables `ARCA_*` del `.env` de la API y el interruptor en
-Ventas › Configuración; sin ellas, todo funciona igual con comprobantes internos.
+El CI de GitHub (`.github/workflows/ci.yml`) corre las dos suites, el lint y el build del panel en cada push.
 
-**Fase 3 (compras y plata que sale) — lista.** Comprobantes de compra (factura, remito,
-liquidación, notas de crédito/débito, orden de compra) con recepción de stock, actualización de
-costos de catálogo, percepciones, bonificación y duplicados; remito → factura sin volver a mover
-stock; pagos a proveedores desde la caja de la sucursal o administración (multi-forma, fletes
-adelantados, bandeja de sin aplicar, imputación con candados); gastos con rubros, renglones,
-pie abierto, pago inmediato, cuentas a pagar, gastos fijos por período y adjuntos; compromisos de
-pago (cuotas), cartera de echeqs, estados de cuenta (mayor DEBE/HABER, antigüedad FIFO, ajustes,
-conciliación) y el kanban de pedidos. Panel: Abastecimiento › Compras / Pagos / Pedidos /
-Vencimientos / Estados de cuenta y Finanzas › Gastos.
+## Qué tiene
 
-**Fase 4 (rentabilidad real) — lista.** Se descartaron del alcance la tienda, el marketing, la
-lectura de facturas PDF y todo el circuito de e-commerce (pedidos de carrito, logística de envíos,
-facturación atada a esos pedidos): el negocio es de mostrador/distribución, no de venta online.
-Lo que sí manda el CRM de referencia es Gerencia › Rentabilidad, y eso es lo que se construyó:
-margen real (venta neta − costo congelado en cada renglón de venta) contra margen aparente (+ el
-IVA que el negocio absorbe por mercadería sin factura), posición fiscal del período (débito de lo
-facturado contra crédito de compras y gastos), compras por proveedor con control de desvío entre
-el % de sin factura declarado y el real, y el valor del stock sin factura parado en depósito. Se
-agrupa por producto, marca, categoría o proveedor — un solo reporte, cuatro lentes. Panel:
-Finanzas › Rentabilidad. El resto de los módulos del template (Analytics genérico, Automatizaciones,
-Integraciones, Finanzas › Resumen/Comisiones/Reembolsos, Pedidos/Logística/Facturación de
-e-commerce, Marketing, Tienda) sin equivalente en el CRM quedan con datos de muestra y fuera de
-alcance salvo que el negocio los necesite más adelante.
+- **Ventas**: punto de venta con borradores y autoguardado (y modo sin conexión), listas por cantidad/marca/monto/cliente,
+  ofertas, descuentos con nombre, cobro con varios medios, tickets y facturas A/B/C con **ARCA** (CAE, QR, notas de crédito),
+  caja con turnos y arqueo, cuenta corriente y cobranzas, clientes y presupuestos.
+- **Compras y precios**: formatos de compra, facturas, remitos, liquidaciones y notas, costos con descuentos en cascada, flete e IVA,
+  precios derivados con historial, actualización masiva con deshacer, importación de catálogos.
+- **Stock**: existencias por sucursal, fraccionamiento, transferencias, incidencias, control de stock, vencimientos.
+- **Proveedores y gastos**: fichas, pedidos, cuentas corrientes, echeqs, estados de cuenta, pagos desde la caja, gastos fijos y resumen.
+- **Gerencia y sistema**: usuarios y roles con permisos, reportes, rentabilidad real, impresión, respaldos, licencias firmadas.
+
+Los planes están definidos en [`api/app/Auth/PlanCatalogo.php`](api/app/Auth/PlanCatalogo.php).
+El módulo **Web** (sitio público con tienda) está apagado y es **solo para el plan Corporativo, a pedido**: la API no tiene sus rutas.
+
+## Operar el servicio
+
+| Tema | Documento |
+|---|---|
+| Dejar una instalación lista para un cliente | [`api/deploy/PRODUCCION.md`](api/deploy/PRODUCCION.md) |
+| **Varios clientes en un mismo servidor** (alta, actualización, cron, suspensión, cambio de plan) | [`api/deploy/CLIENTES.md`](api/deploy/CLIENTES.md) |
+| **Copias fuera del servidor** (cifradas, a Google Drive) | [`api/deploy/COPIAS_EXTERNAS.md`](api/deploy/COPIAS_EXTERNAS.md) |
+| Licencias: emitir, activar, renovar | [`api/deploy/LICENCIAS.md`](api/deploy/LICENCIAS.md) |
+| Notas técnicas de diseño (decisiones y trampas; archivo de consulta interna) | [`docs/NOTAS_TECNICAS_INFO_DE_SISTEMA.md`](docs/NOTAS_TECNICAS_INFO_DE_SISTEMA.md) |
+
+## Despliegue (resumen)
+
+Una instalación de **un cliente**: `api/public/` como raíz de un subdominio de la API y el contenido de `panel/dist/` en el del panel
+(o el panel y la API bajo el mismo dominio: el panel llama a `/api` de donde se lo abre). Con **varios clientes** en un servidor,
+cada uno tiene su subdominio, su base y su carpeta, y todos comparten un único código: ver [`api/deploy/CLIENTES.md`](api/deploy/CLIENTES.md).

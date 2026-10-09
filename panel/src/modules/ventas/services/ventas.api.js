@@ -1,7 +1,7 @@
 /**
  * CAPA DE API DEL MÓDULO VENTAS
  * ============================================================================
- * Funciones puras contra `crm-api`: sin estado, sin React, sin caché. El estado
+ * Funciones puras contra la API (`api/`): sin estado, sin React, sin caché. El estado
  * vive en el contexto (catálogos) o en `useResource` (listados bajo demanda).
  *
  * Deliberadamente NO hay un store singleton como en inventario: los datos de

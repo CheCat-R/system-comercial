@@ -41,7 +41,7 @@ class PlanCatalogoTest extends TestCase
         $this->assertFalse(PlanCatalogo::incluye('pymes', 'gerencia.valorizacion'));
         $this->assertFalse(PlanCatalogo::incluye('pymes', 'gerencia.auditoria'));
         $this->assertFalse(PlanCatalogo::incluye('pymes', 'liquidaciones'));
-        $this->assertFalse(PlanCatalogo::incluye('pymes', 'compras.lecturas'));
+        $this->assertFalse(PlanCatalogo::incluye('pymes', 'compras.cuotas_echeq'));
         $this->assertFalse(PlanCatalogo::incluye('pymes', 'gastos.fiscal_avanzado'));
     }
 

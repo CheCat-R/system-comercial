@@ -26,19 +26,31 @@ correr una migración nueva), siembra lo mínimo para poder entrar (roles, el us
 instalación (ver `App\Auth\PlanCatalogo`). Es seguro correrlo más de una vez.
 
 El plan define qué módulos/secciones ve esta instalación — no se toca desde el panel
-(`App\Services\LicenciaService`); para cambiarlo más adelante, `php artisan licencia:plan
-<plan>`.
+(`App\Services\LicenciaService`). Donde se exige licencia (producción), el plan lo trae la
+clave de activación firmada (`licencia:activar`, ver `deploy/LICENCIAS.md`); en una demo o en
+desarrollo, `php artisan licencia:plan <plan>`.
 
 Contraseña inicial del superadmin: `SUPERADMIN_PASSWORD` del `.env`, o `admin1234` si no
 se definió — cambiarla en el primer ingreso.
 
+## Varios clientes en un mismo servidor
+
+Con una carpeta `clientes/` al lado de esta, el mismo código atiende a varios clientes: cada uno tiene su
+dominio, su base de datos y su carpeta (`.env`, `storage/`, certificado de ARCA). Se opera con los comandos
+`ccs:*` (`ccs:alta`, `ccs:lista`, `ccs:actualizar`, `ccs:cron`, `ccs:suspender`, `ccs:plan`, `ccs:eliminar`…).
+Guía completa: [`deploy/CLIENTES.md`](deploy/CLIENTES.md). Las copias cifradas a Google Drive:
+[`deploy/COPIAS_EXTERNAS.md`](deploy/COPIAS_EXTERNAS.md).
+
 ## Estructura
 
-- `app/Http/Controllers/Api/` — controladores, uno por recurso.
-- `app/Http/Requests/` — validación (Form Requests).
-- `app/Http/Resources/` — forma de las respuestas JSON.
-- `app/Models/` — Eloquent.
+- `app/Http/Controllers/Api/` — controladores, uno por recurso; `app/Http/Requests/` — validación; `app/Http/Resources/` — forma de las respuestas.
+- `app/Services/`, `app/Compras/`, `app/Ventas/`, `app/Inventario/`, `app/Precios/`, `app/Gerencia/` — las reglas de negocio, por área.
+- `app/Arca/` — facturación electrónica (WSAA/WSFE, certificado, QR). `app/Licencias/` — claves firmadas.
+- `app/Auth/` — sesiones, permisos por rol (`Permisos`) y qué incluye cada plan (`PlanCatalogo`).
+- `app/Clientes/` y `app/CopiasExternas/` — varios clientes por instalación y copias a Google Drive.
+- `app/Models/` — Eloquent. `app/Console/Commands/` — los comandos de operación.
 - `database/migrations/` — esquema (fuente de verdad, versionado).
+- `deploy/` — guías de puesta en producción, licencias, varios clientes y copias externas.
 
 ## Despliegue en Hostinger (hosting compartido)
 

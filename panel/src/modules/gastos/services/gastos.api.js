@@ -1,7 +1,7 @@
 /**
  * CAPA DE API DEL MÓDULO GASTOS
  * ============================================================================
- * Funciones puras contra `crm-api`: sin estado, sin React, sin caché. Los
+ * Funciones puras contra la API (`api/`): sin estado, sin React, sin caché. Los
  * catálogos chicos viven en el contexto; los listados que crecen los pide cada
  * panel con `useResource`.
  *

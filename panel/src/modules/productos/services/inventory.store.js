@@ -1,5 +1,5 @@
 /**
- * INVENTORY STORE — cliente del backend (crm-api).
+ * INVENTORY STORE — cliente de la API (`api/`).
  * ============================================================================
  * Reemplaza al store localStorage: ahora los datos vienen de la API REST y las
  * mutaciones llaman a los endpoints y luego refrescan el snapshot (`/bootstrap`).
@@ -57,9 +57,6 @@ function nuevoEstado() {
     // chicos y estables: viajan enteros en el bootstrap y los desplegables del
     // modal filtran en memoria, sin una llamada por tecla.
     catalogos: { marcas: [], categorias: [], subcategorias: [], etiquetas: [] },
-    // Cuántas facturas de papel esperan que alguien las cargue (para el globito
-    // del menú). Es solo el número: la bandeja la pide su panel.
-    lecturasPendientes: 0,
     // Lo que apura del vigía de fechas (vencidos sin procesar + vence en ≤7 días).
     vencimientosUrgentes: 0,
     ctx: _loadCtx(),
@@ -444,7 +441,6 @@ function mergeState(data) {
     ...t, items: (t.items || []).map((it) => ({ ...it, presId: it.presentacionId ?? null })),
   }));
   state.incidencias = (data.incidencias || []).map((i) => ({ ...i, presId: i.presentacionId ?? null }));
-  state.lecturasPendientes = Number(data.lecturasPendientes) || 0;
   state.vencimientosUrgentes = Number(data.vencimientosUrgentes) || 0;
 }
 
@@ -776,14 +772,6 @@ function _cleanComprobante(o) {
     condicionPago: o.condicionPago, recepcion: !!o.recepcion,
     vencimientoPago: _fechaLocal(o.vencimientoPago), observaciones: o.observaciones || '',
     /*
-     * De la bandeja de facturas subidas: el CAE que salió del QR y la lectura
-     * que este comprobante viene a cerrar. Sin `lecturaId` acá, el papel se
-     * cargaba pero la bandeja se quedaba con la factura marcada como pendiente
-     * para siempre (la lista de abajo ya se tragó cuatro campos por lo mismo).
-     */
-    cae: o.cae || undefined,
-    lecturaId: o.lecturaId != null && o.lecturaId !== '' ? Number(o.lecturaId) : undefined,
-    /*
      * La factura que esta NC/ND ajusta. Sin esto la nota quedaba flotando: restaba
      * de la deuda TOTAL del proveedor pero la factura seguía ofreciendo su importe
      * entero para pagar, y el que paga factura por factura le pagaba de más.
@@ -887,8 +875,6 @@ const facturarRemito = (remitoId, o) => _mutate(() => httpClient.post(`/comproba
   numero: o.numero != null && o.numero !== '' ? Number(o.numero) : undefined,
   fecha: _fechaLocal(o.fecha), fechaCarga: _fechaLocal(o.fechaCarga),
   vencimientoPago: _fechaLocal(o.vencimientoPago), observaciones: o.observaciones || '',
-  cae: o.cae || undefined,
-  lecturaId: o.lecturaId != null && o.lecturaId !== '' ? Number(o.lecturaId) : undefined,
   bonificacion: Number(o.bonificacion) || 0,
   bonificacionImporte: Number(o.bonificacionImporte) || 0,
   percepciones: (o.percepciones || [])
@@ -978,49 +964,6 @@ const procesarVencimiento = (id, o) => _mutate(() => httpClient.post(`/vencimien
  * registro queda atado a ella. Esto es la lectura de ese cruce. */
 const ofertasVencimientos = () => httpClient.get('/vencimientos/ofertas');
 
-/* ---- Facturas por procesar (la bandeja de papeles subidos) ----
- *
- * Lecturas directas, sin pasar por el snapshot del store: la bandeja crece y se
- * filtra, y el panel la pide con su filtro. Lo único que viaja en el bootstrap
- * es el CONTADOR de pendientes, para el globito del menú.
- *
- * Las mutaciones tampoco pasan por `_mutate`: subir o descartar un papel no
- * cambia nada del inventario, así que refrescar el store entero sería tirar
- * abajo el catálogo por nada. El que sí lo hace es `crearComprobante`, y ahí el
- * `lecturaId` cierra la bandeja del lado de la API.
- */
-const lecturasFactura = (estado) => httpClient.get('/facturas/lecturas' + (estado ? `?estado=${estado}` : ''));
-const lecturaFactura = (id) => httpClient.get('/facturas/lecturas/' + id);
-const subirFactura = (o) => httpClient.post('/facturas/lecturas', {
-  usuarioId: state.ctx.usuarioId ?? undefined,
-  // La sucursal del que sube es la MEJOR PISTA de dónde entró la mercadería —
-  // la cajera de Express 2 fotografía lo que recibió Express 2— pero sigue
-  // siendo editable: el papel no dice la sucursal y nadie puede adivinarla.
-  sucursalId: state.ctx.sucursalId ?? undefined,
-  ...o,
-});
-const agregarPaginaFactura = (id, archivo) => httpClient.post(`/facturas/lecturas/${id}/archivos`, archivo);
-const borrarPaginaFactura = (archivoId) => httpClient.delete('/facturas/archivos/' + archivoId);
-const guardarLecturaFactura = (id, patch) => httpClient.put('/facturas/lecturas/' + id, patch);
-const descartarLecturaFactura = (id, motivo) => httpClient.post(`/facturas/lecturas/${id}/descartar`, { motivo });
-const recuperarLecturaFactura = (id) => httpClient.post(`/facturas/lecturas/${id}/recuperar`, {});
-/** "Esta factura ya la había cargado a mano": engancha el papel al comprobante. */
-const vincularLecturaFactura = (id, comprobanteId) => _mutate(() => httpClient.post(`/facturas/lecturas/${id}/vincular`, { comprobanteId }));
-/** URL directa del papel: va en un <img src> o se abre en una pestaña. */
-/*
- * EL PAPEL DE UNA FACTURA, con la credencial (25/8). Desde que la API se cerró,
- * la URL cruda en un `<img src>` o un `<a href>` recibía 401 — la etiqueta no
- * puede mandar el token — y la bandeja mostraba miniaturas rotas. Devuelve una
- * promesa con una URL `blob:` local, bajada con el Bearer y cacheada.
- */
-const papelFactura = (archivoId) => httpClient.urlProtegida(`/facturas/archivos/${archivoId}`);
-/**
- * La propuesta de carga leída del PDF digital: renglones + pie + encabezado.
- * Solo lectura — no toca nada; el alta la usa para precargar y la persona
- * confirma. Para fotos el endpoint contesta 400 (eso es la etapa de visión).
- */
-const leerRenglonesLectura = (id) => httpClient.get(`/facturas/lecturas/${id}/renglones`);
-
 /* ---- Costos y márgenes ----
  * La previsualización se calcula en el navegador (el store ya tiene costos y
  * márgenes), así que acá solo viajan los cambios aprobados. `historial` es
@@ -1066,9 +1009,6 @@ export const inventoryStore = {
   precioFinal, redondearPrecio,
   crearComprobante, facturarRemito, getComprobante, comprobantesDe, cuentaProveedor, saldoTotalProveedores,
   facturasReferenciables,
-  lecturasFactura, lecturaFactura, subirFactura, agregarPaginaFactura, borrarPaginaFactura,
-  guardarLecturaFactura, descartarLecturaFactura, recuperarLecturaFactura, vincularLecturaFactura,
-  papelFactura, leerRenglonesLectura,
   pagosSucursal, pagoSucursal, pagosDisponibles, pagosDocsPendientes, cajaAbierta,
   vencimientos, resumenVencimientos, reportesVencimientos, crearSesionVencimientos,
   editarVencimiento, eliminarVencimiento, procesarVencimiento, ofertasVencimientos,

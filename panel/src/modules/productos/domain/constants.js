@@ -100,16 +100,6 @@ export const rangoVenc = (dias) => (
   dias < 0 ? 'vencido' : dias <= 7 ? 'd7' : dias <= 15 ? 'd15' : dias <= 30 ? 'd30' : 'vigente'
 );
 
-/* ---- Estados de una factura de papel subida a la bandeja ----
- * `pendiente` espera que alguien la cargue · `cargada` ya se convirtió en un
- * comprobante (o se enganchó a uno que estaba cargado a mano) · `descartada` no
- * correspondía: duplicada, ilegible o no era nuestra. */
-export const ESTADOS_LECTURA = {
-  pendiente:  { label: 'Esperando',  pill: 'est-pendiente' },
-  cargada:    { label: 'Cargada',    pill: 'est-recibida' },
-  descartada: { label: 'Descartada', pill: 'est-cancelada' },
-};
-
 // ---- Estados e insumos de incidencias ----
 export const ESTADOS_INCIDENCIA = {
   pendiente: { label: 'Pendiente',   pill: 'est-pendiente' },

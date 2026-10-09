@@ -55,10 +55,13 @@ export const appConfig = Object.freeze({
    * `@core` (la alerta global de pedidos), y el `core` no puede importar de
    * `@modules` — al revés sí, así que el módulo Web lee este mismo valor.
    *
-   * `webHabilitado: false`: este negocio no vende online por ahora. Apaga el
-   * módulo Web entero y todo lo que otros módulos le enganchan (hoy: la
-   * sección "Órdenes web" de Ventas y su alerta) sin borrar una línea — en
-   * `true` el día que se necesite.
+   * `webHabilitado: false`: el módulo Web (el sitio público con su tienda) está
+   * APAGADO y así se queda: es un módulo **solo para el plan Corporativo y a
+   * pedido** (ver `PlanCatalogo`). Apaga el módulo entero y todo lo que otros
+   * módulos le enganchan (hoy: la sección "Órdenes web" de Ventas y su alerta)
+   * sin borrar una línea. Prenderlo para un cliente que lo contrate exige
+   * antes construir en la API las rutas `/web/*` y `/tienda/*`, que hoy no
+   * existen (ver el comentario de `modules/web/index.js`).
    */
   features: {
     webHabilitado: false,

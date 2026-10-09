@@ -11,9 +11,12 @@ use App\Clientes\SelectorDeCliente;
  *    membrete, y el panel avisa si divergen.
  *  · El punto de venta de web services es PROPIO (distinto del de "Factura en
  *    Línea" y del de los tickets internos): numeraciones independientes.
- *  · Las rutas de los certificados NO tienen default: sin variable no hay
- *    ruta, y sin ruta la facturación queda dormida. En Hostinger van FUERA de
- *    `public_html` (p. ej. `/home/usuario/arca/`), nunca en una carpeta servida.
+ *  · Las rutas de los certificados no tienen default en una instalación común:
+ *    sin variable no hay ruta, y sin ruta la facturación queda dormida. En
+ *    Hostinger van FUERA de `public_html` (p. ej. `/home/usuario/arca/`), nunca
+ *    en una carpeta servida. En una instalación con VARIOS clientes
+ *    (`App\Clientes\SelectorDeCliente`) cada uno tiene su carpeta `arca/` y el
+ *    default sale de ahí, así que no hace falta cargarlas.
  */
 return [
     'produccion' => strtolower((string) env('ARCA_ENV', '')) === 'produccion',

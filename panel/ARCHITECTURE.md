@@ -67,7 +67,7 @@ en `modules/` y una línea en `modules/index.js`. Nada más.**
 ## 2. Estructura completa de carpetas
 
 ```
-crm-dashboard/
+panel/
 ├── index.html
 ├── package.json
 ├── vite.config.js               # alias @core, @modules, @shared, @styles…
@@ -153,7 +153,7 @@ crm-dashboard/
     │   ├── web/                 # /web — administración del sitio público
     │   ├── gerencia/            # /gerencia — usuarios y roles, rentabilidad
     │   ├── sistema/             # /sistema — empresa, impresión, terminales, respaldos
-    │   ├── manual/              # /info — documentación viva (contenido, es DATO)
+    │   ├── manual/              # /info — guía de uso para el cliente (contenido, es DATO)
     │   └── consultas/           # atajos globales (Alt+F3/F5); lo monta MainLayout
     │
     ├── shared/                  # ────────── REUTILIZABLE (sin negocio) ──────────
@@ -380,7 +380,7 @@ separado de tema y auth para respetar *Single Responsibility*.
 - En cada arranque `getCurrentUser()` refresca permisos contra `/auth/yo`; si
   la API no responde, vale la foto guardada al entrar.
 - `PermissionContext` decide qué se **muestra**; quién puede hacer qué lo
-  decide **el servidor** (guard global de `crm-api`).
+  decide **el servidor** (los middlewares de la API: `permiso`, `plan` y `licencia`).
 
 ---
 
@@ -416,7 +416,7 @@ Proveedores), y **pollers globales** del núcleo para los avisos.
 2. **Un `index.js` con `defineModule`.** Es la única superficie pública del
    módulo; el resto de la app no importa archivos internos del módulo.
 3. **I/O solo en `services/`.** Nunca hagas `fetch` desde un componente. Usá
-   `httpClient` del núcleo para heredar base URL, timeout y (a futuro) el token.
+   `httpClient` del núcleo para heredar base URL, timeout y el token de la sesión.
 4. **Un hook por pantalla** para el estado (`useXData`). Las páginas quedan
    declarativas.
 5. **Estilos en CSS Modules del módulo** usando **tokens** (`var(--crm-…)`).
@@ -503,8 +503,10 @@ sugerido:
    `auth.service.js` + `sesion.js`.
 3. **Autorización robusta:** RBAC/ABAC con permisos `"<recurso>:<acción>"` (ya
    soportados), más un componente `<Can permission="…">` para gating a nivel UI.
-4. **Multi-tenant / white-label:** tema y catálogo de módulos por comercio; feature
-   flags server-driven; aislamiento de datos por `tenantId`.
+4. **Varios clientes:** resuelto del lado de la API con **una base de datos por cliente**
+   y el dominio de cada pedido como selector (`api/deploy/CLIENTES.md`); el panel es el
+   mismo build para todos, habla con `/api` de su propio dominio y la marca es fija.
+   Lo que sigue siendo aspiración: tema y catálogo de módulos por comercio.
 5. **i18n:** `react-i18next`; los `name` de módulos y rótulos ya están listos para
    volverse claves de traducción. Formatos regionales ya usan `Intl`.
 6. **Calidad:** **TypeScript** (ver §14), **Vitest + Testing Library** para

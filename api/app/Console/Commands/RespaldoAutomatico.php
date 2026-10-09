@@ -14,6 +14,7 @@ use Throwable;
  * cron cada minuto con `php artisan schedule:run`. Sin eso el comando nunca
  * corre — por eso Sistema › Respaldos avisa cuando pasan más de 36 horas sin
  * una copia nueva. También se puede correr a mano: `php artisan respaldos:automatico`.
+ * En una instalación con varios clientes la corre `ccs:cron`, una vez por cliente.
  *
  * En un Emprendedor no hace nada (su plan no la incluye).
  */

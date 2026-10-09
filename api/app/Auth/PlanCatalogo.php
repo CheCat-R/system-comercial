@@ -34,8 +34,8 @@ final class PlanCatalogo
     /**
      * Lo que trae EMPRENDEDOR. Es la base: todo lo que un local solo, de un
      * dueño, necesita para operar el día a día sin ayuda — incluido el
-     * asistente de carga de Compras y el módulo de Gastos completos (ver
-     * memoria del proyecto: se decidió no limitarlos de más ahí adentro).
+     * asistente de carga de Compras y el módulo de Gastos completos (decisión
+     * de producto: no limitarlos de más ahí adentro).
      */
     private const EMPRENDEDOR = [
         'dashboard', 'manual',
@@ -74,7 +74,6 @@ final class PlanCatalogo
      * engancharse y no se escriba una clave distinta cada vez.
      */
     private const CLAVES_PROPIAS = [
-        'compras.lecturas',        // Bandeja de lectura de facturas (foto/QR/OCR/PDF)
         'compras.cuotas_echeq',    // Compromiso de pago en cuotas / cartera de echeqs
         'compras.costos_masivo',   // % "sin factura" + regla masiva de costos por proveedor/marca
         'gastos.fiscal_avanzado',  // Pie fiscal abierto: impuestos internos, percepción DGI/DGR

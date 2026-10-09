@@ -18,7 +18,7 @@ export const sistemaModule = defineModule({
     showInSidebar: true,
     group: 'catalog',
     order: 55,
-    // Pendientes del sidebar: copia externa vieja o copia diaria automática caída.
+    // Pendientes del sidebar: copia descargada vieja o copia diaria automática caída.
     badgeCount: () => respaldoAviso.count(),
     badgeSubscribe: (listener) => respaldoAviso.subscribe(listener),
   },

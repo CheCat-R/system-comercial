@@ -217,10 +217,6 @@ function PasosWizard({ paso, irA }) {
 }
 
 /**
- * @param lectura  Factura que viene de la bandeja "Por procesar". Trae el
- *   encabezado ya resuelto desde el QR del papel —tipo, letra, punto de venta,
- *   número, fecha, CAE— y sobre todo **el total que dice la factura**, que es el
- *   número contra el que se valida que los renglones cargados cierren.
  * @param remito  LLEGÓ LA FACTURA DE UN REMITO (26/8): el mismo asistente, en
  *   modo conversión. El remito ya ingresó la mercadería; acá se completa el
  *   papel (encabezado, precios reales, pie, pago) y el remito PASA A SER la
@@ -253,12 +249,10 @@ function filaDesdeItemRemito(it, entry) {
     iva: String(it.iva ?? 21),
     costoAuto: false,
     modo: 'bulto',
-    codigoProveedor: '',
-    descripcionPapel: '',
   };
 }
 
-function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) {
+function ComprobanteFormInner({ proveedorId, tipo: tipoInit, remito }) {
   const { store, closeModal, toast, sucOperativa, can, openModal } = useProductos();
 
   /** Modo conversión: facturar un remito ya ingresado. */
@@ -269,8 +263,8 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
    * entrega sin factura: un documento no fiscal, y quién lo carga es decisión
    * del dueño. Sin el permiso `liquidaciones` el tipo no está ni en la lista.
    *
-   * Ojo: esto esconde la opción, no la prohíbe — la API no valida quién llama
-   * (no puede, no hay autenticación todavía).
+   * La API también lo hace cumplir: cargar una liquidación sin el permiso se
+   * rechaza (403), aunque se arme el pedido a mano.
    */
   /*
    * A propósito SIN el `isAdmin ||` que usan los otros permisos del sistema.
@@ -295,27 +289,18 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
   // proveedor es un hecho del remito.
   const provFijo = !!proveedorId || esConversion;
 
-  /*
-   * EL ENCABEZADO NO SE TIPEA CUANDO VIENE DE LA BANDEJA. Todo esto salió del QR
-   * del papel (RG 4892), que es un JSON: es exacto, no una interpretación de la
-   * imagen. Igual queda editable — una factura hecha a mano no tiene QR.
-   */
-  /* TIPO Y PROVEEDOR ARRANCAN VACÍOS a propósito (26/8, pedido del dueño):
-   * precargados con "Factura" y el primer proveedor del padrón, un Continuar
-   * distraído metía la compra en el proveedor equivocado — y NUEVO COSMOS no
-   * es el proveedor de nada por estar primero en orden alfabético. Se
-   * prellenan solo cuando SON un dato: la lectura del QR de la bandeja, o
-   * abrirlo desde la ficha del proveedor. */
+  /* TIPO Y PROVEEDOR ARRANCAN VACÍOS a propósito: precargados con "Factura" y el primer proveedor del padrón, un Continuar
+   * distraído metía la compra en el proveedor equivocado. Se prellenan solo cuando SON un dato (abrirlo desde la ficha del proveedor). */
   // En la conversión el tipo no se elige: un remito solo se convierte en factura.
-  const [tipo, setTipo] = useState(esConversion ? 'factura' : (lectura?.tipo || tipoInit || ''));
-  const [letra, setLetra] = useState(lectura?.letra || 'A');
-  const [puntoVenta, setPuntoVenta] = useState(lectura?.puntoVenta || '0001');
-  const [numero, setNumero] = useState(lectura?.numero != null ? String(lectura.numero) : '');
-  const [fecha, setFecha] = useState(lectura?.fecha ? String(lectura.fecha).slice(0, 10) : isoDate(new Date()));
+  const [tipo, setTipo] = useState(esConversion ? 'factura' : (tipoInit || ''));
+  const [letra, setLetra] = useState('A');
+  const [puntoVenta, setPuntoVenta] = useState('0001');
+  const [numero, setNumero] = useState('');
+  const [fecha, setFecha] = useState(isoDate(new Date()));
   const [fechaCarga, setFechaCarga] = useState(isoDate(new Date()));
   const [provId, setProvId] = useState(remito?.proveedorId || proveedorId || '');
   // La sucursal de la conversión es la del remito: la mercadería YA entró ahí.
-  const [sucId, setSucId] = useState(remito?.sucursalId ?? lectura?.sucursalId ?? sucOperativa() ?? '');
+  const [sucId, setSucId] = useState(remito?.sucursalId ?? sucOperativa() ?? '');
   const [venc, setVenc] = useState('');
   const [obs, setObs] = useState('');
   /* COMPROMISOS (0068): el proveedor diferido (cta cte / echeq) promete cuándo
@@ -339,19 +324,6 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
     })
     : [nuevoItem()]));
   const [busquedaLote, setBusquedaLote] = useState(false);
-
-  /* ---- Lectura de renglones desde el PDF digital ----
-   * Si el papel de la bandeja es un PDF con capa de texto, el backend lo lee
-   * (receta por proveedor) y devuelve una PROPUESTA: renglones, pie y
-   * encabezado. Acá solo se precarga — la persona confirma. Las fotos no
-   * tienen capa de texto: para esas el endpoint contesta 400. */
-  const [propuestaPdf, setPropuestaPdf] = useState(null);
-  const [leyendoPdf, setLeyendoPdf] = useState(false);
-  /** CAE leído del PDF (cuando el QR no se leyó y la lectura no lo trae). */
-  const [caePdf, setCaePdf] = useState('');
-  /** Códigos del papel ya asociados a mano en este alta: código → nombre. */
-  const [asociados, setAsociados] = useState({});
-  const tienePdf = !!lectura?.archivos?.some((a) => a.mime === 'application/pdf');
 
   /** Deriva de la MISMA lista: si el tipo INGRESA mercadería, entra siempre. */
   const permiteRecepcion = TIPOS_CON_RECEPCION.has(tipo);
@@ -674,132 +646,11 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
   /** Toca UNA percepción por su índice real (lo usa la × del pie). */
   const setPerc = (i, patch) => setPercepciones((r) => r.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
-  /* ---- Leer el PDF: pedir la propuesta y precargar el formulario ---- */
-
-  /** Aplica el encabezado leído del PDF a los campos del paso 1. Es un botón
-   * aparte y no automático: si el QR ya llenó el encabezado (o alguien lo
-   * tipeó), pisarlo sin aviso sería decidir por la persona. */
-  const usarEncabezadoPdf = () => {
-    const e = propuestaPdf?.encabezado;
-    if (!e) return;
-    if (e.tipo) setTipo(e.tipo);
-    if (e.letra) setLetra(e.letra);
-    if (e.puntoVenta) setPuntoVenta(e.puntoVenta);
-    if (e.numero) setNumero(String(e.numero));
-    if (e.fecha) setFecha(e.fecha);
-    if (e.vencimiento) setVenc(e.vencimiento);
-    if (e.cae) setCaePdf(e.cae);
-    toast('Encabezado tomado del PDF.', 'ok');
-  };
-
-  const leerPdf = async () => {
-    if (leyendoPdf || !lectura) return;
-    // Releer pisa lo cargado: si ya hay renglones armados a mano, se pregunta.
-    if (items.some((it) => it.productoId)
-      && !window.confirm('Leer el PDF reemplaza los renglones ya cargados. ¿Seguir?')) return;
-    setLeyendoPdf(true);
-    try {
-      const d = await store.leerRenglonesLectura(lectura.id);
-      setPropuestaPdf(d);
-      if (!d?.receta) {
-        toast(d?.avisos?.[0] || 'No se pudo leer el PDF.', 'err');
-        return;
-      }
-      const filas = (d.renglones || []).filter((x) => x.productoId).map((x) => ({
-        productoId: String(x.productoId),
-        bultos: String(x.cantidad),
-        porBulto: String(x.porBulto || 1),
-        costoBulto: x.costoBulto != null ? String(x.costoBulto) : '',
-        // El costo vino del papel: que el catálogo no lo pise al re-elegir.
-        descuento: String(x.dto || 0),
-        iva: String(x.iva ?? 21),
-        costoAuto: false,
-        // Para el mapeo aprendido: si el admin cambia el producto de esta fila
-        // y guarda, el código del papel queda asociado al producto NUEVO.
-        codigoProveedor: x.codigo || '',
-        descripcionPapel: x.descripcion || '',
-      }));
-      setAsociados({});
-      if (filas.length) setItems(filas);
-      if (d.pie?.bonifImporte > 0) {
-        setBonifPct(d.pie.bonifPct != null ? String(d.pie.bonifPct) : '');
-        setBonifManual(d.pie.bonifImporte);
-      }
-      if (d.pie?.percepciones?.length) {
-        // Tildar las configuradas del proveedor que el papel trajo: por nombre
-        // parecido o por la misma alícuota. El importe del papel manda.
-        const k = (v) => String(v || '').normalize('NFD').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-        setPercepciones((prev) => prev.map((p) => {
-          const m = d.pie.percepciones.find((x) => {
-            const a = k(x.nombre); const b = k(p.nombre);
-            return (a && b && (a.includes(b) || b.includes(a)))
-              || (x.alicuota != null && Number(p.alicuota) === Number(x.alicuota));
-          });
-          return m ? { ...p, aplicar: true, importeManual: m.importe } : p;
-        }));
-      }
-      const conProd = filas.length;
-      toast(`${d.renglones.length} renglones leídos del PDF (${conProd} con producto).`, 'ok');
-    } catch (err) {
-      setPropuestaPdf(null);
-      toast(err?.message || 'No se pudo leer el PDF.', 'err');
-    } finally {
-      setLeyendoPdf(false);
-    }
-  };
-
-  /**
-   * ASOCIAR A MANO un renglón que la lectura no reconoció: el admin elige el
-   * producto del sistema y el renglón se agrega al alta con el código del
-   * papel adentro. Al GUARDAR, ese par (código → producto) queda aprendido y
-   * la próxima factura lo reconoce sola — el trabajo manual es solo la primera
-   * vez que aparece cada artículo.
-   */
-  const asociarRenglon = (ren, prodId) => {
-    const prod = store.getProducto(parseInt(prodId, 10));
-    if (!prod) return;
-    const entry = (prod.formatosCompra || []).find((e) => e.proveedorId === parseInt(provId, 10));
-    const fila = {
-      productoId: String(prod.id),
-      bultos: String(ren.cantidad),
-      porBulto: entry ? String(entry.cantidad || 1) : (prod.tipo === 'entero' ? String(prod.unidadesPorBulto || 1) : '1'),
-      costoBulto: ren.costoBulto != null ? String(ren.costoBulto) : '',
-      descuento: String(ren.dto || 0),
-      iva: String(ren.iva ?? 21),
-      costoAuto: false,
-      codigoProveedor: ren.codigo || '',
-      descripcionPapel: ren.descripcion || '',
-    };
-    // Las filas vacías de relleno se van; las cargadas se quedan.
-    setItems((prev) => [...prev.filter((it) => it.productoId), fila]);
-    setAsociados((a) => ({ ...a, [ren.codigo]: prod.nombre }));
-    toast(`${prod.nombre} agregado. Al guardar, el código ${ren.codigo} queda aprendido.`, 'ok');
-  };
   /** Cuál de los dos modales chicos del pie está abierto: null | 'bonificacion' | 'percepciones'. */
   const [modalPie, setModalPie] = useState(null);
 
   // La suma de las partes ya redondeadas, igual que el pie que arma la API: el total y lo que se paga tienen que coincidir al centavo.
   const total = r2(r2(tot.neto) + r2(tot.iva) + r2(percTotal));
-
-  /**
-   * ¿CIERRA CON EL PAPEL?
-   *
-   * El total del QR es el dato más útil que trae la factura: si la suma de los
-   * renglones, menos la bonificación, más el IVA, más las percepciones da ese
-   * número, la carga está DEMOSTRADA — no "parece bien", cierra.
-   *
-   * La tolerancia no es cero a propósito: el proveedor redondea cada renglón y
-   * el sistema calcula con más precisión, así que en facturas grandes queda un
-   * centavo de diferencia que no es un error. Lo que sí es un error se mide en
-   * pesos, no en centavos.
-   *
-   * OJO con lo que esto NO verifica: la plata, no las cantidades. `1 × $12.000`
-   * y `12 × $1.000` cierran igual, y el segundo mete el stock 12 veces mal.
-   */
-  const totalPapel = Number(lectura?.total) || 0;
-  const difPapel = totalPapel > 0 ? r2(total - totalPapel) : 0;
-  const tolerancia = Math.max(1, items.length * 0.05);
-  const cierraConPapel = totalPapel > 0 && Math.abs(difPapel) <= tolerancia;
 
   /* ---------------- Cuánto queda debiéndose ---------------- */
 
@@ -1021,10 +872,6 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
           // El stock recibe los kg (o unidades) TOTALES; el costo viaja unitario.
           productoId: parseInt(it.productoId, 10), presentacionId: null,
           cantidad: r.cantidadTotal, costoUnitario: r.costoUnitario, descuento: it.descuento, iva: it.iva,
-          // El código del papel viaja para que el guardado APRENDA el mapeo
-          // (proveedor, código) → producto. Vacío si el ítem se cargó a mano.
-          codigoProveedor: it.codigoProveedor || undefined,
-          descripcionPapel: it.descripcionPapel || undefined,
         };
       });
     if (!parsed.length) { toast('Agregá al menos un ítem completo: cantidad y, si va por bultos, el tamaño del bulto.', 'err'); return; }
@@ -1075,8 +922,6 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
         letra, puntoVenta, numero, fecha, fechaCarga,
         vencimientoPago: venc || null,
         observaciones: obs.trim(),
-        cae: lectura?.cae || caePdf || undefined,
-        lecturaId: lectura?.id,
         bonificacion: Number(bonifPct) || 0,
         bonificacionImporte: bonifImporte,
         percepciones: percCalculadas
@@ -1121,10 +966,6 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
       // devuelve mercaderia" y la API la usa para SACAR stock.
       recepcion: esNotaCredito ? devuelveMercaderia : permiteRecepcion,
       vencimientoPago: venc || null, observaciones: obs.trim(), items: parsed,
-      // De la bandeja: el CAE del QR (o el leído del PDF, si el QR no se pudo)
-      // y la lectura que este comprobante cierra en la misma transacción.
-      cae: lectura?.cae || caePdf || undefined,
-      lecturaId: lectura?.id,
       // La factura que esta nota ajusta ('0' = el usuario dijo que no corresponde).
       refComprobanteId: esNota && refId && refId !== '0' ? Number(refId) : undefined,
       // El pie del papel: el descuento general y las percepciones que vinieron.
@@ -1230,34 +1071,6 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
           <strong>La mercadería ya ingresó con el remito y el stock no se vuelve a mover</strong>:
           acá se completa lo que dice el papel — número, precios reales, pie y pago — y el remito
           pasa a ser la factura.
-        </div>
-      )}
-
-      {/* EL PAPEL, A MANO EN LOS TRES PASOS. Es lo que se mira mientras se
-          tipean los renglones, así que el link tiene que estar siempre visible y
-          abrir en otra pestaña — no dentro del modal, donde taparía el
-          formulario que se está llenando. */}
-      {lectura?.archivos?.length > 0 && (
-        <div className={cx(s.callout)} style={{ marginBottom: 'var(--crm-space-3)' }}>
-          <strong>Esta factura vino de la bandeja.</strong> El encabezado salió del QR del papel
-          {lectura.cae && <> · CAE <span className={s.mono}>{lectura.cae}</span></>}.{' '}
-          {/* `window.open` con la URL blob YA BAJADA (25/8): el href crudo a la
-              API recibía 401 — un link no manda el token de la sesión. */}
-          {lectura.archivos.map((a, i) => (
-            <a
-              key={a.id}
-              href="#papel"
-              style={{ marginRight: 10 }}
-              onClick={(e) => {
-                e.preventDefault();
-                store.papelFactura(a.id)
-                  .then((u) => window.open(u, '_blank', 'noopener'))
-                  .catch(() => {});
-              }}
-            >
-              Ver el papel{lectura.archivos.length > 1 ? ` (${i + 1})` : ''}
-            </a>
-          ))}
         </div>
       )}
 
@@ -1430,7 +1243,7 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
                   Remito <span className={s.mono}>{comprobanteNro(r)}</span> · {fmtFecha(r.fecha)} ·{' '}
                   {store.getSucursal(r.sucursalId)?.nombre || '—'} · {money(r.total)}
                 </span>
-                <Btn small variant="btn-primary" onClick={() => openModal('comprobanteForm', { remito: r, lectura })}>
+                <Btn small variant="btn-primary" onClick={() => openModal('comprobanteForm', { remito: r })}>
                   Llegó la factura de este
                 </Btn>
               </div>
@@ -1459,101 +1272,6 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
       <>
       <div className={s['section-title']}>Ítems</div>
 
-      {/* El papel es un PDF digital: los renglones se LEEN, no se tipean. */}
-      {tienePdf && (
-        <div className={cx(s.callout, s.info)} style={{ marginBottom: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span>
-              Este papel es un <strong>PDF digital</strong>: los renglones se pueden leer directo del archivo.
-            </span>
-            <Btn small variant="btn-primary" onClick={leerPdf} disabled={leyendoPdf}>
-              {leyendoPdf ? 'Leyendo…' : propuestaPdf ? 'Releer el PDF' : 'Leer renglones del PDF'}
-            </Btn>
-          </div>
-
-          {propuestaPdf?.receta && (
-            <div style={{ marginTop: 8 }}>
-              <div>
-                <strong>{propuestaPdf.renglones.length} renglones leídos</strong>
-                {' '}· {propuestaPdf.renglones.filter((x) => x.productoId).length} con producto propuesto
-                {propuestaPdf.cierra && <> · <strong>el total cierra con el papel</strong></>}
-              </div>
-
-              {propuestaPdf.encabezado?.numero && (
-                <div style={{ marginTop: 4 }}>
-                  El PDF dice: <strong>
-                    {TIPOS_COMPROBANTE[propuestaPdf.encabezado.tipo]?.label || propuestaPdf.encabezado.tipo}{' '}
-                    {propuestaPdf.encabezado.letra} {propuestaPdf.encabezado.puntoVenta}-{propuestaPdf.encabezado.numero}
-                  </strong>{' '}· {fmtFecha(propuestaPdf.encabezado.fecha)}
-                  {propuestaPdf.encabezado.cae && <> · CAE <span className={s.mono}>{propuestaPdf.encabezado.cae}</span></>}
-                  <button type="button" className={s.linkBtn} style={{ marginLeft: 8 }} onClick={usarEncabezadoPdf}>
-                    usar este encabezado
-                  </button>
-                </div>
-              )}
-
-              {propuestaPdf.renglones.some((x) => !x.productoId) && (
-                <div style={{ marginTop: 6 }}>
-                  <strong>Sin producto reconocido.</strong> Asociá cada uno con el producto del sistema
-                  (aunque tenga otro nombre) y <strong>se aprende al guardar</strong>: la próxima factura
-                  lo reconoce sola. Si es un artículo nuevo, primero se crea en Productos.
-                  <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
-                    {propuestaPdf.renglones.filter((x) => !x.productoId).map((x) => (
-                      <li key={x.codigo} style={{ marginBottom: 4 }}>
-                        <span className={s.mono}>{x.codigo}</span> {x.descripcion} — {money(x.importe)}
-                        {asociados[x.codigo] ? (
-                          <strong style={{ marginLeft: 8, color: 'var(--crm-color-success)' }}>
-                            → {asociados[x.codigo]} ✓
-                          </strong>
-                        ) : (
-                          <select
-                            style={{ marginLeft: 8, maxWidth: 260 }}
-                            defaultValue=""
-                            onChange={(e) => { if (e.target.value) asociarRenglon(x, e.target.value); }}
-                          >
-                            <option value="">Asociar con un producto…</option>
-                            {store.state.productos
-                              .filter((p) => (p.estado || 'activo') === 'activo')
-                              .slice()
-                              .sort((a, b) => a.nombre.localeCompare(b.nombre))
-                              .map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                          </select>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {propuestaPdf.avisos?.length > 0 && (
-                <div style={{ marginTop: 6, color: 'var(--crm-color-warning)' }}>
-                  {propuestaPdf.avisos.map((a, i) => <div key={i}>· {a}</div>)}
-                </div>
-              )}
-
-              <details style={{ marginTop: 6 }}>
-                <summary className={s.hint} style={{ cursor: 'pointer', margin: 0 }}>Ver el texto extraído del PDF</summary>
-                <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto', margin: '6px 0 0' }}>
-                  {propuestaPdf.texto}
-                </pre>
-              </details>
-            </div>
-          )}
-          {propuestaPdf && !propuestaPdf.receta && (
-            <div style={{ marginTop: 8, color: 'var(--crm-color-warning)' }}>
-              {propuestaPdf.avisos?.map((a, i) => <div key={i}>· {a}</div>)}
-              {propuestaPdf.texto && (
-                <details style={{ marginTop: 6 }}>
-                  <summary className={s.hint} style={{ cursor: 'pointer', margin: 0 }}>Ver el texto extraído</summary>
-                  <pre style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto', margin: '6px 0 0' }}>
-                    {propuestaPdf.texto}
-                  </pre>
-                </details>
-              )}
-            </div>
-          )}
-        </div>
-      )}
       {esConversion ? (
         <div className={s.hint} style={{ marginTop: 0 }}>
           Los renglones son <strong>los del remito</strong>: producto y cantidad no se tocan — son
@@ -1901,28 +1619,6 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
           <strong>TOTAL</strong><strong>{money(total)}</strong>
         </div>
 
-        {/* EL CONTROL QUE HACE QUE ESTO VALGA LA PENA: el total del QR contra el
-            total de lo cargado. Si cierra, los renglones están BIEN — no
-            "parecen bien". Si no cierra, falta o sobra algo y se ve cuánto. */}
-        {totalPapel > 0 && (
-          <div
-            style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--crm-color-border)',
-              color: cierraConPapel ? 'var(--crm-color-success, #15803d)' : 'var(--crm-color-danger, #b91c1c)',
-            }}
-          >
-            <span>
-              {cierraConPapel ? '✓ Coincide con el papel' : 'Total que dice el papel'}
-              <span className={s.muted} style={{ marginLeft: 6 }}>{money(totalPapel)}</span>
-            </span>
-            <strong>
-              {cierraConPapel
-                ? 'cierra'
-                : `${difPapel > 0 ? 'sobran' : 'faltan'} ${money(Math.abs(difPapel))}`}
-            </strong>
-          </div>
-        )}
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -2422,9 +2118,6 @@ function nuevoItem() {
     productoId: '', bultos: '1', porBulto: '', costoBulto: '', descuento: '0', iva: '21', costoAuto: true,
     // 'bulto' (la factura habla en bultos) o 'unidad' (entrega suelta, 25/8).
     modo: 'bulto',
-    // Del renglón leído del PDF (vacíos si el ítem se cargó a mano). Viajan al
-    // guardar y alimentan el mapeo aprendido de artículos del proveedor.
-    codigoProveedor: '', descripcionPapel: '',
   };
 }
 

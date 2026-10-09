@@ -14,7 +14,6 @@ import { CatalogosPanel } from '../panels/CatalogosPanel.jsx';
 
 import { FacturacionPanel } from '../panels/FacturacionPanel.jsx';
 import { ProveedoresPanel } from '../panels/ProveedoresPanel.jsx';
-import { LecturasPanel } from '../panels/LecturasPanel.jsx';
 import { ExistenciasPanel } from '../panels/ExistenciasPanel.jsx';
 import { FraccionamientoPanel } from '../panels/FraccionamientoPanel.jsx';
 import { HistorialPanel } from '../panels/HistorialPanel.jsx';
@@ -37,7 +36,6 @@ const PANEL_COMPONENTS = {
   // Solo lo OPERATIVO de compras (costos por producto, percepciones, cuenta):
   // el ABM de la ficha vive en el módulo Proveedores (0068).
   proveedores: ProveedoresPanel,
-  lecturas: LecturasPanel,
   facturacion: FacturacionPanel,
   existencias: ExistenciasPanel,
   fraccionamiento: FraccionamientoPanel,
@@ -64,9 +62,6 @@ export function InventoryShell({ title, subtitle, ayudaCategoriaId }) {
   const counts = {
     incidencias: store.incidenciasAbiertas().length,
     transferencias: store.transferenciasPendientes().length,
-    // Facturas de papel esperando que alguien las cargue: sin el aviso, el papel
-    // se queda en la bandeja como se quedaba en el cajón.
-    lecturas: store.state.lecturasPendientes || 0,
     // Lo que apura del vigía de fechas: vencidos sin procesar + vencen en ≤7 días.
     vencimientos: store.state.vencimientosUrgentes || 0,
   };

@@ -1,8 +1,8 @@
 /**
  * GERENCIA — menú interno del módulo.
  * ============================================================================
- * Las marcadas "pronto" son la agenda de Gerencia: se construyen más adelante,
- * pero el lugar donde van a vivir ya queda a la vista.
+ * Una sección con `pronto: true` es una promesa a la vista: aparece en el menú
+ * con su cartel "Próximamente" hasta que se construya. Hoy no hay ninguna.
  *
  * `permiso` es la clave de SECCIÓN del catálogo de permisos: el manifiesto
  * deriva de acá qué claves hacen visible el módulo, y la página filtra el

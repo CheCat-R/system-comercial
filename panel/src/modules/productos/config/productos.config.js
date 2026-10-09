@@ -46,16 +46,6 @@ export const COMPRAS_PANELS = [
    * (con la regla masiva), las percepciones y la cuenta del proveedor.
    */
   { id: 'proveedores',    label: 'Costos y percepciones', icon: LocalShippingIcon, permiso: 'compras.proveedores' },
-  /*
-   * "Por procesar" (bandeja de lectura de facturas en PDF) oculta a pedido
-   * del dueño: por ahora no se usa. El backend Laravel tampoco la tiene
-   * portada todavía (factura_lecturas/factura_archivos, extracción de texto
-   * y recetas por CUIT — un módulo aparte, no un campo suelto). El panel
-   * (LecturasPanel.jsx) y el resto del cableado quedan intactos para
-   * reactivarla el día que se porte: solo hace falta volver a importar
-   * DocumentScannerIcon de '@mui/icons-material/DocumentScanner' y esta línea:
-   * { id: 'lecturas', label: 'Por procesar', icon: DocumentScannerIcon, permiso: 'compras.lecturas', badge: 'lecturas' },
-   */
   { id: 'facturacion',    label: 'Facturación',    icon: ReceiptLongIcon,    permiso: 'compras.facturacion' },
   { id: 'historial',      label: 'Historial',      icon: HistoryIcon,        permiso: 'compras.historial' },
 ];

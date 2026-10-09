@@ -106,7 +106,7 @@ function textoWhatsApp(p, cliente, empresaNombre) {
   const lineas = p.items.map((it) =>
     `  •  ${num(it.cantidad)} × ${it.nombre}${it.detalle ? ` _(${it.detalle})_` : ''}\n      ${money(finalUnit(it) * it.cantidad)}`);
   return [
-    `🌿 *${(empresaNombre || 'Sabor y Aroma').toUpperCase()}* 🌿`,
+    `*${(empresaNombre || 'Presupuesto').toUpperCase()}*`,
     '',
     `¡Hola${nombrePila ? ` ${nombrePila}` : ''}! 👋 Te pasamos tu presupuesto:`,
     '',

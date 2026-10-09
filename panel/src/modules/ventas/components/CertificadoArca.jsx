@@ -159,7 +159,7 @@ export function CertificadoArca({ est, onCambio }) {
               value={alias}
               onChange={(e) => setAlias(limpiarAlias(e.target.value))}
               maxLength={60}
-              placeholder="saboryaroma"
+              placeholder="minegocio"
             />
             <div className={s.hint}>Para distinguirlo dentro de tu CUIT. Sin espacios ni acentos.</div>
           </div>

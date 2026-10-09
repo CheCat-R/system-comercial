@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
- * Sistema › Respaldos: la copia externa (volcado + rastro de descargas) y la
+ * Sistema › Respaldos: la copia descargada (volcado + rastro de descargas) y la
  * limpieza de fin de práctica (exclusiva del superadmin, con la palabra
  * tipeada como segundo seguro).
  */
@@ -94,7 +94,7 @@ class RespaldosTest extends TestCase
     }
 
     // ------------------------------------------------------------------
-    // El aviso de la copia externa (todos los planes)
+    // El aviso de la descarga (todos los planes)
     // ------------------------------------------------------------------
 
     private function sinOperatoria(): void

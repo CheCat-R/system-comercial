@@ -15,8 +15,9 @@ import { WEB_SECCIONES } from './config/web.config.js';
  * `permissions` sale del propio menú: con CUALQUIER sección el módulo aparece;
  * sin ninguna, desaparece entero del sidebar.
  *
- * ⭐ APAGADO A PROPÓSITO (no borrado): este negocio no vende online por ahora,
- * pero puede que lo haga más adelante. `enabled` saca el módulo del sidebar Y
+ * ⭐ APAGADO A PROPÓSITO (no borrado): es un módulo SOLO PARA EL PLAN
+ * CORPORATIVO Y A PEDIDO — se enciende para el cliente que lo contrate, no
+ * viene con ningún plan. `enabled` saca el módulo del sidebar Y
  * de la tabla de rutas (`moduleRegistry` filtra por esto en los dos lugares)
  * sin tocar una línea de código de adentro de ESTE módulo. Ese mismo valor es
  * lo que leen los otros módulos que dejan algo ENGANCHADO a Web (hoy: la

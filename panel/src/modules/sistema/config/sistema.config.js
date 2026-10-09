@@ -17,7 +17,7 @@ export const SISTEMA_SECCIONES = [
   { id: 'terminales', label: 'Este equipo', icon: PointOfSaleIcon, permiso: 'sistema.terminales' },
   {
     id: 'respaldos', label: 'Respaldos', icon: BackupIcon, permiso: 'sistema.respaldos',
-    desc: 'La copia externa de la base: descargarla a esta máquina, con el rastro de quién y cuándo.',
+    desc: 'Descargar la copia de la base a esta máquina, con el rastro de quién y cuándo, y las copias diarias del servidor.',
   },
   // Solo el dueño (superadmin): el rol Administrador no trae este permiso.
   {

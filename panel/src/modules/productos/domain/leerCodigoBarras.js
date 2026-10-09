@@ -1,10 +1,9 @@
 /**
  * LEER CÓDIGO DE BARRAS (1D) DESDE LA CÁMARA
  * ============================================================================
- * Hermano de `leerFactura.js`, que lee el QR de las facturas. Acá el código es
- * el de la GÓNDOLA: EAN-13 / EAN-8 / UPC / Code-128, el que trae impreso el
- * paquete. `jsQR` NO sirve para esto (lee solo QR, que es 2D), así que hay dos
- * caminos y se elige el que haya:
+ * El código que se lee es el de la GÓNDOLA: EAN-13 / EAN-8 / UPC / Code-128, el
+ * que trae impreso el paquete. Un lector de QR NO sirve para esto (el QR es 2D),
+ * así que hay dos caminos y se elige el que haya:
  *
  *   1. `BarcodeDetector`, la API nativa. En **Chrome para Android existe** — y
  *      Android es justo donde se va a escanear, caminando la góndola. Es la vía

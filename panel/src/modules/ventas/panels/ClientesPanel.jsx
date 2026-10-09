@@ -106,7 +106,7 @@ export function ClientesPanel() {
    * Pedidos web por cliente: alimenta la columna "Web" y el historial. Se pide
    * al entrar al panel (no viaja en el bootstrap: crece sin techo).
    */
-  const { data: presupuestos } = useResource('clientes-pedidos-web', () => ventasApi.presupuestos());
+  const { data: presupuestos } = useResource('clientes-pedidos-web', () => ventasApi.presupuestos(), { enabled: appConfig.features.webHabilitado });
   const webPorCliente = useMemo(() => {
     const mapa = new Map();
     for (const p of presupuestos ?? []) {

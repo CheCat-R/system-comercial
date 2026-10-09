@@ -345,7 +345,7 @@ export function SistemaPage() {
               </div>
               {/* Separada del nombre a propósito: en una factura la razón social
                   es obligatoria (RG 1415) y puede no ser el nombre de fantasía
-                  — acá se conoce "Sabor y Aroma" y factura una persona. */}
+                  — el comercio se conoce por un nombre y factura una persona o sociedad. */}
               <div className={s['form-grid']}>
                 <div className={s.field}>
                   <label>Razón social (ante ARCA)</label>

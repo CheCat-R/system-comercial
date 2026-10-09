@@ -68,7 +68,7 @@ export const AYUDA = [
           'Tocá **Facturar** si el cliente quiere comprobante con sus datos, o **Liquidar** si alcanza con un ticket simple.',
         ],
         notas: [
-          { tono: 'info', texto: 'Si la facturación electrónica está configurada, la Factura sale con CAE sola — no hay nada distinto que hacer. Si no está configurada, igual se emite un comprobante válido para el día a día, sin CAE.' },
+          { tono: 'info', texto: 'Si la facturación electrónica está configurada, la Factura sale con CAE sola — no hay nada distinto que hacer. Si no está configurada, o ARCA no contesta en ese momento, la venta sale igual como ticket (sin CAE) y la factura se pide después desde Ventas › Sin facturar.' },
         ],
       },
     ],
@@ -132,11 +132,10 @@ export const AYUDA = [
         pasos: [
           'Buscá la venta en este listado y tocala para abrir el detalle.',
           'Si la venta **tiene CAE** (factura electrónica): siempre con **Nota de crédito**, sea toda la venta o una parte — una venta con CAE no se puede anular.',
-          'Si la venta **no tiene CAE** y se devuelve **todo**: un encargado o admin puede usar **Anular** directamente.',
-          'Si no tiene CAE pero se devuelve **solo una parte**: también con **Nota de crédito** (ver el artículo de abajo).',
+          'Si la venta **no tiene CAE** (un ticket interno): el detalle ofrece **Anular**, que deshace **toda** la venta y devuelve la mercadería al stock. Lo hace un encargado o admin.',
         ],
         notas: [
-          { tono: 'info', texto: 'Ante la duda, Nota de crédito siempre sirve — es el camino que cubre todos los casos. Anular es el atajo para el caso más simple (todo, sin factura) y solo lo ve un encargado.' },
+          { tono: 'info', texto: 'Una de las dos opciones aparece según la venta: **Nota de crédito** si tiene CAE, **Anular** si no. Un ticket interno no lleva nota de crédito, así que si el cliente devuelve solo una parte, se anula la venta y se vuelve a cobrar lo que sí se queda.' },
         ],
       },
       {
@@ -147,7 +146,7 @@ export const AYUDA = [
           'Tocá **Nota de crédito**.',
           'Elegí qué se devuelve: **toda la venta** o **solo algunos renglones** (cargando la cantidad de cada uno).',
           'Dejá tildado **la mercadería vuelve al stock** si es una devolución real — destildalo si la nota es solo por un error de precio o facturación.',
-          'Tildá **Devolver en efectivo por caja** únicamente si además le das la plata al cliente en el momento.',
+          'Tildá **Devolver $… en efectivo por caja** únicamente si además le das la plata al cliente en el momento.',
           'Escribí el **Motivo** — es obligatorio y va impreso en la nota.',
           'Tocá **Emitir**.',
         ],
@@ -416,13 +415,12 @@ export const AYUDA = [
         id: 'factura-proveedor',
         pregunta: '¿Cómo cargo la factura de un proveedor?',
         pasos: [
-          'Entrá a **Facturación** y tocá **+ Nuevo comprobante**.',
-          'Elegí el **Tipo** (factura, remito, liquidación…) y el **Proveedor** — son obligatorios.',
-          'Cargá letra, punto de venta, número y fecha del comprobante.',
+          'Entrá a **Facturación** y tocá **+ Nuevo comprobante**. Es un asistente de tres pasos: datos, ítems y pago.',
+          '**Paso 1 · Datos**: elegí el **Tipo** (factura, remito, liquidación…) y el **Proveedor** — son obligatorios — y cargá letra, punto de venta, número y fecha.',
           'Elegí la **Sucursal de recepción**: ahí es donde entra la mercadería.',
-          'Cargá los renglones — productos, cantidades y costo.',
-          'Si lo pagás en el momento, completá "Se paga ahora" con el medio y de dónde sale.',
-          'Guardá.',
+          '**Paso 2 · Ítems**: cargá los renglones — productos, cantidades (en bultos, como habla la factura) y costo — y revisá el **Impacto en precios**.',
+          '**Paso 3 · Pago y confirmación**: si lo pagás en el momento, completá "Se paga ahora" con el medio y de dónde sale; si no, queda en cuenta corriente con su vencimiento.',
+          'Confirmá.',
         ],
         notas: [
           { tono: 'info', texto: 'La mercadería entra siempre con la factura — no hay un paso aparte de "recibir". Lo único que elegís es a qué sucursal.' },
@@ -464,12 +462,27 @@ export const AYUDA = [
         ],
       },
       {
+        id: 'sucursal-nueva',
+        pregunta: '¿Cómo agrego una sucursal nueva?',
+        pasos: [
+          'Entrá a la pestaña **Sucursales** y tocá **+ Nueva sucursal**.',
+          'Poné el **Nombre** y elegí el **Tipo**: Express es un local de venta; la Distribuidora es el depósito central y hay una sola.',
+          'Cargá el **Punto de venta** de ARCA de ese local y su **Domicilio del comprobante**.',
+          'Tocá **Guardar**.',
+        ],
+        notas: [
+          { tono: 'warn', texto: 'Tu plan pone un tope de sucursales (1 en Emprendedor, 3 en Pymes). Si ya lo alcanzaste, el botón está apagado: para sumar otra hay que subir de plan.' },
+          { tono: 'info', texto: 'Después de crearla, registrá el equipo de ese local (Sistema › Este equipo) y cargale mercadería con una compra o una transferencia.' },
+        ],
+      },
+      {
         id: 'sucursal-punto-venta',
-        pregunta: '¿Cómo cargo el punto de venta de una sucursal?',
+        pregunta: '¿Cómo cambio el punto de venta de una sucursal?',
         pasos: [
           'Entrá a la pestaña **Sucursales**.',
-          'Cargá el **Punto de venta** (el de ARCA, para la factura electrónica) y el **Domicilio del comprobante** de ese local.',
-          'Tocá **Guardar** en esa fila.',
+          'Tocá **Editar** en la fila del local.',
+          'Cambiá el **Punto de venta** (el de ARCA, para la factura electrónica) o el **Domicilio del comprobante**.',
+          'Tocá **Guardar**.',
         ],
         notas: [
           { tono: 'info', texto: 'Con un solo local, dejarlo vacío es válido: usa el de la configuración del servidor. Con varios locales, cada uno necesita el suyo propio — no se puede compartir.' },

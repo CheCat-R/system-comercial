@@ -2,14 +2,14 @@
  * RESPALDOS — la versión chica y honesta (26/8, decisión del dueño).
  * ============================================================================
  * Tres cosas, de la más importante a la más cómoda:
- *  1. LA COPIA EXTERNA (todos los planes): descargar el volcado completo a
+ *  1. LA COPIA DESCARGADA (todos los planes): bajar el volcado completo a
  *     esta máquina. Si el servidor se cae con sus backups adentro, la copia
- *     de afuera salva. Cada descarga queda en auditoría.
+ *     descargada salva. Cada descarga queda en auditoría.
  *  2. EL AVISO: si hace 7 días o más que nadie baja una copia, esta pantalla
  *     lo dice arriba de todo (y el menú muestra una insignia en Sistema).
  *  3. LAS COPIAS DIARIAS DEL SERVIDOR (solo Pymes y Corporativo): una por día
  *     a las 3:00, las últimas 14. Viven en el mismo servidor que la base, así
- *     que NO reemplazan a la copia de afuera — por eso el aviso de arriba
+ *     que NO reemplazan a la copia descargada — por eso el aviso de arriba
  *     sigue valiendo también en esos planes.
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -55,7 +55,7 @@ export function RespaldosPanel({ onAviso }) {
     }
   };
 
-  /** Baja una de las copias diarias del servidor. Cuenta como copia externa: queda en el rastro y apaga el aviso. */
+  /** Baja una de las copias diarias del servidor. Cuenta como copia descargada: queda en el rastro y apaga el aviso. */
   const descargarAutomatica = async (archivo) => {
     if (bajando) return;
     setBajando(true);
@@ -104,8 +104,8 @@ export function RespaldosPanel({ onAviso }) {
       <PanelHead
         title="Respaldos"
         desc={info?.automatico
-          ? 'La copia externa de la base, bajada a esta máquina, y las copias diarias que el servidor guarda solo.'
-          : 'La copia externa de la base, bajada a esta máquina.'}
+          ? 'La copia de la base que bajás a esta máquina, y las copias diarias que el servidor guarda solo.'
+          : 'La copia de la base que bajás a esta máquina.'}
         actions={(
           <Btn variant="btn-primary" disabled={bajando || !!error} onClick={descargar}>
             {bajando ? 'Generando…' : 'Descargar respaldo (.sql)'}
@@ -119,8 +119,8 @@ export function RespaldosPanel({ onAviso }) {
         <div className={cx(s.callout, s.warn)} style={{ margin: 0 }}>
           <strong>
             {info.aviso.dias == null
-              ? 'Todavía no bajaste ninguna copia externa.'
-              : `Hace ${info.aviso.dias} días que no bajás una copia externa.`}
+              ? 'Todavía no bajaste ninguna copia.'
+              : `Hace ${info.aviso.dias} días que no bajás una copia.`}
           </strong>
           {' '}Si el servidor falla, hoy no tenés nada fuera de él. Bajá una ahora y guardala
           en un pendrive o en un Drive.
@@ -142,7 +142,7 @@ export function RespaldosPanel({ onAviso }) {
         {info?.automatico
           ? 'Las copias automáticas viven en el mismo servidor que la base: un problema grande se las puede llevar juntas. '
           : 'Si el servidor se rompe, se lleva la base con todo adentro. '}
-        El archivo que se descarga acá es <strong>la copia de afuera</strong> — llevala a un pendrive
+        El archivo que se descarga acá es <strong>la copia que te llevás</strong> — guardala en un pendrive
         o a un Drive cada tanto. Se restaura sobre una base con el sistema ya migrado, cargándolo con
         <code> mysql</code>; las instrucciones exactas van en el encabezado del propio archivo.
       </div>
@@ -187,7 +187,7 @@ export function RespaldosPanel({ onAviso }) {
           <div className={s.hint}>
             Se genera una por día a las 3:00 y se conservan las últimas {info.automatico.retencion}.
             Sirven si se rompe o se borra algo de la base; si se pierde el servidor entero, se van
-            con él — para eso está la copia de afuera.
+            con él — para eso está la copia que bajás vos.
           </div>
         </div>
       )}
@@ -208,7 +208,7 @@ export function RespaldosPanel({ onAviso }) {
         </Table>
         {(info?.descargas?.length ?? 0) > 0 && (
           <div className={s.hint}>
-            Si la última descarga tiene semanas, la copia externa está vieja: bajá una nueva.
+            Si la última descarga tiene semanas, la última copia que bajaste está vieja: bajá una nueva.
           </div>
         )}
       </div>
