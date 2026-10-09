@@ -1,5 +1,7 @@
 <?php
 
+use App\Clientes\SelectorDeCliente;
+
 /*
  * ARCA — facturación electrónica. Todo lo que el módulo sabe del entorno vive
  * acá; el resto del código no lee `env()`.
@@ -17,8 +19,13 @@ return [
     'produccion' => strtolower((string) env('ARCA_ENV', '')) === 'produccion',
     'cuit' => preg_replace('/\D/', '', (string) env('ARCA_CUIT', '')),
     'pto_vta' => (int) env('ARCA_PTO_VTA', 0),
-    'cert_path' => (string) env('ARCA_CERT_PATH', ''),
-    'key_path' => (string) env('ARCA_KEY_PATH', ''),
+    /*
+     * En una instalación con varios clientes (`App\Clientes\SelectorDeCliente`) cada uno guarda su certificado en SU carpeta
+     * `arca/`, fuera de lo público, y no hace falta tocar el `.env`: el trámite se hace desde el panel. En una instalación
+     * común (un cliente, un Corporativo dedicado) siguen mandando las variables.
+     */
+    'cert_path' => (string) (env('ARCA_CERT_PATH') ?: (SelectorDeCliente::carpeta() ? SelectorDeCliente::carpeta().'/arca/certificado.crt' : '')),
+    'key_path' => (string) (env('ARCA_KEY_PATH') ?: (SelectorDeCliente::carpeta() ? SelectorDeCliente::carpeta().'/arca/clave.key' : '')),
     /*
      * Cuánto se espera a ARCA antes de darlo por caído. Corto a propósito: hay
      * una cajera con un cliente enfrente y el circuito de caída ya existe (sale

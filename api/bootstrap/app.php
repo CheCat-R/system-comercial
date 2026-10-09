@@ -1,5 +1,6 @@
 <?php
 
+use App\Clientes\SelectorDeCliente;
 use App\Http\Middleware\CamelizarJson;
 use App\Http\Middleware\ExigirCambioPassword;
 use App\Http\Middleware\ExigirLicencia;
@@ -15,7 +16,7 @@ use Illuminate\Http\Request;
  * API pura: no hay rutas web ni vistas. Todo vive en `routes/api.php` bajo el
  * prefijo `/api`, y toda respuesta —incluidos los errores— es JSON.
  */
-return Application::configure(basePath: dirname(__DIR__))
+$app = Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
@@ -49,3 +50,11 @@ return Application::configure(basePath: dirname(__DIR__))
             return response()->json(['message' => 'Tu sesión venció. Volvé a entrar.'], 401);
         });
     })->create();
+
+/*
+ * Instalación con varios clientes: acá se elige el suyo (su `.env`, su `storage/`, su caché de configuración) por el dominio
+ * del pedido. Tiene que ser ANTES de que la aplicación lea el `.env`. En una instalación común no hace nada.
+ */
+SelectorDeCliente::aplicar($app);
+
+return $app;
