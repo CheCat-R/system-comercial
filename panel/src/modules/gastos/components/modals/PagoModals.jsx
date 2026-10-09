@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cx } from '@shared/utils/classNames.js';
+import { useUnaVez } from '@shared/hooks/useUnaVez.js';
 import { useGastos } from '../../context/GastosContext.jsx';
 import { useResource } from '../../hooks/useResource.js';
 import { gastosApi } from '../../services/gastos.api.js';
@@ -38,6 +39,7 @@ export function PagoFormModal({ proveedorId: proveedorFijo, onChange }) {
   const hayTurno = !!caja?.id && caja.estado === 'abierta';
   const saleDeCaja = medio === 'efectivo' && hayTurno && desdeCaja;
 
+  const [ejecutar, enviando] = useUnaVez();
   const registrar = async () => {
     if (!proveedorId) { toast('Elegí a qué proveedor se le pagó.', 'err'); return; }
     if (!(Number(importe) > 0)) { toast('El importe tiene que ser mayor a 0.', 'err'); return; }
@@ -71,7 +73,7 @@ export function PagoFormModal({ proveedorId: proveedorFijo, onChange }) {
       onClose={closeModal}
       footer={[
         { texto: 'Cancelar', clase: 'btn-ghost', onClick: closeModal },
-        { texto: 'Registrar pago', clase: 'btn-primary', onClick: registrar },
+        { texto: enviando ? 'Registrando…' : 'Registrar pago', clase: 'btn-primary', onClick: () => ejecutar(registrar), disabled: enviando },
       ]}
     >
       <div className={s['form-grid']}>

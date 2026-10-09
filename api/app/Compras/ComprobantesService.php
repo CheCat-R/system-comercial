@@ -429,6 +429,23 @@ class ComprobantesService
      */
     public function crear(array $dto, array $opciones): array
     {
+        $clave = trim((string) ($dto['claveIdempotencia'] ?? '')) ?: null;
+        if ($clave && ($ya = DB::table('comprobantes')->where('clave_idempotencia', $clave)->value('id'))) {
+            return $this->get((int) $ya);   // el mismo formulario enviado dos veces: es el comprobante de siempre
+        }
+        try {
+            return $this->crearNuevo($dto, $opciones, $clave);
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Dos pedidos con la misma clave al mismo tiempo: el índice único frenó al segundo.
+            if ($clave && ($ya = DB::table('comprobantes')->where('clave_idempotencia', $clave)->value('id'))) {
+                return $this->get((int) $ya);
+            }
+            throw $e;
+        }
+    }
+
+    private function crearNuevo(array $dto, array $opciones, ?string $claveIdempotencia): array
+    {
         $this->exigirPermisoPrecios($dto, $opciones, 'Registrá el comprobante');
         $tipo = $dto['tipo'] ?? '';
         if (! in_array($tipo, Documentos::TIPOS, true)) {
@@ -493,6 +510,9 @@ class ComprobantesService
             if ($ref->estado !== 'confirmado') {
                 throw new ErrorDeNegocio(Documentos::etiqueta($ref).' está '.$ref->estado.': no se le pueden aplicar notas.');
             }
+            if ($tipo === 'nota_credito') {
+                $this->exigirTopeDeLaNota($ref, (float) $pie['total']);
+            }
         }
         $puedeComprometer = $estado === 'confirmado' && in_array($tipo, ['factura', 'liquidacion'], true);
         if (! empty($dto['compromisos']) && ! $puedeComprometer) {
@@ -513,14 +533,14 @@ class ComprobantesService
             throw new ErrorDeNegocio('Letra inválida.');
         }
 
-        $id = DB::transaction(function () use ($dto, $prov, $tipo, $estado, $letra, $puntoVenta, $numero, $fecha, $fechaCarga, $venc, $sucursalId, $fiscal, $pie, $refId, $usuarioId, $compromisos, $ingresaStock, $egresaStock) {
+        $id = DB::transaction(function () use ($dto, $prov, $tipo, $estado, $letra, $puntoVenta, $numero, $fecha, $fechaCarga, $venc, $sucursalId, $fiscal, $pie, $refId, $usuarioId, $compromisos, $ingresaStock, $egresaStock, $opciones, $claveIdempotencia) {
             $id = DB::table('comprobantes')->insertGetId([
                 'tipo' => $tipo, 'letra' => $letra, 'punto_venta' => $puntoVenta, 'numero' => $numero, 'cae' => $fiscal ? mb_substr((string) ($dto['cae'] ?? ''), 0, 32) : '',
                 'fecha' => $fecha, 'fecha_carga' => $fechaCarga, 'proveedor_id' => $prov->id, 'sucursal_id' => $sucursalId, 'estado' => $estado,
                 'condicion_pago' => $dto['condicionPago'] ?? 'cuenta_corriente', 'vencimiento_pago' => $venc, 'recepcion' => ! empty($dto['recepcion']),
                 'bonificacion' => $pie['bonifPct'], 'bonificacion_importe' => $pie['bonificacionImporte'], 'subtotal_neto' => $pie['subtotalNeto'], 'iva_total' => $pie['ivaTotal'],
                 'percepciones_total' => $pie['percepcionesTotal'], 'total' => $pie['total'], 'pagado' => 0, 'ref_comprobante_id' => $refId,
-                'observaciones' => trim((string) ($dto['observaciones'] ?? '')), 'usuario_id' => $usuarioId, 'created_at' => now(), 'updated_at' => now(),
+                'observaciones' => trim((string) ($dto['observaciones'] ?? '')), 'usuario_id' => $usuarioId, 'clave_idempotencia' => $claveIdempotencia, 'created_at' => now(), 'updated_at' => now(),
             ]);
             $c = DB::table('comprobantes')->find($id);
             DB::table('comprobante_items')->insert(array_map(fn ($it) => [
@@ -553,16 +573,19 @@ class ComprobantesService
             }
             $this->aplicarCostos($dto, $prov, $id, $etiqueta.' · '.$prov->nombre, $usuarioId);
 
+            // El pago "en el acto" va ADENTRO: si falla (turno cerrado, importe de más…) no queda una factura cargada con la
+            // mercadería ya ingresada y un error en pantalla; el reintento (o el doble clic) la duplicaba.
+            if ($estado === 'confirmado' && Documentos::generaDeuda($tipo)) {
+                $this->saldarEnElActo($id, [
+                    'proveedorId' => $prov->id, 'concepto' => Documentos::etiqueta(DB::table('comprobantes')->find($id)), 'fecha' => $dto['fecha'] ?? null,
+                    'sucursalId' => $sucursalId, 'usuarioId' => $usuarioId, 'tomarPagos' => $dto['tomarPagos'] ?? [], 'pagoContado' => $dto['pagoContado'] ?? null,
+                ], $opciones);
+            }
+
             return $id;
         });
         $this->registrarEvolucion($dto, 'Recepción de comprobante', $usuarioId);
 
-        if ($estado === 'confirmado' && Documentos::generaDeuda($tipo)) {
-            $this->saldarEnElActo($id, [
-                'proveedorId' => $prov->id, 'concepto' => Documentos::etiqueta(DB::table('comprobantes')->find($id)), 'fecha' => $dto['fecha'] ?? null,
-                'sucursalId' => $sucursalId, 'usuarioId' => $usuarioId, 'tomarPagos' => $dto['tomarPagos'] ?? [], 'pagoContado' => $dto['pagoContado'] ?? null,
-            ], $opciones);
-        }
         if ($esNota && $refId && $estado === 'confirmado') {
             $this->pagos->sincronizarComprobante($refId);
         }
@@ -678,9 +701,36 @@ class ComprobantesService
         if ($c->estado !== 'borrador') {
             throw new ErrorDeNegocio('Solo un borrador se confirma.');
         }
+        // Una nota en borrador no contaba, y la factura que ajusta pudo anularse o ser acreditada por otra mientras tanto:
+        // confirmarla sin mirar dejaba al proveedor con una deuda negativa fantasma.
+        if ($c->ref_comprobante_id && in_array($c->tipo, ['nota_credito', 'nota_debito'], true)) {
+            $ref = DB::table('comprobantes')->find((int) $c->ref_comprobante_id);
+            if (! $ref || $ref->estado !== 'confirmado') {
+                throw new ErrorDeNegocio('La factura que esta nota ajusta '.($ref ? 'está '.$ref->estado : 'ya no existe').': no se puede confirmar. Anulá la nota.');
+            }
+            if ($c->tipo === 'nota_credito') {
+                $this->exigirTopeDeLaNota($ref, (float) $c->total, (int) $c->id);
+            }
+        }
         DB::table('comprobantes')->where('id', $id)->update(['estado' => 'confirmado', 'usuario_id' => $usuarioId ?? $c->usuario_id, 'updated_at' => now()]);
 
         return $this->get($id);
+    }
+
+    /**
+     * Una nota de crédito no puede acreditar más que el total de la factura menos lo que otras notas confirmadas ya
+     * acreditaron (con lo ya pagado SÍ puede: es plata a favor con el proveedor). Antes una nota de $1.500 contra una
+     * factura de $1.000 se aceptaba y el proveedor quedaba con saldo negativo.
+     */
+    private function exigirTopeDeLaNota(object $ref, float $total, ?int $ignorarId = null): void
+    {
+        $yaAcreditado = (float) DB::table('comprobantes')->where('ref_comprobante_id', $ref->id)->where('tipo', 'nota_credito')->where('estado', 'confirmado')
+            ->when($ignorarId, fn ($q) => $q->where('id', '!=', $ignorarId))->sum('total');
+        $queda = round((float) $ref->total - $yaAcreditado, 2);
+        if ($total > $queda + self::EPS) {
+            throw new ErrorDeNegocio('La nota acredita $'.number_format($total, 2, '.', '').' pero de '.Documentos::etiqueta($ref).' (total $'.number_format((float) $ref->total, 2, '.', '').') quedan $'
+                .number_format(max(0, $queda), 2, '.', '').' por acreditar.');
+        }
     }
 
     /**
@@ -727,10 +777,14 @@ class ComprobantesService
                 DB::table('proveedor_echeqs')->whereIn('compromiso_id', $pend)->whereIn('estado', ['emitido', 'entregado'])->update(['estado' => 'anulado']);
                 DB::table('proveedor_compromisos')->whereIn('id', $pend)->delete();
             }
+            // El comprobante anulado deja de ocupar su número: no hay edición, así que la forma de corregir un papel mal cargado
+            // es anularlo y cargarlo de nuevo, y la unicidad (proveedor, tipo, punto de venta, número) lo rechazaba. El número
+            // original queda escrito en el rastro de la anulación.
             DB::table('comprobantes')->where('id', $id)->update([
                 'estado' => 'anulado', 'updated_at' => now(),
                 'anulado_por' => $usuarioId, 'anulado_en' => now(),
-                'observaciones' => trim(($c->observaciones ? $c->observaciones."\n" : '').'Anulado: '.trim($motivo)),
+                'numero' => null,
+                'observaciones' => trim(($c->observaciones ? $c->observaciones."\n" : '').'Anulado: '.trim($motivo).($c->numero !== null ? ' (era '.$etiqueta.')' : '')),
             ]);
             if ($c->ref_comprobante_id) {
                 $this->pagos->sincronizarCompromisos((int) $c->ref_comprobante_id, null);

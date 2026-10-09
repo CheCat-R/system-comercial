@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useUnaVez } from '@shared/hooks/useUnaVez.js';
 import { cx } from '@shared/utils/classNames.js';
 import { useProductos } from '../../context/ProductosContext.jsx';
 import { money, num } from '../../domain/format.js';
@@ -32,6 +33,7 @@ export function VenderModal({ prodId, sucId: sucInit, pre = {} }) {
   const sinPrecio = presNum != null && precio == null;
   const importe = (parseFloat(cant) || 0) * (precio || 0);
 
+  const [ejecutar, enviando] = useUnaVez();
   const registrar = async () => {
     /* Misma trampa que en Fraccionar: `cant` es el texto del input y el DTO
      * pide `@IsNumber()`. Acá NO se redondea —un granel se vende por peso y
@@ -49,7 +51,7 @@ export function VenderModal({ prodId, sucId: sucInit, pre = {} }) {
       onClose={closeModal}
       footer={[
         { texto: 'Cancelar', clase: 'btn-ghost', onClick: closeModal },
-        { texto: 'Registrar venta', clase: 'btn-primary', onClick: registrar },
+        { texto: enviando ? 'Registrando…' : 'Registrar venta', clase: 'btn-primary', onClick: () => ejecutar(registrar), disabled: enviando },
       ]}
     >
       <div className={s.field}>
@@ -80,6 +82,7 @@ export function VenderModal({ prodId, sucId: sucInit, pre = {} }) {
 /* ============================== FRACCIONAR ============================== */
 export function FraccionarModal({ prodId, sucId: sucInit }) {
   const { store, act, closeModal } = useProductos();
+  const [ejecutar, enviando] = useUnaVez();
   const prod = store.getProducto(prodId);
   // Todo se fracciona en la DISTRIBUIDORA (ahí llega la mercadería a granel):
   // no se elige sucursal. Si la fila que abrió el modal trae otra, se respeta.
@@ -116,7 +119,7 @@ export function FraccionarModal({ prodId, sucId: sucInit }) {
       presId: pr.id,
       cant: Math.round(Number(cants[pr.id]) || 0),
     }));
-    act(store.opFraccionar({ productoId: prod.id, sucursalId: parseInt(sucId, 10), asignaciones }), 'Fraccionamiento registrado.');
+    return act(store.opFraccionar({ productoId: prod.id, sucursalId: parseInt(sucId, 10), asignaciones }), 'Fraccionamiento registrado.');
   };
 
   return (
@@ -128,10 +131,10 @@ export function FraccionarModal({ prodId, sucId: sucInit }) {
         {
           texto: 'Fraccionar',
           clase: 'btn-primary',
-          onClick: fraccionar,
+          onClick: () => ejecutar(fraccionar),
           // Sin tamaños no hay nada que armar; con el total en 0 tampoco, y
-          // excediendo el granel el servidor lo rechaza igual.
-          disabled: sinTamanos || excede || !(total > 0),
+          // excediendo el granel el servidor lo rechaza igual. Y una sola vez: el doble clic fraccionaba dos veces.
+          disabled: enviando || sinTamanos || excede || !(total > 0),
         },
       ]}
     >
@@ -194,6 +197,7 @@ export function FraccionarModal({ prodId, sucId: sucInit }) {
  */
 export function CorregirFraccionadoModal({ prodId, presId, sucId: sucInit }) {
   const { store, act, closeModal } = useProductos();
+  const [ejecutar, enviando] = useUnaVez();
   const prod = store.getProducto(prodId);
   const pres = prod ? (prod.presentaciones || []).find((x) => x.id === presId) : null;
 
@@ -220,7 +224,7 @@ export function CorregirFraccionadoModal({ prodId, presId, sucId: sucInit }) {
   const faltaGranel = delta > 0 && kg > granel + 1e-9;
 
   const guardar = () => {
-    act(
+    return act(
       store.opCorregirFraccionado({ productoId: prodId, presId, sucursalId: suc, cantidadReal: n, motivo }),
       delta === 0 ? 'No había nada que corregir.' : 'Corrección registrada.',
     );
@@ -235,7 +239,8 @@ export function CorregirFraccionadoModal({ prodId, presId, sucId: sucInit }) {
         {
           texto: 'Corregir',
           clase: valido && !faltaGranel && delta !== 0 ? 'btn-primary' : 'btn-ghost',
-          onClick: guardar,
+          onClick: () => ejecutar(guardar),
+          disabled: enviando,
         },
       ]}
     >
@@ -293,6 +298,7 @@ export function CorregirFraccionadoModal({ prodId, presId, sucId: sucInit }) {
 /* ============================== MOVIMIENTO SIMPLE ============================== */
 export function MovimientoModal({ prodId, sucId: sucInit, pre = {} }) {
   const { store, act, closeModal, toast, sucOperativa } = useProductos();
+  const [ejecutar, enviando] = useUnaVez();
   const prod = store.getProducto(prodId);
   const tipos = store.tiposMovPermitidos();
 
@@ -345,7 +351,7 @@ export function MovimientoModal({ prodId, sucId: sucInit, pre = {} }) {
       onClose={closeModal}
       footer={[
         { texto: 'Cancelar', clase: 'btn-ghost', onClick: closeModal },
-        { texto: 'Registrar', clase: 'btn-primary', onClick: registrar },
+        { texto: 'Registrar', clase: 'btn-primary', onClick: () => ejecutar(registrar), disabled: enviando },
       ]}
     >
       <div className={s['form-grid']}>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { cx } from '@shared/utils/classNames.js';
+import { useUnaVez } from '@shared/hooks/useUnaVez.js';
 import { useProveedores } from '../../context/ProveedoresContext.jsx';
 import { useResource } from '../../hooks/useResource.js';
 import { provApi, MEDIOS_PAGO_REAL } from '../../services/proveedores.api.js';
@@ -123,6 +124,7 @@ export function PagoProveedorModal({ proveedor, docs = [], preseleccion = [], on
     return { ...m, [k]: !m[k] };
   });
 
+  const [ejecutar, enviando] = useUnaVez();
   const pagar = async () => {
     if (mezcla) {
       toast('Un pago va a facturas de mercadería O a gastos, no a los dos: son bandejas distintas. Hacé un pago para cada uno.', 'err');
@@ -213,8 +215,8 @@ export function PagoProveedorModal({ proveedor, docs = [], preseleccion = [], on
             ? `Descontar ${money(sumaFletes)} de flete`
             : importe > 0 ? `Pagar ${money(importe)}` : 'Pagar',
           clase: 'btn-primary',
-          onClick: pagar,
-          disabled: mezcla || fleteExcedido,
+          onClick: () => ejecutar(pagar),
+          disabled: enviando || mezcla || fleteExcedido,
         },
       ]}
     >

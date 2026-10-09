@@ -331,6 +331,22 @@ class GastosService
 
     public function crear(array $d, Sesion $sesion): array
     {
+        $clave = trim((string) ($d['claveIdempotencia'] ?? '')) ?: null;
+        if ($clave && ($ya = DB::table('gastos')->where('clave_idempotencia', $clave)->value('id'))) {
+            return $this->get((int) $ya);   // el mismo formulario enviado dos veces: es el gasto de siempre
+        }
+        try {
+            return $this->crearNuevo($d, $sesion, $clave);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($clave && ($ya = DB::table('gastos')->where('clave_idempotencia', $clave)->value('id'))) {
+                return $this->get((int) $ya);
+            }
+            throw $e;
+        }
+    }
+
+    private function crearNuevo(array $d, Sesion $sesion, ?string $claveIdempotencia): array
+    {
         // "Lo pagué y lo cargo" saca plata del cajón: exige también el permiso de pagar.
         if (! empty($d['pagoInmediato']) && ! $sesion->puede(...self::PERMISOS_PAGO)) {
             throw new AccessDeniedHttpException('Podés cargar el gasto, pero no registrar su pago: eso saca plata de la caja y necesita permiso propio.');
@@ -361,6 +377,9 @@ class GastosService
         // La sucursal del gasto: el jefe elige (null = toda la empresa), el resto graba en la suya.
         $sucursalId = $sesion->esJefe() ? ((int) ($d['sucursalId'] ?? 0) ?: null) : $sesion->sucursalId;
 
+        // Alta y pago inmediato en UNA transacción: si el pago falla no queda el gasto cargado con un error en pantalla
+        // (el reintento lo duplicaba).
+        $id = DB::transaction(function () use ($d, $sesion, $proveedorId, $cat, $imp, $numero, $letra, $tipoDoc, $sucursalId, $claveIdempotencia) {
         $id = DB::table('gastos')->insertGetId([
             'fecha' => Documentos::fecha($d['fecha'] ?? null) ?? now(), 'fecha_carga' => now(), 'tipo_doc' => $tipoDoc, 'letra' => $letra, 'numero' => $numero,
             'proveedor_id' => $proveedorId, 'proveedor_texto' => $proveedorId ? '' : mb_substr(trim((string) ($d['proveedorTexto'] ?? '')), 0, 160),
@@ -368,12 +387,11 @@ class GastosService
             'condicion_pago' => ($d['condicionPago'] ?? 'contado') === 'cuenta_corriente' ? 'cuenta_corriente' : 'contado', 'vencimiento' => Documentos::fecha($d['vencimiento'] ?? null),
             'neto' => $imp['neto'], 'iva' => $imp['iva'], 'otros' => $imp['otros'], 'imp_internos' => $imp['impInternos'], 'perc_dgi' => $imp['percDgi'], 'perc_dgr' => $imp['percDgr'],
             'total' => $imp['total'], 'pagado' => 0, 'estado' => 'pendiente', 'observaciones' => trim((string) ($d['observaciones'] ?? '')), 'usuario_id' => $sesion->usuarioId,
-            'created_at' => now(), 'updated_at' => now(),
+            'clave_idempotencia' => $claveIdempotencia, 'created_at' => now(), 'updated_at' => now(),
         ]);
         if ($imp['items']) {
             DB::table('gasto_items')->insert(array_map(fn ($i) => [...$i, 'gasto_id' => $id], $imp['items']));
         }
-        // El pago va DESPUÉS del alta y fuera de su transacción: si falla, el gasto queda pendiente (estado válido).
         if (! empty($d['pagoInmediato'])) {
             $pi = $d['pagoInmediato'];
             $importe = Documentos::money($pi['importe'] ?? 0);
@@ -384,6 +402,9 @@ class GastosService
                 'imputaciones' => [['gastoId' => $id, 'importe' => $importe]],
             ], $sesion->sucursalId, $sesion->esJefe());
         }
+
+        return $id;
+        });
 
         return $this->get($id);
     }

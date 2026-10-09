@@ -240,11 +240,13 @@ function redondearPrecio(valor, redondeo) {
   if (r <= 0) return money(v);
   return Math.round(v / r) * r;
 }
+/** Neto de UNA unidad con 4 decimales, igual que `Pricing::unitario` de la API (con centavos el ticket de 10 kg a $581 daba $5.810,06). */
+function netoUnitario4(n) { return Math.round((Number(n) || 0) * 10000) / 10000; }
 function ajustarNeto(neto, iva) {
   const r = Number(state.configVentas?.redondeoPrecio) || 0;
   if (r <= 0) return money(neto);
   const i = Number(iva) || 0;
-  return money(redondearPrecio(neto * (1 + i / 100), r) / (1 + i / 100));
+  return netoUnitario4(redondearPrecio(neto * (1 + i / 100), r) / (1 + i / 100));
 }
 /** Precio final con IVA, redondeado: el número de la etiqueta. */
 function precioFinal(neto, iva) {
@@ -268,7 +270,7 @@ function ventaFormato(prod, fila, costo) {
     const finalFormato = money(Number(fila.precioFijo) || 0);
     return {
       unidades,
-      netoUnitario: money(finalFormato / (1 + iva / 100) / unidades),
+      netoUnitario: netoUnitario4(finalFormato / (1 + iva / 100) / unidades),
       finalUnitario: money(finalFormato / unidades),
       finalFormato,
     };
@@ -276,7 +278,7 @@ function ventaFormato(prod, fila, costo) {
   // La BASE del precio (0072), no el costo real: acá se cotiza.
   const base = costo != null ? Number(costo) || 0 : costoPrecio(prod);
   const bruto = base * (1 + (Number(fila?.markup) || 0) / 100);
-  const netoUnitario = redondeo > 0 ? money(redondearPrecio(bruto * (1 + iva / 100), redondeo) / (1 + iva / 100)) : money(bruto);
+  const netoUnitario = redondeo > 0 ? netoUnitario4(redondearPrecio(bruto * (1 + iva / 100), redondeo) / (1 + iva / 100)) : money(bruto);
   const finalUnitario = redondeo > 0 ? redondearPrecio(netoUnitario * (1 + iva / 100), redondeo) : money(netoUnitario * (1 + iva / 100));
   return { unidades, netoUnitario, finalUnitario, finalFormato: money(finalUnitario * unidades) };
 }
@@ -533,10 +535,15 @@ function _refrescarSecciones() {
   );
 }
 
+/** Número de la última recarga pedida: la respuesta de una anterior que llega tarde no pisa a la más nueva. */
+let _seqRefetch = 0;
 async function refetch() {
+  const mia = ++_seqRefetch;
   const data = await httpClient.get('/bootstrap');
+  if (mia !== _seqRefetch) return;   // salió otra recarga después: esta foto ya es vieja
   mergeState(data);
   await _refrescarSecciones();
+  if (mia !== _seqRefetch) return;
   emit();
 }
 
@@ -579,13 +586,24 @@ async function reset() { await refetch(); }
 
 /** Corre una mutación contra la API y refresca el snapshot. Devuelve {ok}/{ok:false,error}. */
 async function _mutate(fn) {
+  let data;
   try {
-    const data = await fn();
-    await refetch();
-    return Object.assign({ ok: true }, (data && typeof data === 'object') ? data : {});
+    data = await fn();
   } catch (e) {
     return { ok: false, error: _errMsg(e) };
   }
+  /*
+   * LA MUTACIÓN YA SE HIZO. Si falla solo la recarga que viene después (timeout, corte de red: el /bootstrap es el
+   * pedido más pesado), el resultado sigue siendo "ok": informarlo como fallo hacía que el usuario reintentara y
+   * duplicara la factura, el ajuste o el pago. `refrescoFallo` avisa que la pantalla puede estar desactualizada.
+   */
+  let refrescoFallo = false;
+  try {
+    await refetch();
+  } catch {
+    refrescoFallo = true;
+  }
+  return Object.assign({ ok: true }, (data && typeof data === 'object') ? data : {}, refrescoFallo ? { refrescoFallo: true } : {});
 }
 
 /* ---------------- Mutaciones (API) ---------------- */
@@ -748,6 +766,8 @@ function _fechaLocal(v) {
 
 function _cleanComprobante(o) {
   return {
+    // Una por formulario abierto: si el mismo formulario se reenvía, la API devuelve el comprobante ya creado.
+    claveIdempotencia: o.claveIdempotencia || undefined,
     tipo: o.tipo, letra: o.letra, puntoVenta: o.puntoVenta,
     fecha: _fechaLocal(o.fecha), fechaCarga: _fechaLocal(o.fechaCarga),
     proveedorId: Number(o.proveedorId),
@@ -846,7 +866,17 @@ function _cleanComprobante(o) {
     })),
   };
 }
-const crearComprobante = (o) => _mutate(() => httpClient.post('/comprobantes', _cleanComprobante(o)));
+/** Los envíos IDÉNTICOS que están en vuelo comparten un solo pedido (doble clic): una factura, un ingreso de stock. */
+const _comprobantesEnVuelo = new Map();
+const crearComprobante = (o) => {
+  const cuerpo = _cleanComprobante(o);
+  const huella = JSON.stringify(cuerpo);
+  const enVuelo = _comprobantesEnVuelo.get(huella);
+  if (enVuelo) return enVuelo;
+  const p = _mutate(() => httpClient.post('/comprobantes', cuerpo)).finally(() => _comprobantesEnVuelo.delete(huella));
+  _comprobantesEnVuelo.set(huella, p);
+  return p;
+};
 /**
  * LLEGÓ LA FACTURA DE UN REMITO (26/8): el remito PASA A SER la factura, sin
  * volver a mover stock. Los renglones viajan por `itemId` (los del remito) y

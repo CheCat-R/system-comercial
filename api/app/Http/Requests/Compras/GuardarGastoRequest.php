@@ -14,6 +14,7 @@ class GuardarGastoRequest extends ApiRequest
 
         return [
             'fecha' => ['nullable', 'string', 'max:30'],
+            'claveIdempotencia' => ['nullable', 'string', 'max:64'],
             'tipoDoc' => ['nullable', Rule::in(['factura', 'ticket', 'recibo', 'nota_credito', 'otro'])],
             'letra' => ['nullable', Rule::in(Documentos::LETRAS)],
             'numero' => ['nullable', 'string', 'max:40'],

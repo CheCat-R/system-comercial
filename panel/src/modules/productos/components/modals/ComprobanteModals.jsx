@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useUnaVez } from '@shared/hooks/useUnaVez.js';
 import { cx } from '@shared/utils/classNames.js';
 import { useProductos } from '../../context/ProductosContext.jsx';
 import { money, num, fmtFecha, isoDate } from '../../domain/format.js';
@@ -981,6 +982,9 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
     return store.precioFinal(cn * (1 + ganancia / 100), d.iva);
   };
 
+  // Una clave por formulario abierto (si se reenvía, la API devuelve el comprobante ya creado) y una confirmación a la vez.
+  const claveForm = useRef(`cmp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+  const [ejecutar, guardando] = useUnaVez();
   const guardar = async () => {
     const parsed = items
       .filter((it) => it.productoId && Number(it.bultos) > 0
@@ -1082,6 +1086,7 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
     }
 
     const res = await store.crearComprobante({
+      claveIdempotencia: claveForm.current,
       tipo, letra, puntoVenta, numero, fecha, fechaCarga, proveedorId: parseInt(provId, 10),
       // Sale del TIPO, no de un tilde: factura, liquidación y remito ingresan
       // mercadería siempre (ver TIPOS_CON_RECEPCION).
@@ -1178,7 +1183,7 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
     ]
     : [
       { texto: 'Volver', clase: 'btn-ghost', onClick: () => setPaso(2) },
-      { texto: 'Registrar', clase: 'btn-primary', onClick: guardar },
+      { texto: guardando ? 'Registrando…' : 'Registrar', clase: 'btn-primary', onClick: () => ejecutar(guardar), disabled: guardando },
     ];
 
   return (

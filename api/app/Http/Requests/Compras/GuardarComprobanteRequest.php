@@ -16,6 +16,8 @@ class GuardarComprobanteRequest extends ApiRequest
     public function rules(): array
     {
         return [
+            // Una por formulario abierto: reenviar el mismo formulario devuelve el comprobante ya creado.
+            'claveIdempotencia' => ['nullable', 'string', 'max:64'],
             'tipo' => ['required', Rule::in(Documentos::TIPOS)],
             'letra' => ['nullable', Rule::in(Documentos::LETRAS)],
             'puntoVenta' => ['nullable', 'string', 'max:10'],
