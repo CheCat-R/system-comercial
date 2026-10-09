@@ -46,8 +46,17 @@ function campanita() {
   } catch { /* sin audio disponible: el aviso visual alcanza */ }
 }
 
+/**
+ * Solo se monta (y por lo tanto solo se suscribe al poller) cuando el aviso le corresponde a esta persona: sitio
+ * web habilitado, administración y con la sección. Antes se suscribía siempre y recién después se decidía no mostrar.
+ */
 export function OrdenesWebAlert() {
   const { can, esAdmin } = usePermissions();
+  if (!appConfig.features.webHabilitado || !esAdmin || !can('ventas.ordenes')) return null;
+  return <OrdenesWebAviso />;
+}
+
+function OrdenesWebAviso() {
   const navigate = useNavigate();
   const count = useSyncExternalStore(ordenesWeb.subscribe, ordenesWeb.count, ordenesWeb.count);
   const [abierto, setAbierto] = useState(false);
@@ -61,8 +70,6 @@ export function OrdenesWebAlert() {
     }
     previo.current = count;
   }, [count]);
-
-  if (!appConfig.features.webHabilitado || !esAdmin || !can('ventas.ordenes')) return null;
 
   const irAOrdenes = () => {
     setAbierto(false);

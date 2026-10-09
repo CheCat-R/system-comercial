@@ -87,16 +87,30 @@ export function leerClave(k) {
 }
 
 /** Escribe una clave de ESTA pestaña. `compartir` también la deja como copia
- *  compartida (solo el login usa eso sin condiciones), con su vencimiento. */
-export function escribirClave(k, valor, { compartir = false } = {}) {
+ *  compartida, con su vencimiento.
+ *
+ *  El vencimiento se fija SOLO en el login. Un refresco de una sesión ya iniciada (`conservarVence`: permisos,
+ *  cambio de sucursal, cada F5) actualiza el contenido de la copia pero no corre el plazo, y no la resucita si
+ *  ya venció: si no, el tope de 10 h se renovaba con cada F5 y a la mañana siguiente una ventana nueva entraba
+ *  como la cajera del día anterior, sin contraseña. */
+export function escribirClave(k, valor, { compartir = false, conservarVence = false } = {}) {
   const raw = JSON.stringify(valor);
   try { sessionStorage.setItem(k, raw); } catch { /* modo privado */ }
-  if (compartir) {
-    try {
+  if (!compartir) return;
+  try {
+    if (conservarVence) {
+      // Primera copia de esta clave (el contexto de los módulos se escribe después del login): hereda el plazo
+      // del LOGIN. Si ya tenía plazo y venció, no se vuelve a crear.
+      const propia = localStorage.getItem(claveVence(k));
+      const hasta = propia ?? localStorage.getItem(claveVence(SESION_KEY));
+      if (!(Number(hasta) > Date.now())) return;
+      if (propia == null) localStorage.setItem(claveVence(k), hasta);
       localStorage.setItem(k, raw);
-      localStorage.setItem(claveVence(k), String(Date.now() + HEREDABLE_MS));
-    } catch { /* modo privado */ }
-  }
+      return;
+    }
+    localStorage.setItem(k, raw);
+    localStorage.setItem(claveVence(k), String(Date.now() + HEREDABLE_MS));
+  } catch { /* modo privado */ }
 }
 
 /** ¿La copia compartida pertenece al usuario de esta pestaña? */
@@ -120,13 +134,13 @@ export function guardarSesion(sesion) {
  * siendo del mismo usuario.
  */
 export function actualizarSesion(sesion) {
-  escribirClave(SESION_KEY, sesion, { compartir: esDuenaDeLaCompartida(sesion?.usuario?.id) });
+  escribirClave(SESION_KEY, sesion, { compartir: esDuenaDeLaCompartida(sesion?.usuario?.id), conservarVence: true });
 }
 
 /** Contexto operativo de los módulos, con la misma regla que la sesión. */
 export function actualizarCtx(ctx, usuarioId) {
   const compartir = esDuenaDeLaCompartida(usuarioId);
-  for (const k of CTX_KEYS) escribirClave(k, ctx, { compartir });
+  for (const k of CTX_KEYS) escribirClave(k, ctx, { compartir, conservarVence: true });
 }
 
 /** Cierra la sesión de ESTA pestaña; la copia compartida solo si era suya. */

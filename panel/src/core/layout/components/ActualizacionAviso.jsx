@@ -11,11 +11,35 @@ import { conectividad } from '@core/services/conectividad.js';
  * ticket armado offline vive solo en la pantalla y la recarga lo borraría.
  */
 export function ActualizacionAviso() {
-  const { hayNueva } = useSyncExternalStore(actualizaciones.subscribe, actualizaciones.estado, actualizaciones.estado);
+  const { hayNueva, otraVentana } = useSyncExternalStore(actualizaciones.subscribe, actualizaciones.estado, actualizaciones.estado);
   const { offline } = useSyncExternalStore(conectividad.subscribe, conectividad.estado, conectividad.estado);
   const [despues, setDespues] = useState(false);
 
-  if (!hayNueva || despues) return null;
+  if (despues || !(hayNueva || otraVentana)) return null;
+
+  /* La versión nueva ya la aplicó OTRA ventana: esta sigue andando con la anterior hasta que se recargue. No lo
+   * hace sola porque podría tener una venta a medio cobrar. */
+  if (otraVentana) {
+    return (
+      <Snackbar open anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
+        <Alert
+          severity="info"
+          variant="filled"
+          sx={{ alignItems: 'center' }}
+          action={(
+            <>
+              <Button color="inherit" size="small" onClick={() => setDespues(true)}>Después</Button>
+              <Button color="inherit" size="small" sx={{ fontWeight: 700 }} onClick={() => actualizaciones.recargar()}>
+                Recargar
+              </Button>
+            </>
+          )}
+        >
+          El sistema se actualizó en otra ventana. Recargá esta cuando termines la venta en curso.
+        </Alert>
+      </Snackbar>
+    );
+  }
 
   return (
     <Snackbar open anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>

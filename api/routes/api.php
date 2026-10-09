@@ -188,8 +188,9 @@ Route::middleware(['auth:sanctum', 'cambio.password', 'licencia'])->group(functi
 
     /* ---------------- Precios ---------------- */
 
+    // El aviso "cambiaron los precios" es para quien cobra: solo dice cuándo, quién y cuántos productos (sin costos).
+    Route::get('/precios/ultimo-cambio', [PreciosController::class, 'ultimoCambio'])->middleware('permiso:precios,ventas.pos');
     Route::prefix('precios')->middleware('permiso:precios')->group(function () {
-        Route::get('/ultimo-cambio', [PreciosController::class, 'ultimoCambio']);
         Route::get('/evolucion', [PreciosController::class, 'evolucion']);
         Route::get('/historial', [PreciosController::class, 'historial']);
         Route::post('/costos', [PreciosController::class, 'costos']);

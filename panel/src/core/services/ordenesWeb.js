@@ -15,6 +15,8 @@ const INTERVALO_MS = 30000;
 
 let _count = 0;
 let _timer = null;
+/** El servidor dijo 403 (el plan o el rol no incluyen las órdenes web): no va a cambiar solo, no se insiste. */
+let _denegado = false;
 const _listeners = new Set();
 
 async function tick() {
@@ -25,11 +27,15 @@ async function tick() {
       _count = n;
       _listeners.forEach((l) => l());
     }
-  } catch { /* API caída: el próximo tick reintenta */ }
+  } catch (e) {
+    // Un 403 NO se reintenta (plan Emprendedor, o un rol sin la sección): eran ~120 rechazos por hora por pestaña,
+    // para siempre. Lo demás (API caída, corte de red) sí: el próximo tick reintenta.
+    if (e?.status === 403) { _denegado = true; detenerPolling(); }
+  }
 }
 
 function asegurarPolling() {
-  if (_timer) return;
+  if (_timer || _denegado) return;
   tick();
   _timer = setInterval(tick, INTERVALO_MS);
 }
