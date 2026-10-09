@@ -16,7 +16,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ventana, drenar } from './entorno.js';
+import { ventana, drenar, esperar } from './entorno.js';
 
 test('la pestaña del POS no se recarga sola porque OTRA pestaña aplicó la actualización', async () => {
   // Esta pestaña cargó con un SW ya instalado (el caso normal de un POS abierto todo el día).
@@ -25,8 +25,8 @@ test('la pestaña del POS no se recarga sola porque OTRA pestaña aplicó la act
   const { instancias } = await import('workbox-window');
   const { iniciarActualizaciones, actualizaciones } = await import('@core/pwa/actualizacion.js');
   iniciarActualizaciones();
+  const wb = await esperar(() => instancias[0]);
   await drenar();
-  const wb = instancias[0];
   assert.ok(wb, 'se registró el service worker');
 
   // Otra pestaña encontró la versión nueva: acá llega como SW externo instalado y en espera.

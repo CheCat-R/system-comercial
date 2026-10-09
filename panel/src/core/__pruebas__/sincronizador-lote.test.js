@@ -26,7 +26,7 @@ function servidorConTopeDe200() {
 test('con 201 ventas offline en cola, la sincronización las termina mandando (en tandas de hasta 200)', async () => {
   const { agregarVentaPendiente, contarPendientes } = await import('@core/offline/colaVentas.js');
   for (let i = 0; i < 201; i += 1) {
-    // eslint-disable-next-line no-await-in-loop
+     
     await agregarVentaPendiente({ sucursalId: 1, items: [{ productoId: 1, cantidad: 1 }], pagos: [{ medio: 'efectivo', importe: 100 }] });
   }
   servidorConTopeDe200();
@@ -50,7 +50,7 @@ test('si el lote falla con un 500, se vuelve a intentar solo (hoy queda quieto h
   const { agregarVentaPendiente, listarPendientes } = await import('@core/offline/colaVentas.js');
   // Vaciar lo que haya dejado el test anterior.
   const { quitarVentaPendiente } = await import('@core/offline/colaVentas.js');
-  for (const f of await listarPendientes()) await quitarVentaPendiente(f.idLocal); // eslint-disable-line no-await-in-loop
+  for (const f of await listarPendientes()) await quitarVentaPendiente(f.idLocal);  
   await agregarVentaPendiente({ sucursalId: 1, items: [{ productoId: 1, cantidad: 1 }], pagos: [{ medio: 'efectivo', importe: 100 }] });
 
   mock.timers.enable({ apis: ['setTimeout'] });
@@ -69,7 +69,7 @@ test('si el lote falla con un 500, se vuelve a intentar solo (hoy queda quieto h
     // Pasan 10 minutos con conexión (la red nunca se cortó: no hay "volvió internet" que la dispare).
     for (let i = 0; i < 10; i += 1) {
       mock.timers.tick(60_000);
-      await drenar(); // eslint-disable-line no-await-in-loop
+      await drenar();  
     }
     assert.ok(intentos >= 2, `Después de un 500 hubo ${intentos} intento(s) en 10 minutos: la venta quedó trabada sin aviso.`);
   } finally {

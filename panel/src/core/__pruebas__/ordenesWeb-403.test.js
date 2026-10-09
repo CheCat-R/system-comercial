@@ -24,7 +24,7 @@ test('después de un 403, el poller de órdenes web deja de pedir', async () => 
     await drenar();
     for (let i = 0; i < 4; i += 1) {
       mock.timers.tick(30_000);
-      await drenar(); // eslint-disable-line no-await-in-loop
+      await drenar();  
     }
     const pedidos = red.llamadas.filter((l) => l.url.includes('/presupuestos/ordenes/pendientes')).length;
     baja();

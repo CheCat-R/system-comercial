@@ -175,7 +175,6 @@ Object.defineProperty(globalThis, 'navigator', {
 /** Espera a que se vacíen las colas de microtareas/inmediatos varias veces. */
 export async function drenar(vueltas = 20) {
   for (let i = 0; i < vueltas; i += 1) {
-    // eslint-disable-next-line no-await-in-loop
     await new Promise((r) => setImmediate(r));
   }
 }
@@ -189,4 +188,15 @@ export function sesionDe({ usuarioId = 1, nombre = 'Carla', sucursalId = 1, toke
     terminal: null,
     plan: null,
   };
+}
+
+/** Espera (hasta `ms`) a que `cond()` devuelva algo verdadero y lo devuelve. Para lo que depende de un `import()` dinámico: con la máquina cargada tarda más que unas vueltas de `drenar`. */
+export async function esperar(cond, ms = 5000) {
+  const hasta = Date.now() + ms;
+  for (;;) {
+    const v = cond();
+    if (v) return v;
+    if (Date.now() > hasta) return v;
+    await new Promise((r) => setTimeout(r, 5));
+  }
 }

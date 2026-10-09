@@ -74,15 +74,12 @@ async function enviar() {
     for (let i = 0; i < pendientes.length; i += TANDA) {
       const tanda = pendientes.slice(i, i + TANDA);
       // `sinRedirigir`: un 401 acá (la sesión venció con la cola llena) no recarga la pantalla.
-      // eslint-disable-next-line no-await-in-loop
       const res = await httpClient.post('/ventas/offline-lote', {
         ventas: tanda.map((f) => ({ idLocal: f.idLocal, ...f.payload })),
       }, { sinRedirigir: true });
       stockNegativo = stockNegativo.concat(res.stockNegativo ?? []);
       for (const r of res.resultados) {
-        /* eslint-disable no-await-in-loop */
         if (r.ok) { await quitarVentaPendiente(r.idLocal); sincronizadas += 1; } else if (r.reintentar) { esperando += 1; } else { await marcarError(r.idLocal, r.motivo); fallidas += 1; }
-        /* eslint-enable no-await-in-loop */
       }
     }
   } catch {
