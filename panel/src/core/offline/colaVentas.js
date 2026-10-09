@@ -35,8 +35,15 @@ export async function listarPendientes() {
   return filas.sort((a, b) => a.creadoEn - b.creadoEn);
 }
 
-export async function contarPendientes() {
-  return (await listarPendientes()).length;
+/** ¿La fila se cobró en esa sucursal? Una fila sin sucursal anotada (cola vieja) cuenta como de cualquiera. */
+export function esDeLaSucursal(fila, sucursalId) {
+  const suya = fila?.payload?.sucursalId;
+  return sucursalId == null || suya == null || Number(suya) === Number(sucursalId);
+}
+
+/** Con `sucursalId`, solo las de esa sucursal: el cierre de caja no se traba por la venta de otra. */
+export async function contarPendientes(sucursalId) {
+  return (await listarPendientes()).filter((f) => esDeLaSucursal(f, sucursalId)).length;
 }
 
 /** El servidor ya la confirmó: sale de la cola, el registro real vive allá. */

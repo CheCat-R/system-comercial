@@ -229,8 +229,25 @@ export function CobroModal({
     }
   };
 
-  /** `tipo`: 'ticket' liquida, 'factura' emite comprobante fiscal. */
+  /**
+   * Una sola confirmación a la vez. Sin esto, el doble clic en "Cobrar (provisorio)" encolaba DOS ventas offline
+   * (cada una con su `idLocal`, así que el servidor no podía detectar el duplicado): doble egreso de stock y el
+   * arqueo esperando el doble de efectivo. Con una REF, no con el estado: el segundo clic llega antes de que
+   * React vuelva a pintar con `enviando` en true.
+   */
+  const enCurso = useRef(false);
   const confirmar = async (tipo) => {
+    if (enCurso.current) return;
+    enCurso.current = true;
+    try {
+      await confirmarUna(tipo);
+    } finally {
+      enCurso.current = false;
+    }
+  };
+
+  /** `tipo`: 'ticket' liquida, 'factura' emite comprobante fiscal. */
+  const confirmarUna = async (tipo) => {
     if (offline) { await confirmarOffline(); return; }
     if (tipo === 'ticket' && condicionPago !== 'contado') {
       toast('Liquidar es al contado. Para cuenta corriente, facturá (F8).', 'err');
@@ -405,11 +422,13 @@ export function CobroModal({
           texto: enviando ? 'Registrando…' : 'Facturar · F8',
           clase: puedeFacturar ? 'btn-ingreso' : 'btn-ghost',
           onClick: () => confirmar('factura'),
+          disabled: enviando,
         }]),
         {
           texto: enviando ? 'Registrando…' : `${offline ? 'Cobrar (provisorio)' : 'Liquidar'} ${money(totalCobrar)} · F10`,
           clase: puedeLiquidar ? 'btn-primary' : 'btn-ghost',
           onClick: () => confirmar('ticket'),
+          disabled: enviando,
         },
       ]}
     >

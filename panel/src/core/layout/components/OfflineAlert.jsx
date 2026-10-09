@@ -23,18 +23,18 @@ const MOSTRAR_RESULTADO_MS = 8000;
 
 export function OfflineAlert() {
   const { offline } = useSyncExternalStore(conectividad.subscribe, conectividad.estado, conectividad.estado);
-  const { sincronizando, ultimoResultado } = useSyncExternalStore(
+  const { sincronizando, ultimoResultado, fallo } = useSyncExternalStore(
     sincronizadorOffline.subscribe, sincronizadorOffline.estado, sincronizadorOffline.estado,
   );
 
   const [pendientes, setPendientes] = useState(0);
   useEffect(() => {
-    if (!offline) { setPendientes(0); return undefined; }
+    if (!offline && !fallo) { setPendientes(0); return undefined; }
     const tick = () => contarPendientes().then(setPendientes);
     tick();
     const id = setInterval(tick, 2000);
     return () => clearInterval(id);
-  }, [offline]);
+  }, [offline, fallo]);
 
   /* Las que el servidor rechazó: no salen solas de la cola, hay que mostrarlas hasta que alguien decida. */
   const [conError, setConError] = useState([]);
@@ -60,6 +60,17 @@ export function OfflineAlert() {
         <Alert severity="warning" variant="filled" icon={<WifiOffIcon fontSize="small" />} sx={{ alignItems: 'center' }}>
           Sin conexión con el servidor — reintentando…
           {pendientes > 0 && ` · ${pendientes} venta${pendientes === 1 ? '' : 's'} por sincronizar`}
+        </Alert>
+      </Snackbar>
+    );
+  }
+
+  /* Con conexión, pero el servidor no recibió el lote (error del servidor, licencia en solo lectura…): no es silencio. */
+  if (fallo && !sincronizando && pendientes > 0) {
+    return (
+      <Snackbar open anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity="warning" variant="filled" sx={{ alignItems: 'center' }}>
+          No se pudieron enviar {pendientes} venta{pendientes === 1 ? '' : 's'} cobrada{pendientes === 1 ? '' : 's'} sin conexión — se reintenta solo. No cierres la caja hasta que entren.
         </Alert>
       </Snackbar>
     );

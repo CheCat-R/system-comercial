@@ -6,6 +6,7 @@ import { ventasApi } from '../../services/ventas.api.js';
 import { MEDIOS_PAGO } from '../../domain/constants.js';
 import { r2 } from '../../domain/pos.js';
 import { contarPendientes } from '@core/offline/colaVentas.js';
+import { leerSesion } from '@core/auth/sesion.js';
 import { Table, Di, Btn, ModalShell, money, fmtFechaHora, s } from '../ui.jsx';
 
 /* ==================================================================== *
@@ -751,7 +752,7 @@ export function CerrarCajaModal({ cajaSesionId, onChange }) {
     if (declarado === '') { toast('Contá el efectivo del cajón e ingresá el monto.', 'err'); return; }
     /* Una venta cobrada sin conexión que todavía no entró al sistema es efectivo en el cajón que el
      * arqueo no conoce: cerrar así firma un sobrante falso. Primero se sincroniza (o se resuelve). */
-    const guardadas = await contarPendientes();
+    const guardadas = await contarPendientes(leerSesion()?.sucursal?.id);
     if (guardadas > 0) {
       const s1 = guardadas === 1 ? '' : 's';
       toast(`Hay ${guardadas} venta${s1} cobrada${s1} sin conexión que todavía no entró al sistema. Esperá a que se sincronicen (o resolvelas) antes de cerrar la caja.`, 'err');

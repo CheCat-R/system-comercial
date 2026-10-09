@@ -432,7 +432,8 @@ class VentasService
                 throw new ErrorDeNegocio('Indicá con qué se paga la venta.');
             }
             $pagado = Pricing::money(array_sum(array_map(fn ($p) => (float) $p['importe'], $validos)));
-            if (abs($pagado - $total) > 0.01) {
+            // En centavos enteros: `2503 - 2502.99` en coma flotante da 0,0100000000002 y un centavo de diferencia se rechazaba.
+            if (abs(round($pagado * 100) - round($total * 100)) > 1) {
                 throw new ErrorDeNegocio('Los pagos suman $'.number_format($pagado, 2, '.', '').' y el total es $'.number_format($total, 2, '.', '').'.');
             }
         } elseif ($validos) {

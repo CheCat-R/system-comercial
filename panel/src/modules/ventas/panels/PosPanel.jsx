@@ -10,9 +10,9 @@ import { useResource } from '../hooks/useResource.js';
 import { ventasApi } from '../services/ventas.api.js';
 import { CONDICIONES_IVA, CONDICIONES_PAGO, MEDIOS_PAGO, ORIGEN_LISTA } from '../domain/constants.js';
 import {
-  buscarEnCatalogo, calcularRenglon, descuentosDisponibles, descuentosParaApi,
+  buscarEnCatalogo, calcularRenglon, cantidadDeEtiqueta, descuentosDisponibles, descuentosParaApi,
   extrasParaApi, itemsParaApi, parseEtiquetaBalanza,
-  problemasDelTicket, r2, ticketDesdeBorrador, ticketInicial, ticketReducer,
+  problemasDelTicket, ticketDesdeBorrador, ticketInicial, ticketReducer,
   totalesTicket, ultimoArticulo,
 } from '../domain/pos.js';
 import { indicePrecios, sugerenciaPorMonto } from '../domain/listas.js';
@@ -186,7 +186,7 @@ function Buscador({ catalogo, config, onElegir, inputRef }) {
     if (etiqueta) {
       const item = catalogo.find((i) => i.codigoBarras && i.codigoBarras.endsWith(etiqueta.codigoItem));
       if (item) {
-        const cantidad = etiqueta.cantidad ?? (item.precio > 0 ? r2(etiqueta.importe / item.precio) : 0);
+        const cantidad = cantidadDeEtiqueta(etiqueta, item);
         if (cantidad > 0) { elegir(item, cantidad); return; }
       }
     }

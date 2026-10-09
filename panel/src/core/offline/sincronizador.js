@@ -27,11 +27,15 @@
 import { httpClient } from '../services/httpClient.js';
 import { conectividad } from '../services/conectividad.js';
 import { leerSesion } from '../auth/sesion.js';
-import { listarPendientes, quitarVentaPendiente, marcarError } from './colaVentas.js';
+import { listarPendientes, quitarVentaPendiente, marcarError, esDeLaSucursal } from './colaVentas.js';
 
 const REINTENTO_MS = 60_000;
+/** Espera máxima entre intentos cuando el servidor rechaza el lote entero (500, 403 de licencia, red caída). */
+const REINTENTO_MAX_MS = 10 * 60_000;
+/** El servidor acepta hasta 200 ventas por pedido (SincronizarOfflineRequest). */
+const TANDA = 200;
 
-let _snap = { sincronizando: false, ultimoResultado: null };
+let _snap = { sincronizando: false, ultimoResultado: null, fallo: false };
 const _listeners = new Set();
 
 function publicar() {
@@ -39,36 +43,63 @@ function publicar() {
 }
 
 let _reintento = null;
+let _fallos = 0;
+/** La corrida en curso: dos disparos casi juntos (volvió internet + login) comparten UN envío. */
+let _enCurso = null;
 
-async function sincronizar() {
-  if (_snap.sincronizando) return;
-  if (!leerSesion()?.token) return;
-  const pendientes = (await listarPendientes()).filter((f) => f.estado !== 'error');
+function sincronizar() {
+  if (_enCurso) return _enCurso;
+  _enCurso = enviar().finally(() => { _enCurso = null; });
+  return _enCurso;
+}
+
+async function enviar() {
+  const sesion = leerSesion();
+  if (!sesion?.token) return;
+  // Solo las de ESTA sucursal: el servidor graba cada venta en la sucursal de la sesión que sincroniza, así que
+  // una cobrada en la 2 mandada con una sesión de la 3 descontaría el stock y entraría al turno de la 3.
+  const sucursalId = sesion.sucursal?.id ?? null;
+  const pendientes = (await listarPendientes()).filter((f) => f.estado !== 'error' && esDeLaSucursal(f, sucursalId));
   if (!pendientes.length) return;
 
-  _snap = { sincronizando: true, ultimoResultado: null };
+  _snap = { sincronizando: true, ultimoResultado: null, fallo: false };
   publicar();
 
+  let sincronizadas = 0;
+  let fallidas = 0;
+  let esperando = 0;
+  let stockNegativo = [];
+  let fallo = false;
   try {
-    // `sinRedirigir`: un 401 acá (la sesión venció con la cola llena) no recarga la pantalla.
-    const { resultados, stockNegativo } = await httpClient.post('/ventas/offline-lote', {
-      ventas: pendientes.map((f) => ({ idLocal: f.idLocal, ...f.payload })),
-    }, { sinRedirigir: true });
-    let sincronizadas = 0;
-    let fallidas = 0;
-    let esperando = 0;
-    for (const r of resultados) {
-      if (r.ok) { await quitarVentaPendiente(r.idLocal); sincronizadas += 1; } else if (r.reintentar) { esperando += 1; } else { await marcarError(r.idLocal, r.motivo); fallidas += 1; }
+    for (let i = 0; i < pendientes.length; i += TANDA) {
+      const tanda = pendientes.slice(i, i + TANDA);
+      // `sinRedirigir`: un 401 acá (la sesión venció con la cola llena) no recarga la pantalla.
+      // eslint-disable-next-line no-await-in-loop
+      const res = await httpClient.post('/ventas/offline-lote', {
+        ventas: tanda.map((f) => ({ idLocal: f.idLocal, ...f.payload })),
+      }, { sinRedirigir: true });
+      stockNegativo = stockNegativo.concat(res.stockNegativo ?? []);
+      for (const r of res.resultados) {
+        /* eslint-disable no-await-in-loop */
+        if (r.ok) { await quitarVentaPendiente(r.idLocal); sincronizadas += 1; } else if (r.reintentar) { esperando += 1; } else { await marcarError(r.idLocal, r.motivo); fallidas += 1; }
+        /* eslint-enable no-await-in-loop */
+      }
     }
-    _snap = { sincronizando: false, ultimoResultado: sincronizadas || fallidas ? { sincronizadas, fallidas, stockNegativo, en: Date.now() } : null };
-    // Las que esperan algo (caja cerrada, otro equipo procesándolas) se vuelven a intentar solas.
-    clearTimeout(_reintento);
-    if (esperando) _reintento = setTimeout(sincronizar, REINTENTO_MS);
   } catch {
-    // Se cortó de nuevo a mitad de la sincronización: la cola queda intacta
-    // (nada se borró todavía) y el próximo "volvió internet" reintenta solo.
-    _snap = { sincronizando: false, ultimoResultado: null };
+    // El lote entero falló (se cortó la red, 500, 403 de licencia): nada se borró, así que se reintenta solo con espera creciente.
+    fallo = true;
   }
+
+  _fallos = fallo ? _fallos + 1 : 0;
+  _snap = {
+    sincronizando: false,
+    fallo,
+    ultimoResultado: sincronizadas || fallidas ? { sincronizadas, fallidas, stockNegativo, en: Date.now() } : null,
+  };
+  // Las que esperan algo (caja cerrada, otro equipo procesándolas) y los lotes que fallaron se vuelven a intentar solos.
+  clearTimeout(_reintento);
+  if (fallo) _reintento = setTimeout(sincronizar, Math.min(REINTENTO_MS * 2 ** (_fallos - 1), REINTENTO_MAX_MS));
+  else if (esperando) _reintento = setTimeout(sincronizar, REINTENTO_MS);
   publicar();
 }
 

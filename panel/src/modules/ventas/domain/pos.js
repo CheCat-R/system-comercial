@@ -12,7 +12,17 @@ import { norm } from './constants.js';
 import { contextoResolucion, resolverRenglon } from './listas.js';
 import { resolverOfertas } from './ofertas.js';
 
-export const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+/**
+ * Redondeo a centavos IGUAL que `Pricing::money` de la API (`round()` de PHP): el medio centavo sube (lejos del
+ * cero) y se mira el número con 15 cifras, no con el error de la coma flotante. Con `Math.round(x * 100)`,
+ * 2068,595 daba 2068,59 en el panel y 2068,60 en la API: el panel cobraba $2.502,99 un producto de $2.503 y la
+ * venta offline ya cobrada volvía rechazada para siempre al sincronizar.
+ */
+export const r2 = (n) => {
+  const v = Number(n) || 0;
+  const centavos = Math.round(Math.abs(Number((v * 100).toPrecision(15))));
+  return (v < 0 ? -centavos : centavos) / 100;
+};
 
 /* ------------------------------------------------------------------ *
  * Códigos de barras
@@ -44,6 +54,16 @@ export function parseEtiquetaBalanza(codigo, config) {
   return config.balanzaModo === 'importe'
     ? { codigoItem, importe: r2(bruto / 100) }
     : { codigoItem, cantidad: r2(bruto / 1000) }; // gramos → kg
+}
+
+/**
+ * Cuántas unidades lleva una etiqueta de balanza. En modo peso viene escrito; en modo importe el valor es el precio
+ * AL PÚBLICO (con IVA impreso), así que se divide por el precio FINAL del artículo: dividirlo por el neto inflaba la
+ * cantidad un 21% (una etiqueta de $1.210 entraba como 1,21 kg y cobraba $1.464,10).
+ */
+export function cantidadDeEtiqueta(etiqueta, item) {
+  if (etiqueta.cantidad != null) return etiqueta.cantidad;
+  return item?.precioFinal > 0 ? r2(etiqueta.importe / item.precioFinal) : 0;
 }
 
 /**

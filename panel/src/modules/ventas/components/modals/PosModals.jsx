@@ -3,7 +3,7 @@ import { cx } from '@shared/utils/classNames.js';
 import { useVentas } from '../../context/VentasContext.jsx';
 import { ventasApi } from '../../services/ventas.api.js';
 import { norm } from '../../domain/constants.js';
-import { buscarEnCatalogo, parseEtiquetaBalanza, r2 } from '../../domain/pos.js';
+import { buscarEnCatalogo, cantidadDeEtiqueta, parseEtiquetaBalanza, r2 } from '../../domain/pos.js';
 import { Btn, ModalShell, money, num, s } from '../ui.jsx';
 import p from '../../styles/Pos.module.css';
 
@@ -41,11 +41,7 @@ export function CargaRapidaModal({ catalogo, config, onAgregar }) {
     if (etiqueta) {
       const item = catalogo.find((i) => i.codigoBarras && i.codigoBarras.endsWith(etiqueta.codigoItem));
       if (item) {
-        /* El importe de la etiqueta de balanza es el precio AL PÚBLICO (con
-         * IVA impreso): se divide por el precio FINAL. Dividirlo por el neto
-         * inflaba la cantidad un 21% — el error que nadie ve porque el peso
-         * casi siempre viene en la etiqueta y este es solo el fallback. */
-        const cantidad = etiqueta.cantidad ?? (item.precioFinal > 0 ? r2(etiqueta.importe / item.precioFinal) : 0);
+        const cantidad = cantidadDeEtiqueta(etiqueta, item);
         if (cantidad > 0) { agregar(item, cantidad); return; }
       }
     }
