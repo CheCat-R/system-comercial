@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  problemasDelTicket, ticketInicial, ticketReducer, totalesTicket,
+  parseEtiquetaBalanza, problemasDelTicket, r3, ticketInicial, ticketReducer, totalesTicket,
 } from './pos.js';
 import { resolverOfertas } from './ofertas.js';
 import { indicePrecios, sugerenciaPorMonto } from './listas.js';
@@ -161,4 +161,27 @@ test('reabrir: el precio por MONTO aplicado se pierde al cambiar de pestaña', (
     }],
   });
   assert.equal(e.renglones[0].precioUnitario, 800, 'el cajero aplicó Mayorista por monto y al volver a la pestaña volvió a $1000');
+});
+
+/* ---- Cantidades al gramo, no a los 10 g ---- */
+
+test('la etiqueta de balanza de 1,234 kg entra como 1,234 kg', () => {
+  const et = parseEtiquetaBalanza('2000123012340', { balanzaHabilitada: true, balanzaPrefijo: '20', balanzaModo: 'peso' });
+  assert.equal(et.cantidad, 1.234);
+});
+
+test('agregar 0,125 kg de un granel carga 0,125 kg, y repetirlo suma al gramo', () => {
+  const it = item(1, 20000, { unidad: 'kg', fraccionable: true });
+  let e = estadoCon({}, [it]);
+  e = ticketReducer(e, { tipo: 'agregar', item: it, cantidad: 0.125 });
+  assert.equal(e.renglones[0].cantidad, 0.125);
+  e = ticketReducer(e, { tipo: 'agregar', item: it, cantidad: 0.125 });
+  assert.equal(e.renglones[0].cantidad, 0.25);
+});
+
+test('r3 redondea al gramo, el medio gramo hacia arriba', () => {
+  assert.equal(r3(1.2345), 1.235);
+  assert.equal(r3(0.1 + 0.2), 0.3);
+  assert.equal(r3(-1.2345), -1.235);
+  assert.equal(r3(''), 0);
 });

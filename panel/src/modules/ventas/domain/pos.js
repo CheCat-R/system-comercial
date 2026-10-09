@@ -24,6 +24,17 @@ export const r2 = (n) => {
   return (v < 0 ? -centavos : centavos) / 100;
 };
 
+/**
+ * Redondeo de CANTIDADES: al gramo (3 decimales), no al centavo. Con `r2` una etiqueta de balanza de 1,234 kg
+ * entraba como 1,23 kg y 0,125 kg como 0,13: hasta ±$200 por renglón en un producto a $40.000/kg, y un ticket
+ * que no coincidía con la etiqueta.
+ */
+export const r3 = (n) => {
+  const v = Number(n) || 0;
+  const gramos = Math.round(Math.abs(Number((v * 1000).toPrecision(15))));
+  return (v < 0 ? -gramos : gramos) / 1000;
+};
+
 /* ------------------------------------------------------------------ *
  * Códigos de barras
  * ------------------------------------------------------------------ */
@@ -53,7 +64,7 @@ export function parseEtiquetaBalanza(codigo, config) {
   const bruto = Number(c.slice(7, 12));
   return config.balanzaModo === 'importe'
     ? { codigoItem, importe: r2(bruto / 100) }
-    : { codigoItem, cantidad: r2(bruto / 1000) }; // gramos → kg
+    : { codigoItem, cantidad: r3(bruto / 1000) }; // gramos → kg
 }
 
 /**
@@ -63,7 +74,7 @@ export function parseEtiquetaBalanza(codigo, config) {
  */
 export function cantidadDeEtiqueta(etiqueta, item) {
   if (etiqueta.cantidad != null) return etiqueta.cantidad;
-  return item?.precioFinal > 0 ? r2(etiqueta.importe / item.precioFinal) : 0;
+  return item?.precioFinal > 0 ? r3(etiqueta.importe / item.precioFinal) : 0;
 }
 
 /**
@@ -144,7 +155,7 @@ export function totalesTicket(renglones, extras = []) {
     iva: r2(iva),
     total: r2(neto + netoExtras + iva),
     renglones: renglones.length,
-    unidades: r2(unidades),
+    unidades: r3(unidades),
   };
 }
 
@@ -327,7 +338,7 @@ export function ticketReducer(estado, accion) {
             r.key === item.key
               ? {
                 ...r,
-                cantidad: r2(r.cantidad + cantidad),
+                cantidad: r3(r.cantidad + cantidad),
                 ...(listaFija ? {
                   listaId: listaFija.listaId, lista: listaFija.etiqueta, listaOrigen: 'manual',
                   listaManual: true, precioLista: listaFija.precio, precioUnitario: listaFija.precio,
@@ -369,7 +380,7 @@ export function ticketReducer(estado, accion) {
         ofertaId: null,
         oferta: '',
         ofertaDescuento: 0,
-        cantidad: r2(cantidad),
+        cantidad: r3(cantidad),
       };
       return recalcular({ ...estado, renglones: [...estado.renglones, renglon], uid: estado.uid + 1 });
     }
