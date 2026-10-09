@@ -165,6 +165,31 @@ export function resolverRenglon(renglon, precios, ctx) {
 }
 
 /**
+ * Lo que vale el ticket para el PRECIO POR MONTO: cantidad × precio de la lista BASE (neto), no lo que se cobra
+ * con IVA, descuentos y extras. Es la misma vara que usa la API (`Portero`, `brutoTicket`): medirlo con el total
+ * ofrecía Mayorista a un ticket que el servidor después rechazaba ("el ticket no habilita la lista…").
+ */
+export function brutoDeLista(renglones, catalogo, preciosDe) {
+  const baseId = (catalogo?.listas ?? []).find((l) => l.esBase)?.listaId ?? null;
+  let total = 0;
+  for (const r of renglones) {
+    const cant = Number(r.cantidad) || 0;
+    const precios = preciosDe(r.key) ?? [];
+    if (!(cant > 0) || !precios.length) continue;
+    const piso = precios.find((p) => p.listaId === baseId) ?? precios[precios.length - 1];
+    total += cant * (Number(piso.precio) || 0);
+  }
+  return total;
+}
+
+/** ¿El ticket llega al monto que habilita el precio por monto? */
+export function montoHabilita(renglones, catalogo, preciosDe) {
+  const cfg = catalogo?.montoMayorista;
+  if (!cfg) return false;
+  return brutoDeLista(renglones, catalogo, preciosDe) + 1e-9 >= (Number(cfg.monto) || 0);
+}
+
+/**
  * ¿El ticket habilita el precio por monto, y cambiaría algo aplicarlo?
  *
  * Devuelve la sugerencia para mostrarla al cajero, o null. No se aplica sola
@@ -173,10 +198,10 @@ export function resolverRenglon(renglon, precios, ctx) {
  * exactamente lo pedido: "si no tiene ninguna lista mayorista, no se le asigna
  * nada".
  */
-export function sugerenciaPorMonto(renglones, total, catalogo, preciosDe, yaAplicada) {
+export function sugerenciaPorMonto(renglones, catalogo, preciosDe, yaAplicada) {
   const cfg = catalogo?.montoMayorista;
   if (!cfg || yaAplicada) return null;
-  if (total + 1e-9 < (Number(cfg.monto) || 0)) return null;
+  if (!montoHabilita(renglones, catalogo, preciosDe)) return null;
 
   const dela = new Set(
     (catalogo.listas ?? []).filter((l) => l.modalidadId === cfg.modalidadId).map((l) => l.listaId),

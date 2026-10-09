@@ -9,7 +9,7 @@
  * IVA se suma aparte.
  */
 import { norm } from './constants.js';
-import { contextoResolucion, resolverRenglon } from './listas.js';
+import { contextoResolucion, montoHabilita, resolverRenglon } from './listas.js';
 import { resolverOfertas } from './ofertas.js';
 
 /**
@@ -197,16 +197,25 @@ function recalcular(estado) {
   const { catalogo, cliente, precios } = estado.ctx;
   if (!catalogo?.listas?.length) return estado;
 
+  /* El precio por monto se RETIRA solo cuando el ticket deja de llegar al monto (sacar artículos, bajar cantidades):
+   * aplicado y olvidado, el servidor rechaza todos los guardados ("el ticket no habilita la lista…"). */
+  let montoAplicado = estado.montoAplicado;
+  let cambio = false;
+  if (montoAplicado != null && !montoHabilita(estado.renglones, catalogo, (k) => precios.get(k))) {
+    montoAplicado = null;
+    cambio = true;
+  }
+
   const ctx = contextoResolucion({
     catalogo,
     cliente,
     renglones: estado.renglones,
-    modalidadesExtra: estado.montoAplicado ? [estado.montoAplicado] : [],
+    modalidadesExtra: montoAplicado ? [montoAplicado] : [],
   });
-  let cambio = false;
 
   let renglones = estado.renglones.map((r) => {
-    if (r.listaManual) return r;                 // la decisión de una persona manda
+    // La decisión de una persona manda; y un renglón cotizado en un presupuesto conserva el precio que se prometió.
+    if (r.listaManual || r.listaOrigen === 'presupuesto') return r;
     const res = resolverRenglon(r, precios.get(r.key), ctx);
     if (!res) return r;
     // Compara también el precio: con el mismo `listaId` puede haber cambiado el
@@ -231,7 +240,10 @@ function recalcular(estado) {
     ahora: estado.ctx.ahora,
     sucursalId: estado.ctx.sucursalId,
     ticketAplicadaId: estado.ofertaTicket,
+    extras: estado.extras,
   });
+  const ofertaTicket = promos.ticketRetirada ? null : estado.ofertaTicket;
+  if (ofertaTicket !== estado.ofertaTicket) cambio = true;
   renglones = renglones.map((r) => {
     const p = promos.get(r.key) ?? null;
     const igual = p
@@ -287,7 +299,7 @@ function recalcular(estado) {
     };
   });
 
-  return cambio ? { ...estado, renglones } : estado;
+  return cambio ? { ...estado, renglones, montoAplicado, ofertaTicket } : estado;
 }
 
 /**
@@ -386,11 +398,12 @@ export function ticketReducer(estado, accion) {
       });
     }
     case 'precio':
-      return {
+      // Recalcula: la oferta y el descuento con nombre se miden sobre el precio que queda, no sobre el anterior.
+      return recalcular({
         ...estado,
         renglones: estado.renglones.map((r) =>
           r.uid === accion.uid ? { ...r, precioUnitario: Math.max(0, Number(accion.valor) || 0) } : r),
-      };
+      });
     /**
      * Elección MANUAL de lista en un renglón. Queda marcado con `listaManual`
      * para que el automático no se la pise en la próxima tecla: la decisión de
@@ -401,7 +414,7 @@ export function ticketReducer(estado, accion) {
         ...estado,
         renglones: estado.renglones.map((r) => {
           if (r.uid !== accion.uid) return r;
-          if (accion.manual === false) return { ...r, listaManual: false };
+          if (accion.manual === false) return { ...r, listaManual: false, listaOrigen: r.listaOrigen === 'manual' || r.listaOrigen === 'presupuesto' ? 'auto' : r.listaOrigen };
           return {
             ...r,
             listaId: accion.lista.listaId,
@@ -462,9 +475,10 @@ export function ticketReducer(estado, accion) {
         };
       });
       // Volver al automático tiene que recotizar; fijar a mano, no.
+      // Y las ofertas se miden sobre la lista que quedó: una oferta solo de Mostrador no sigue aplicada en Mayorista.
       return modalidadId == null
         ? recalcular({ ...estado, renglones })
-        : (tocados ? { ...estado, renglones } : estado);
+        : (tocados ? recalcular({ ...estado, renglones }) : estado);
     }
 
     case 'quitar':
@@ -767,8 +781,10 @@ export function problemasDelTicket(renglones, { permitirStockNegativo, descuento
     if (!permitirStockNegativo && r.cantidad > r.stock + 1e-9) {
       problemas.push(`${etiqueta}: hay ${r.stock} ${r.unidad} y estás vendiendo ${r.cantidad}.`);
     }
-    if (!puedePisarPrecio && r.descuento > descuentoMax + 1e-9) {
-      problemas.push(`${etiqueta}: el descuento de ${r.descuento}% supera el tope de ${descuentoMax}%.`);
+    // El tope es de lo que puso una PERSONA (la base): un descuento con nombre lo autorizó el dueño, no cuenta contra el tope.
+    const puesto = Number(r.descuentoBase ?? r.descuento) || 0;
+    if (!puedePisarPrecio && puesto > descuentoMax + 1e-9) {
+      problemas.push(`${etiqueta}: el descuento de ${puesto}% supera el tope de ${descuentoMax}%.`);
     }
   }
   return problemas;

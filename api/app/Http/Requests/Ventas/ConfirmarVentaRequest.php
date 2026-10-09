@@ -20,6 +20,8 @@ class ConfirmarVentaRequest extends ApiRequest
             'operadorId' => ['nullable', 'integer'],
             'observaciones' => ['nullable', 'string', 'max:2000'],
             'redondeo' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            // El total (sin redondeo) que el cajero tiene en pantalla: si no es el del borrador guardado, no se cobra.
+            'totalEsperado' => ['nullable', 'numeric', 'min:0'],
             'pagos' => ['nullable', 'array', 'max:20'],
             'pagos.*.medio' => ['required', Rule::in(\App\Ventas\VentasService::MEDIOS_POS)],
             'pagos.*.importe' => ['required', 'numeric', 'min:0', 'max:100000000'],

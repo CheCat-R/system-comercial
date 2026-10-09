@@ -333,6 +333,17 @@ class Portero
                 || ($minimo > 0 && $llevadas + 1e-9 >= $minimo)
                 || ! empty($modalidadesDeMarca[$prod->marca_id][$elegida['lista']['modalidadId']])
                 || ($modalidadPorMonto !== null && (int) $elegida['lista']['modalidadId'] === $modalidadPorMonto);
+            // POR QUÉ puerta se ganó la lista, decidido acá y no tomado del body: de esto depende que el "precio por monto"
+            // quede registrado como tal (y valga la restricción de medios de pago), y que al reabrir el ticket el POS lo reconozca.
+            $listaElegidaId = (int) $elegida['fila']->lista_id;
+            $origenGanado = match (true) {
+                $esPiso => 'base',
+                in_array($listaElegidaId, $delCliente, true) => 'cliente',
+                $minimo > 0 && $llevadas + 1e-9 >= $minimo => 'auto',
+                ! empty($modalidadesDeMarca[$prod->marca_id][$elegida['lista']['modalidadId']]) => 'marca',
+                $modalidadPorMonto !== null && (int) $elegida['lista']['modalidadId'] === $modalidadPorMonto => 'monto',
+                default => ($it['listaOrigen'] ?? '') === 'manual' ? 'manual' : 'auto',
+            };
             if (! $habilitada && ! $puedePisarPrecio) {
                 throw new ErrorDeNegocio($etiqueta.': el ticket no habilita la lista '.$elegida['lista']['nombre'].($minimo > 0 ? ' (pide '.$minimo.' unidades y el ticket lleva '.$llevadas.')' : '').'. Hace falta el permiso para pisar precios.');
             }
@@ -407,7 +418,7 @@ class Portero
             $resueltos[] = [
                 'productoId' => (int) $prod->id, 'presentacionId' => $presId, 'cantidad' => $cantidad,
                 'listaId' => (int) $elegida['fila']->lista_id, 'lista' => $elegida['lista']['etiqueta'] ?: ($elegida['lista']['nombre'] ?? ''),
-                'listaOrigen' => $honraCotizado ? 'presupuesto' : ($pisado ? 'manual' : ($esPiso ? 'base' : 'auto')),
+                'listaOrigen' => $honraCotizado ? 'presupuesto' : ($pisado ? 'manual' : $origenGanado),
                 'precioLista' => $honraCotizado ? $congelado['precioLista'] : $netoLista,
                 'precioUnitario' => $pedido, 'descuento' => $desc, 'descuentoBase' => $descuentoBase,
                 'descuentoId' => $descuentoId, 'descuentoNombre' => $descuentoNombre,

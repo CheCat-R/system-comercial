@@ -1091,6 +1091,14 @@ class VentasService
             throw new ErrorDeNegocio('El redondeo es del cobro al contado: en cuenta corriente el comprobante va por su total exacto.');
         }
         $viejos = array_values(array_filter($borrador['extras'], fn ($e) => $e['concepto'] === 'Redondeo' && ! ((float) $e['iva'] > 0)));
+        // El cobro es de LO GUARDADO. Si el último guardado falló (o llegó tarde uno anterior), el cajero está viendo
+        // un ticket que no es este: cobrarlo firmaría la versión vieja, y en cuenta corriente nada más lo frenaría.
+        if (isset($dto['totalEsperado'])) {
+            $guardado = Pricing::money((float) $borrador['total'] - array_sum(array_map(fn ($e) => (float) $e['importe'], $viejos)));
+            if (abs($guardado - (float) $dto['totalEsperado']) > 0.011) {
+                throw new ErrorDeNegocio('El ticket que ves ($'.number_format((float) $dto['totalEsperado'], 2, '.', '').') no es el que está guardado ($'.number_format($guardado, 2, '.', '').'). No se pudo guardar el último cambio: volvé a abrir la venta antes de cobrar.');
+            }
+        }
         if ($viejos || $redondeoPedido > 0) {
             $quitar = Pricing::money(array_sum(array_map(fn ($e) => (float) $e['importe'], $viejos)));
             $delta = Pricing::money($redondeoPedido - $quitar);

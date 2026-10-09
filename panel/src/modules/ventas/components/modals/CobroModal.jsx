@@ -279,6 +279,8 @@ export function CobroModal({
           // El relevo (0088): el cobro queda firmado por quien está en la caja.
           operadorId: operadorId ?? undefined,
           observaciones,
+          // El total que se ve en pantalla (sin redondeo): si el servidor tiene guardado otro ticket, no cobra.
+          totalEsperado: totales.total,
           // El importe del redondeo (los $7 de "39.893 → 39.900"): el servidor
           // lo materializa como el extra "Redondeo" y ajusta el total.
           redondeo: condicionPago === 'contado' && redondeo > 0.009 ? redondeo : undefined,

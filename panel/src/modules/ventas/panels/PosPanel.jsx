@@ -844,8 +844,8 @@ export function PosPanel() {
    * tienen ese problema y ya se aplicaron solas.
    */
   const sugerencia = useMemo(
-    () => sugerenciaPorMonto(ticket.renglones, totales.total, catalogoRaw, preciosDe, !!ticket.montoAplicado),
-    [ticket.renglones, ticket.montoAplicado, totales.total, catalogoRaw, preciosDe],
+    () => sugerenciaPorMonto(ticket.renglones, catalogoRaw, preciosDe, !!ticket.montoAplicado),
+    [ticket.renglones, ticket.montoAplicado, catalogoRaw, preciosDe],
   );
 
   /** Desbloquea (o retira) la modalidad por monto. El motor reasigna el resto. */
@@ -946,7 +946,7 @@ export function PosPanel() {
   const guardarAhora = useCallback(async (id, estado, cliente) => {
     // Offline no autoguarda: no hay servidor al que mandarle el PUT, y total
     // el ticket va a viajar completo recién al cobrar (ver `cobrar`/`CobroModal`).
-    if (!id || offline) return;
+    if (!id || offline) return true;
     setGuardando(true);
     try {
       await ventasApi.guardarVenta(id, {
@@ -962,8 +962,10 @@ export function PosPanel() {
         operadorId: operadorId ?? undefined,
       });
       recargarAbiertas();
+      return true;
     } catch (e) {
       toast(e?.data?.message || 'No se pudo guardar la venta abierta.', 'err');
+      return false;
     } finally {
       setGuardando(false);
     }
@@ -1219,7 +1221,9 @@ export function PosPanel() {
     if (offline) { abrirCobro(); return; }
     // Online: se fuerza el guardado antes de cobrar — el backend confirma lo GUARDADO.
     clearTimeout(guardadoRef.current);
-    guardarAhora(activaId, ticket, clienteActual).then(abrirCobro);
+    // Si el guardado falló, NO se abre el cobro: el servidor cobraría la versión anterior del ticket (en cuenta
+    // corriente, sin pagos que la contrasten, ni siquiera se notaría).
+    guardarAhora(activaId, ticket, clienteActual).then((guardado) => { if (guardado) abrirCobro(); });
   }, [puedeCobrar, problemas, activaId, ticket, clienteActual, totales, caja, sucursalId, offline, guardarAhora, openModal, closeModal, trasCobrar, toast]);
 
   const cambiarCliente = (id) => {

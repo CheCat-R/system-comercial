@@ -24,7 +24,11 @@
  */
 // Redondeo local (idéntico al de pos.js) y no un import: pos.js importa de acá,
 // y un ciclo de módulos por dos líneas es comprar un problema gratis.
-const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const r2 = (n) => {
+  const v = Number(n) || 0;
+  const centavos = Math.round(Math.abs(Number((v * 100).toPrecision(15))));
+  return (v < 0 ? -centavos : centavos) / 100;
+};
 
 /* ------------------------------------------------------------------ *
  * Vigencia y alcance
@@ -112,6 +116,9 @@ const netoDe = (precioFinal, iva) => (Number(precioFinal) || 0) / (1 + (Number(i
 export function descuentoMecanica(o, r, c) {
   const p = Number(r.precioUnitario) || 0;
   if (!(c > 0) || !(p > 0)) return null;
+  // Lo que el renglón paga por unidad con el descuento del cliente: el CARTEL MANDA, y no se le suma encima ese
+  // descuento. Una oferta "a $605" deja el renglón en el neto del cartel, no más barato (y es el techo de la API).
+  const pEf = p * (1 - (Number(r.descuento) || 0) / 100);
 
   switch (o.tipo) {
     case 'porcentaje': {
@@ -120,8 +127,8 @@ export function descuentoMecanica(o, r, c) {
     }
     case 'precio_fijo': {
       const pf = netoDe(o.precio, r.iva);
-      if (pf >= p) return null;
-      return { descuento: c * (p - pf), detalle: `Precio oferta` };
+      if (pf >= pEf) return null;
+      return { descuento: c * (pEf - pf), detalle: `Precio oferta` };
     }
     case 'nxm': {
       const gratis = Math.floor(c / o.lleva) * (o.lleva - o.paga);
@@ -136,7 +143,7 @@ export function descuentoMecanica(o, r, c) {
     case 'pack': {
       const grupos = Math.floor(c / o.lleva);
       if (grupos <= 0) return null;
-      const ahorroPorPack = o.lleva * p - netoDe(o.precio, r.iva);
+      const ahorroPorPack = o.lleva * pEf - netoDe(o.precio, r.iva);
       if (ahorroPorPack <= 0) return null;
       return { descuento: grupos * ahorroPorPack, detalle: `${grupos}× pack de ${o.lleva}` };
     }
@@ -223,7 +230,7 @@ function aplicarCombos(combos, renglones, usadas, resultado) {
  * porcentaje entre los renglones QUE NO tienen otra oferta — el 10% del ticket
  * no se apila sobre el 3×2.
  */
-export function resolverOfertas(renglones, ofertas, { ahora, sucursalId, ticketAplicadaId }) {
+export function resolverOfertas(renglones, ofertas, { ahora, sucursalId, ticketAplicadaId, extras = [] }) {
   const resultado = new Map();
   if (!renglones.length || !ofertas?.length) return resultado;
 
@@ -262,12 +269,11 @@ export function resolverOfertas(renglones, ofertas, { ahora, sucursalId, ticketA
      *    (gratis·p) lo son. En el 3×2 la unidad gratis vale lo que el cliente
      *    iba a pagar por ella —$900 si tiene 10% de descuento, no $1.000—, así
      *    que sin el factor el ticket regalaba $100 de más.
-     *  - `precio_fijo` y `pack` NO: prometen un PRECIO ("el kilo a $800", "el
-     *    pack de 6 a $4.000"). Escalarles el ahorro le cobraría al cliente más
-     *    que el número del cartel, y del lado del servidor nadie lo pide — su
-     *    techo para esas dos es el bruto del renglón. Cómo se combinan un precio
-     *    de oferta y el descuento del cliente es decisión del dueño, no un
-     *    efecto de esta línea: quedan como estaban.
+     *  - `precio_fijo` y `pack` NO se escalan: prometen un PRECIO y su ahorro ya
+     *    se midió contra lo que el renglón paga con el descuento del cliente
+     *    (`descuentoMecanica`). EL CARTEL MANDA: el cliente paga el número del
+     *    cartel, no el cartel menos su descuento. Es lo mismo que acota el
+     *    servidor (`techoDeOferta`).
      */
     if (mejor) {
       const proporcional = mejor.tipoOferta === 'porcentaje'
@@ -283,7 +289,7 @@ export function resolverOfertas(renglones, ofertas, { ahora, sucursalId, ticketA
   // La oferta de ticket aceptada: % sobre los renglones que quedaron sin promo.
   if (ticketAplicadaId) {
     const ot = ofertas.find((o) => o.id === ticketAplicadaId && o.tipo === 'ticket');
-    if (ot && ofertaVigente(ot, { ahora, sucursalId })) {
+    if (ot && ofertaVigente(ot, { ahora, sucursalId }) && ticketCumpleMinimo(ot, renglones, resultado, extras)) {
       for (const r of renglones) {
         if (resultado.has(r.key) || !pasaLista(ot, r)) continue;
         const neto = (Number(r.cantidad) || 0) * (Number(r.precioUnitario) || 0)
@@ -299,8 +305,35 @@ export function resolverOfertas(renglones, ofertas, { ahora, sucursalId, ticketA
     }
   }
 
+  // Aceptada pero el ticket ya no llega al mínimo: se retira (el POS la deja de marcar como aceptada).
+  if (ticketAplicadaId) {
+    const ot = ofertas.find((o) => o.id === ticketAplicadaId && o.tipo === 'ticket');
+    if (ot && ofertaVigente(ot, { ahora, sucursalId }) && !ticketCumpleMinimo(ot, renglones, resultado, extras)) {
+      resultado.ticketRetirada = true;
+    }
+  }
+
   for (const v of resultado.values()) v.descuento = r2(v.descuento);
   return resultado;
+}
+
+/**
+ * El ticket SIN el descuento de la oferta de ticket (con IVA y extras, como lo mide la API en
+ * `exigirMinimoDeTicket`) tiene que llegar al mínimo de la oferta. Sin esto, sacar renglones dejaba aplicado
+ * el descuento y el servidor rechazaba todos los guardados.
+ */
+function ticketCumpleMinimo(ot, renglones, resultado, extras) {
+  const minimo = Number(ot.montoMinimo) || 0;
+  if (!(minimo > 0)) return true;
+  let total = 0;
+  for (const r of renglones) {
+    let neto = (Number(r.cantidad) || 0) * (Number(r.precioUnitario) || 0) * (1 - (Number(r.descuento) || 0) / 100);
+    const prom = resultado.get(r.key);
+    if (prom && prom.ofertaId !== ot.id) neto -= Math.min(Math.max(0, prom.descuento), neto);
+    total += neto * (1 + (Number(r.iva) || 0) / 100);
+  }
+  for (const e of extras ?? []) total += (Number(e.importe) || 0) * (1 + (e.iva != null ? Number(e.iva) : 21) / 100);
+  return total + 1e-9 >= minimo;
 }
 
 /**
