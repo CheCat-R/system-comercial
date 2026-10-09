@@ -75,6 +75,11 @@ final class SelectorDeCliente
             $carpeta = $nombre === null ? null : $raiz.'/'.$nombre;
             // Sin `.env` no es un cliente: es una carpeta cualquiera. El mensaje es el mismo para "no existe" y "no es válido".
             if ($carpeta !== null && is_file($carpeta.'/.env')) {
+                // Un cliente suspendido (`ccs:suspender`) no atiende pedidos web; por consola SÍ se lo puede operar (copias, exportar, reactivar).
+                if ($cliente === '' && is_file($carpeta.'/.suspendido')) {
+                    return ['modo' => 'rechazado', 'http' => 503, 'mensaje' => 'Este servicio está suspendido. Comunicate con soporte.'];
+                }
+
                 return ['modo' => 'cliente', 'nombre' => $nombre, 'carpeta' => $carpeta];
             }
 
@@ -109,14 +114,21 @@ final class SelectorDeCliente
 
         if ($d['modo'] === 'rechazado') {
             if ($esWeb) {
-                // Al que pregunta por la web no se le cuenta qué clientes existen: el mismo 404 para todo.
-                http_response_code(404);
+                // Al que pregunta por la web no se le cuenta qué clientes existen: el mismo 404 para todo. Solo un cliente suspendido, 503.
+                $suspendido = $d['http'] === 503;
+                http_response_code($suspendido ? 503 : 404);
                 header('Content-Type: application/json');
-                echo json_encode(['message' => 'Sitio no encontrado.']);
+                echo json_encode(['message' => $suspendido ? $d['mensaje'] : 'Sitio no encontrado.']);
             } else {
                 fwrite(STDERR, $d['mensaje'].PHP_EOL);
             }
             exit(1);
+        }
+        if ($d['modo'] === 'sin-cliente') {
+            // Administrar sin cliente (`ccs:alta`, `ccs:lista`…): ningún `.env` suelto del código, que metería su base en el entorno de los hijos.
+            $app->loadEnvironmentFrom('.ccs-sin-entorno');
+
+            return;
         }
         if ($d['modo'] !== 'cliente') {
             return;

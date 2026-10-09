@@ -152,4 +152,17 @@ class SelectorDeClienteTest extends TestCase
 
         $this->assertSame('kiosco.ccs.com', SelectorDeCliente::decidir($this->base, null, 'kiosco.ccs.com', null, 'production')['nombre']);
     }
+
+    public function test_un_cliente_suspendido_no_atiende_la_web_pero_si_se_lo_puede_operar_por_consola(): void
+    {
+        $this->cliente('moroso.ccs.com');
+        file_put_contents($this->raiz.'/clientes/moroso.ccs.com/.suspendido', '{}');
+
+        $web = SelectorDeCliente::decidir($this->base, null, 'moroso.ccs.com', null, 'production');
+        $this->assertSame('rechazado', $web['modo']);
+        $this->assertSame(503, $web['http']);
+
+        $consola = SelectorDeCliente::decidir($this->base, 'moroso.ccs.com', null, 'ccs:respaldar', 'production');
+        $this->assertSame('cliente', $consola['modo']);
+    }
 }

@@ -24,7 +24,7 @@ use Illuminate\Console\Command;
  */
 class AprovisionarCliente extends Command
 {
-    protected $signature = 'cliente:aprovisionar {--plan=corporativo : emprendedor|pymes|corporativo}';
+    protected $signature = 'cliente:aprovisionar {--plan=corporativo : emprendedor|pymes|corporativo} {--forzar-cambio-clave : el dueño elige su clave en el primer ingreso aunque SUPERADMIN_PASSWORD esté definida (la usa ccs:alta con una clave temporal)}';
 
     protected $description = 'Da de alta una instalación nueva: migra, siembra la base mínima y fija el plan comercial';
 
@@ -49,7 +49,7 @@ class AprovisionarCliente extends Command
 
         // Con la clave de FÁBRICA (sin SUPERADMIN_PASSWORD en el .env) el dueño tiene que elegir la suya
         // en el primer ingreso: sin esto, `admin1234` quedaba en producción para siempre.
-        if (! env('SUPERADMIN_PASSWORD')) {
+        if (! env('SUPERADMIN_PASSWORD') || $this->option('forzar-cambio-clave')) {
             Usuario::query()->whereHas('rol', fn ($q) => $q->where('clave', 'superadmin'))->update(['debe_cambiar_password' => true]);
         }
 
