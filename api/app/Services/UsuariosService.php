@@ -113,6 +113,11 @@ class UsuariosService
         if ($rol->esDeMando()) {
             throw ValidationException::withMessages(['rol' => 'El superadmin maneja todo: no se edita.']);
         }
+        // De este rol depende quién opera en TODAS las sucursales (`Sesion::esJefe`). Quien tiene solo
+        // `gerencia.usuarios` podía recortárselo, asignárselo a sí mismo y quedar de jefe.
+        if ($rol->clave === 'admin' && ! $sesion->esSuperadmin()) {
+            throw new AccessDeniedHttpException('El rol Administrador solo lo edita el superadmin: de él depende quién puede operar en todas las sucursales.');
+        }
         if (array_key_exists('nombre', $datos)) {
             $rol->nombre = trim($datos['nombre']);
         }
@@ -154,12 +159,8 @@ class UsuariosService
         // La tercera puerta al mismo lugar: dar de alta un usuario NUEVO con un rol más fuerte.
         $this->exigirPuedeAsignarRol($rol, $sesion);
 
-        $limite = PlanCatalogo::limite($this->licencia->plan(), 'usuarios');
-        if ($limite !== null && Usuario::query()->where('activo', true)->count() >= $limite) {
-            throw ValidationException::withMessages([
-                'rolId' => 'El plan actual admite hasta '.$limite.' usuario'.($limite === 1 ? '' : 's').' activo'.($limite === 1 ? '' : 's')
-                    .'. Para sumar otro hay que subir de plan, o desactivar uno que ya no se use.',
-            ]);
+        if ($datos['activo'] ?? true) {
+            $this->exigirCupoDeUsuarios('rolId');
         }
 
         $this->exigirNombreLibre(trim($datos['nombre']), null);
@@ -180,6 +181,21 @@ class UsuariosService
             'relevo_caja' => $relevoCaja,
             'pin' => $pin !== '' ? $pin : null,
         ]);
+    }
+
+    /**
+     * El plan tiene un tope de usuarios ACTIVOS. Se mira al dar de alta y también al reactivar:
+     * si solo se miraba el alta, alcanzaba con crear, desactivar y reactivar todos para pasarse.
+     */
+    private function exigirCupoDeUsuarios(string $campo): void
+    {
+        $limite = PlanCatalogo::limite($this->licencia->plan(), 'usuarios');
+        if ($limite !== null && Usuario::query()->where('activo', true)->count() >= $limite) {
+            throw ValidationException::withMessages([
+                $campo => 'El plan actual admite hasta '.$limite.' usuario'.($limite === 1 ? '' : 's').' activo'.($limite === 1 ? '' : 's')
+                    .'. Para sumar otro hay que subir de plan, o desactivar uno que ya no se use.',
+            ]);
+        }
     }
 
     /**
@@ -214,6 +230,23 @@ class UsuariosService
         }
 
         $echar = false;
+        $propio = $usuario->id === $sesion->usuarioId;
+
+        // La regla de "no se otorga lo que no se tiene", por la puerta de editar: cambiarle la contraseña,
+        // el PIN o el estado a alguien con un rol más fuerte que el tuyo es tomar sus permisos.
+        if (! $propio && ! $sesion->esSuperadmin()) {
+            $propios = array_flip($sesion->permisos);
+            $deMas = array_filter($rolActual->permisos ?? [], fn ($p) => ! in_array($p, Permisos::LEGADAS, true) && ! isset($propios[$p]));
+            if ($deMas) {
+                throw new AccessDeniedHttpException('No podés modificar a este usuario: su rol incluye permisos que vos no tenés ('.implode(', ', $deMas).').');
+            }
+        }
+        // La contraseña propia se cambia en "Mi perfil", que pide la actual: con un token prestado o
+        // robado no alcanzaba más que un PATCH para dejar al dueño de la cuenta afuera.
+        if ($propio && ! empty($datos['password'])) {
+            throw ValidationException::withMessages(['password' => 'Tu propia contraseña se cambia desde Mi perfil: ahí se te pide la actual.']);
+        }
+        $cambios = [];
 
         if (array_key_exists('nombre', $datos)) {
             $this->exigirNombreLibre(trim($datos['nombre']), $usuario->id);
@@ -229,20 +262,26 @@ class UsuariosService
             if ($this->esUltimoSuperadmin($usuario)) {
                 throw ValidationException::withMessages(['rolId' => 'Es el último superadmin activo: primero nombrá otro.']);
             }
+            $cambios[] = ['Rol', $rolActual->nombre, $rol->nombre];
             $usuario->rol_id = $rol->id;
         }
         if (array_key_exists('activo', $datos) && (bool) $datos['activo'] !== $usuario->activo) {
             if (! $datos['activo'] && $this->esUltimoSuperadmin($usuario)) {
                 throw ValidationException::withMessages(['activo' => 'Es el último superadmin activo: primero nombrá otro.']);
             }
+            if ($datos['activo']) {
+                $this->exigirCupoDeUsuarios('activo');
+            }
             $usuario->activo = (bool) $datos['activo'];
             $echar = $echar || ! $usuario->activo;
+            $cambios[] = ['Estado', $usuario->activo ? 'Desactivado' : 'Activo', $usuario->activo ? 'Activo' : 'Desactivado'];
         }
         if (! empty($datos['password'])) {
             $usuario->password = $datos['password'];
             // Si se la cambió otro (restablecer), la persona elige la suya; si se la cambia ella misma, no.
             $usuario->debe_cambiar_password = $usuario->id !== $sesion->usuarioId;
             $echar = true;
+            $cambios[] = ['Contraseña', '', 'Restablecida'];
         }
         /*
          * El PIN es corto a propósito (se tipea con un cliente esperando) — la
@@ -251,6 +290,7 @@ class UsuariosService
          */
         if (! empty($datos['pin'])) {
             $usuario->pin = $datos['pin'];
+            $cambios[] = ['PIN de relevo', '', 'Cambiado'];
         }
         if (array_key_exists('relevoCaja', $datos) && (bool) $datos['relevoCaja'] !== $usuario->relevo_caja) {
             if ($datos['relevoCaja'] && ! $usuario->tienePin()) {
@@ -260,6 +300,14 @@ class UsuariosService
         }
 
         $usuario->save();
+
+        // Quién le cambió qué a quién: lo más delicado del sistema (contraseña, PIN, rol, estado) deja rastro.
+        if ($cambios) {
+            $this->auditoria->registrar(array_map(fn ($c) => [
+                'entidad' => 'usuario', 'entidadId' => $usuario->id, 'ambito' => 'Usuarios', 'detalle' => $usuario->nombre,
+                'campo' => $c[0], 'antes' => $c[1], 'despues' => $c[2], 'usuarioId' => $sesion->usuarioId,
+            ], $cambios));
+        }
 
         // Cambiar la contraseña o desactivar tiene que ECHARLO de donde ya está.
         if ($echar) {

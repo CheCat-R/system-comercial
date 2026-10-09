@@ -24,6 +24,12 @@ class ClientesController extends Controller
         return $s->puede('cta_cte');
     }
 
+    /** Asignar listas de precios a un cliente le abre precios mayoristas: llave propia, a nivel campo. */
+    private function conLlaveListas(Sesion $s): bool
+    {
+        return $s->puede('ventas.listas', 'precios');
+    }
+
     public function index(Request $request): JsonResponse
     {
         $activo = $request->query('activo');
@@ -44,12 +50,12 @@ class ClientesController extends Controller
 
     public function store(GuardarClienteRequest $request, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->publico($this->svc->crear($request->validated(), $this->conLlaveCredito($sesion))), 201);
+        return response()->json($this->svc->publico($this->svc->crear($request->validated(), $this->conLlaveCredito($sesion), $this->conLlaveListas($sesion))), 201);
     }
 
     public function update(GuardarClienteRequest $request, int $id, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->publico($this->svc->editar($id, $request->validated(), $this->conLlaveCredito($sesion))));
+        return response()->json($this->svc->publico($this->svc->editar($id, $request->validated(), $this->conLlaveCredito($sesion), $this->conLlaveListas($sesion))));
     }
 
     public function reactivar(int $id): JsonResponse

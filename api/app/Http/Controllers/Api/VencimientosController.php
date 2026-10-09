@@ -18,24 +18,24 @@ class VencimientosController extends Controller
 {
     public function __construct(private readonly VencimientosService $svc) {}
 
-    public function index(): JsonResponse
+    public function index(Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->listar());
+        return response()->json($this->svc->paraSucursal($sesion->soloSuSucursal())->listar());
     }
 
-    public function resumen(): JsonResponse
+    public function resumen(Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->resumen());
+        return response()->json($this->svc->paraSucursal($sesion->soloSuSucursal())->resumen());
     }
 
-    public function reportes(Request $request): JsonResponse
+    public function reportes(Request $request, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->reportes((string) ($request->query('periodo') ?: 'mes')));
+        return response()->json($this->svc->paraSucursal($sesion->soloSuSucursal())->reportes((string) ($request->query('periodo') ?: 'mes')));
     }
 
-    public function ofertas(): JsonResponse
+    public function ofertas(Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->ofertasEnJuego());
+        return response()->json($this->svc->paraSucursal($sesion->soloSuSucursal())->ofertasEnJuego());
     }
 
     public function crearSesion(Request $request, Sesion $sesion): JsonResponse
@@ -56,12 +56,12 @@ class VencimientosController extends Controller
         return response()->json($this->svc->crearSesion($d), 201);
     }
 
-    public function borradorOferta(int $id): JsonResponse
+    public function borradorOferta(int $id, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->borradorOferta($id));
+        return response()->json($this->svc->paraSucursal($sesion->soloSuSucursal())->borradorOferta($id));
     }
 
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, int $id, Sesion $sesion): JsonResponse
     {
         $d = $request->validate([
             'cantidad' => ['nullable', 'numeric'],
@@ -69,12 +69,12 @@ class VencimientosController extends Controller
             'observaciones' => ['nullable', 'string', 'max:300'],
         ]);
 
-        return response()->json($this->svc->editar($id, $d));
+        return response()->json($this->svc->paraSucursal($sesion->soloSuSucursal())->editar($id, $d));
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(int $id, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->eliminar($id));
+        return response()->json($this->svc->paraSucursal($sesion->soloSuSucursal())->eliminar($id));
     }
 
     public function procesar(Request $request, int $id, Sesion $sesion): JsonResponse
@@ -84,13 +84,13 @@ class VencimientosController extends Controller
             'generarMerma' => ['nullable', 'boolean'],
         ]);
 
-        return response()->json($this->svc->procesar($id, $d, $sesion));
+        return response()->json($this->svc->paraSucursal($sesion->soloSuSucursal())->procesar($id, $d, $sesion));
     }
 
-    public function vincularOferta(Request $request, int $id): JsonResponse
+    public function vincularOferta(Request $request, int $id, Sesion $sesion): JsonResponse
     {
         $d = $request->validate(['ofertaId' => ['required', 'integer']]);
 
-        return response()->json($this->svc->vincularOferta($id, (int) $d['ofertaId']));
+        return response()->json($this->svc->paraSucursal($sesion->soloSuSucursal())->vincularOferta($id, (int) $d['ofertaId']));
     }
 }

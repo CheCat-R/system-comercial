@@ -183,9 +183,57 @@ class LicenciaFirmadaTest extends TestCase
         $svc->registrarReloj();
         $this->assertSame('vencida', $svc->estado()['estado']);
 
-        // ...y volver el reloj para atrás no la revive.
+        // ...y volver el reloj para atrás no la revive: queda en solo lectura hasta corregir la fecha.
         $this->travelBack();
-        $this->assertSame('vencida', $this->exigir()->estado()['estado']);
+        $e = $this->exigir()->estado();
+        $this->assertTrue($e['restringido']);
+        $this->assertStringContainsString('atrasada', $e['motivo']);
+    }
+
+    public function test_un_reloj_atrasado_no_congela_la_licencia_por_vencer(): void
+    {
+        $svc = $this->exigir();
+        $svc->activar($this->clave(2));   // vence en 2 días: "por vencer"
+        $this->assertSame('por_vencer', $svc->estado()['estado']);
+        $this->travelTo(Carbon::now(config('licencia.zona'))->addDay());
+        $svc->registrarReloj();           // el último día que el sistema vio: mañana
+
+        // El dueño atrasa el reloj un año: antes la licencia quedaba "por vencer" para siempre.
+        $this->travelTo(Carbon::now(config('licencia.zona'))->subDay()->subYear());
+        $e = $this->exigir()->estado();
+        $this->assertSame('invalida', $e['estado']);
+        $this->assertTrue($e['restringido']);
+        $this->assertStringContainsString('atrasada', $e['motivo']);
+
+        // Una diferencia chica (hora de verano, un ajuste de unos días) no molesta.
+        $this->travelBack();
+        $this->travelTo(Carbon::now(config('licencia.zona'))->subDays(2));
+        $this->assertFalse($this->exigir()->estado()['restringido']);
+    }
+
+    public function test_una_renovacion_reinicia_el_reloj_pero_la_misma_clave_no(): void
+    {
+        $svc = $this->exigir();
+        $vieja = $this->clave(5);
+        $svc->activar($vieja);
+        $this->travelTo(Carbon::now(config('licencia.zona'))->addDays(8));
+        $svc->registrarReloj();
+        $this->travelTo(Carbon::now(config('licencia.zona'))->subDays(40));   // reloj muy atrasado
+        $this->assertTrue($this->exigir()->estado()['restringido']);
+
+        // Volver a pegar la MISMA clave (o una que no vence más tarde) no lo arregla: sería el truco para reiniciar el reloj.
+        try {
+            $this->exigir()->activar($vieja);
+        } catch (\Throwable) {
+            // vencida a la fecha del reloj atrasado puede o no aceptarse: lo que importa es que sigue restringido
+        }
+        $this->assertTrue($this->exigir()->estado()['restringido']);
+
+        // Una renovación (vence más tarde) es prueba de que intervino el vendedor: el reloj se toma como bueno.
+        $svc = $this->exigir();
+        $svc->activar($this->clave(40));
+        $this->assertFalse($svc->estado()['restringido']);
+        $this->travelBack();
     }
 
     public function test_el_id_de_instalacion_se_genera_una_vez_y_se_conserva(): void

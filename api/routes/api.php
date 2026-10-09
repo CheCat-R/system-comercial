@@ -173,7 +173,7 @@ Route::middleware(['auth:sanctum', 'cambio.password', 'licencia'])->group(functi
     Route::get('/listas', [ListasController::class, 'catalogo']);
     Route::get('/listas/reglas-marca', [ListasController::class, 'reglas']);
     Route::put('/listas/cliente/{clienteId}', [ListasController::class, 'setCliente'])
-        ->whereNumber('clienteId')->middleware('permiso:ventas.listas,ventas.clientes');
+        ->whereNumber('clienteId')->middleware('permiso:ventas.listas,precios');
     Route::middleware('permiso:ventas.listas,precios')->group(function () {
         Route::post('/listas/modalidades', [ListasController::class, 'crearModalidad']);
         Route::patch('/listas/modalidades/{modalidad}', [ListasController::class, 'editarModalidad']);
@@ -423,7 +423,9 @@ Route::middleware(['auth:sanctum', 'cambio.password', 'licencia'])->group(functi
         Route::post('/{id}/anular', [PagosProveedorController::class, 'anular']);
         Route::patch('/{id}/papel', [PagosProveedorController::class, 'papel']);
         // Imputar es del administrador: decidir contra qué documento se descuenta un pago que ya existe.
-        Route::middleware('permiso:gastos_imputar,gastos.pagos_proveedor,compras.pagos')->group(function () {
+        // Pide la ACCIÓN gastos_imputar (o la sección de administración): la sección de Gastos que ve la bandeja,
+        // que el rol Cajero trae de fábrica, NO alcanza para reasignar plata ya pagada.
+        Route::middleware('permiso:gastos_imputar,compras.pagos')->group(function () {
             Route::post('/{id}/imputar', [PagosProveedorController::class, 'imputar']);
             Route::delete('/imputaciones/{id}', [PagosProveedorController::class, 'desimputar']);
             Route::patch('/{id}/destino', [PagosProveedorController::class, 'destino']);
@@ -461,7 +463,7 @@ Route::middleware(['auth:sanctum', 'cambio.password', 'licencia'])->group(functi
         Route::post('/{id}/adjuntos', [GastosController::class, 'subirAdjunto'])->middleware('permiso:gastos.gastos');
         Route::post('/{id}/anular', [GastosController::class, 'anular'])->middleware('permiso:gastos_anular');
         Route::post('/{id}/pagos', [GastosController::class, 'pagar'])->middleware('permiso:'.$pagarGastos);
-        Route::post('/{id}/aplicar-pago', [GastosController::class, 'aplicarPago'])->middleware('permiso:gastos_imputar,gastos.pagos_proveedor,compras.pagos');
+        Route::post('/{id}/aplicar-pago', [GastosController::class, 'aplicarPago'])->middleware('permiso:gastos_imputar,compras.pagos');
     });
 
     Route::prefix('compromisos')->middleware(['permiso:proveedores.ctasctes', 'plan:proveedores.ctasctes'])->group(function () {

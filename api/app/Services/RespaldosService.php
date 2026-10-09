@@ -80,12 +80,21 @@ class RespaldosService
         'auditoria',
     ];
 
-    /** Tablas del schema activo, orden alfabético. `migrations` queda afuera: es bookkeeping del framework, no datos del negocio. */
+    /**
+     * Lo que NO se vuelca. `migrations` es bookkeeping del framework, no datos del negocio. Las otras dos son
+     * CREDENCIALES VIVAS: el ticket de acceso a ARCA (con él se emiten comprobantes con el CUIT de la empresa
+     * mientras dure, sin certificado) y las sesiones abiertas. El volcado se descarga y se guarda en una PC, un
+     * mail o un Drive: no tiene que llevar nada con lo que alguien pueda actuar. Se regeneran solas (el sistema
+     * pide otro ticket y la gente vuelve a entrar).
+     */
+    private const SIN_VOLCAR = ['migrations', 'arca_tokens', 'personal_access_tokens'];
+
+    /** Tablas del schema activo, orden alfabético, sin las de `SIN_VOLCAR`. */
     private function tablas(): array
     {
         return DB::table('information_schema.tables')
             ->where('table_schema', DB::connection()->getDatabaseName())
-            ->where('table_name', '!=', 'migrations')
+            ->whereNotIn('table_name', self::SIN_VOLCAR)
             ->orderBy('table_name')
             ->pluck('table_name')
             ->all();
@@ -414,8 +423,8 @@ class RespaldosService
                  * filas en memoria de PHP, y con unas cientos de miles (un año de
                  * movimientos o auditoría) el respaldo moría por memoria justo
                  * cuando más hacía falta. `chunkById` mantiene el pico plano sin
-                 * importar el tamaño. Solo `arca_tokens` no tiene `id` (su PK es
-                 * `service`) y es de un puñado de filas: esa va entera.
+                 * importar el tamaño. Una tabla sin `id` (si apareciera alguna: son
+                 * de un puñado de filas) va entera.
                  */
                 $cols = null;
                 $emitir = function ($lote) use ($t, $pdo, &$cols, $escribir) {

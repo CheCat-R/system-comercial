@@ -153,11 +153,16 @@ class LicenciaService
             throw new LicenciaInvalida('Esa clave ya venció el '.Carbon::parse($lic->vence)->format('d/m/Y').'. Pedí una vigente.');
         }
 
+        // Una clave que vence MÁS TARDE que la vigente es una renovación: prueba que el vendedor intervino, así que
+        // la fecha del servidor se toma como buena aunque estuviera atrasada. Volver a cargar la misma clave no reinicia nada.
+        $vigente = $this->cargar()['licencia'];
+        $esRenovacion = $vigente === null || $lic->vence > $vigente->vence;
+
         Configuracion::query()->updateOrCreate(
             ['clave' => self::CLAVE_FIRMADA],
             ['valor' => ['token' => Licencia::compactar($clave), 'activadoEn' => now()->toIso8601String()]],
         );
-        $this->registrarReloj();
+        $this->registrarReloj($esRenovacion);
 
         return $this->estado();
     }
@@ -181,13 +186,31 @@ class LicenciaService
         return $real;
     }
 
+    /**
+     * Cuántos días está el reloj del servidor por detrás de la fecha más alta que el sistema vio, si pasa de la
+     * tolerancia (0 = en orden). Sin esto, atrasar el reloj un año el día antes del vencimiento dejaba la licencia
+     * "por vencer" para siempre: la fecha de hoy no avanza y el sistema nunca se entera de que pasó el tiempo.
+     */
+    private function diasDeRelojAtrasado(?Configuracion $reloj): int
+    {
+        $visto = is_array($reloj?->valor) ? ($reloj->valor['visto'] ?? null) : null;
+        if (! is_string($visto) || ! Carbon::hasFormat($visto, 'Y-m-d')) {
+            return 0;
+        }
+        $real = Carbon::now(config('licencia.zona'))->startOfDay();
+        $atraso = (int) round(Carbon::parse($visto, config('licencia.zona'))->startOfDay()->diffInDays($real, false) * -1);
+
+        return $atraso > (int) config('licencia.tolerancia_reloj_dias') ? $atraso : 0;
+    }
+
     /** Anota la fecha de hoy como "la más alta vista". Se llama al entrar y al activar. */
-    public function registrarReloj(): void
+    public function registrarReloj(bool $reiniciar = false): void
     {
         if (! $this->exigida()) {
             return;
         }
-        $hoy = $this->hoy(Configuracion::query()->where('clave', self::CLAVE_RELOJ)->first())->toDateString();
+        $reloj = $reiniciar ? null : Configuracion::query()->where('clave', self::CLAVE_RELOJ)->first();
+        $hoy = $this->hoy($reloj)->toDateString();
         Configuracion::query()->updateOrCreate(['clave' => self::CLAVE_RELOJ], ['valor' => ['visto' => $hoy]]);
     }
 
@@ -254,6 +277,14 @@ class LicenciaService
                 'exigida' => true, 'estado' => $sinClave ? 'sin_licencia' : 'invalida', 'plan' => $this->plan(),
                 'cliente' => null, 'vence' => null, 'diasRestantes' => null, 'modalidad' => null,
                 'motivo' => $datos['motivo'], 'restringido' => true,
+            ];
+        }
+
+        if ($atraso = $this->diasDeRelojAtrasado($datos['filas'][self::CLAVE_RELOJ] ?? null)) {
+            return [
+                'exigida' => true, 'estado' => 'invalida', 'plan' => $this->plan(), 'cliente' => $lic->cliente, 'vence' => $lic->vence,
+                'diasRestantes' => null, 'modalidad' => $lic->modalidad, 'restringido' => true,
+                'motivo' => 'La fecha de este servidor está '.$atraso.' días atrasada respecto de la última vez que se usó el sistema. Corregí la fecha y la hora del servidor; si ya están bien, cargá la clave de renovación.',
             ];
         }
 

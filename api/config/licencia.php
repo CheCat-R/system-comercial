@@ -47,6 +47,14 @@ return [
      */
     'dias_gracia' => 10,
 
+    /**
+     * Cuántos días puede estar el reloj del servidor por DETRÁS de la última fecha que el sistema vio antes de
+     * considerarlo manipulado. Un reloj que se atrasa un año "congela" la licencia: el sistema creería que sigue
+     * siendo el mismo día. Pasada la tolerancia el sistema queda en solo lectura hasta corregir la fecha o
+     * cargar una clave de renovación.
+     */
+    'tolerancia_reloj_dias' => 3,
+
     /** Zona con la que se cuentan los días: el comercio vive en Argentina, no en UTC. */
     'zona' => 'America/Argentina/Buenos_Aires',
 ];

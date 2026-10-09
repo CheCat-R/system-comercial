@@ -6,6 +6,7 @@ use App\Auth\Sesion;
 use App\Auth\Sesiones;
 use App\Models\SesionToken;
 use App\Models\Usuario;
+use App\Support\ProxiesConfiables;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -35,6 +36,8 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Detrás de un proxy, la IP del cliente sale de X-Forwarded-For solo si se declaró en cuál confiar.
+        ProxiesConfiables::aplicar(config('checat.proxies_confiables'));
         Sanctum::usePersonalAccessTokenModel(SesionToken::class);
         // Vencimiento por inactividad, refresco deslizante y baja inmediata de usuarios desactivados.
         Sanctum::authenticateAccessTokensUsing([Sesiones::class, 'validar']);

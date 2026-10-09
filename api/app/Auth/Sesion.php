@@ -86,6 +86,20 @@ final class Sesion
         return $this->esJefe() ? null : $this->sucursalId;
     }
 
+    /**
+     * Un registro que ya existe y es de UNA sucursal: el jefe lo abre, el resto
+     * solo si es de la suya. Es lo que cierra el "pedir el id de otra sucursal".
+     * `$que` es el sujeto del mensaje ("Esa venta"). Un registro sin sucursal
+     * (de administración, de toda la empresa) tampoco es de nadie más que del jefe.
+     */
+    public function exigirSucursal(?int $sucursalDelRegistro, string $que = 'Ese registro'): void
+    {
+        $solo = $this->soloSuSucursal();
+        if ($solo !== null && (int) $sucursalDelRegistro !== $solo) {
+            throw new \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException($que.' es de otra sucursal.');
+        }
+    }
+
     /** La forma con que viaja al panel: los mismos campos que devuelve el login. */
     public function usuarioPublico(): array
     {

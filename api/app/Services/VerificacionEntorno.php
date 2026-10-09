@@ -31,7 +31,7 @@ class VerificacionEntorno
     public function verificar(): array
     {
         $controles = [
-            'entorno', 'depuracion', 'claveApp', 'url', 'cors', 'baseDeDatos', 'migraciones',
+            'entorno', 'depuracion', 'claveApp', 'url', 'cors', 'proxies', 'baseDeDatos', 'migraciones',
             'superadmin', 'plan', 'firmaLicencias', 'registro', 'arca', 'escritura', 'configCacheada', 'copiaAutomatica',
         ];
         $out = [];
@@ -185,6 +185,19 @@ class VerificacionEntorno
             : $this->r('ok', 'Nivel de log razonable');
     }
 
+    private function proxies(): array
+    {
+        $valor = trim((string) config('checat.proxies_confiables'));
+        if ($valor === '') {
+            return $this->r('aviso', 'TRUSTED_PROXIES vacío', 'Si la API está detrás de un proxy (Traefik, nginx, Cloudflare), todos los pedidos parecen venir de una sola IP y el freno del login puede dejar afuera a toda la empresa con 20 intentos fallidos. Poné en TRUSTED_PROXIES la IP o red del proxy. Si la API recibe a los clientes directo, está bien así.');
+        }
+        if ($valor === '*') {
+            return $this->r('aviso', 'TRUSTED_PROXIES=* confía en cualquiera', 'Solo es seguro si la API no se puede alcanzar sin pasar por el proxy; si no, alguien puede inventar su IP y saltearse el freno del login. Lo mejor es listar la IP o red del proxy.');
+        }
+
+        return $this->r('ok', 'Proxies confiables definidos', $valor);
+    }
+
     private function arca(): array
     {
         $cfg = config('arca');
@@ -201,6 +214,14 @@ class VerificacionEntorno
         }
         if ($cfg['pto_vta'] <= 0) {
             return $this->r('fallo', 'ARCA en producción sin punto de venta', 'Completá ARCA_PTO_VTA.');
+        }
+        // La clave privada firma en nombre de la empresa ante ARCA: dentro de la carpeta pública se descarga con una URL.
+        foreach (['cert_path' => 'certificado', 'key_path' => 'clave privada'] as $k => $nombre) {
+            $real = realpath($cfg[$k]) ?: $cfg[$k];
+            $publica = realpath(public_path()) ?: public_path();
+            if (str_starts_with(str_replace('\\', '/', $real), rtrim(str_replace('\\', '/', $publica), '/').'/')) {
+                return $this->r('fallo', 'El '.$nombre.' de ARCA está en la carpeta pública', 'Ruta: "'.$cfg[$k].'". Cualquiera puede descargarlo: movelo fuera de public/ y actualizá ARCA_*_PATH.');
+            }
         }
 
         return $this->r('ok', 'ARCA en producción, certificado legible');

@@ -293,6 +293,14 @@ class ConteosService extends StockCore
             if ($c->estado !== 'cerrado') {
                 throw new ErrorDeNegocio('Cerrá el control antes de aplicarlo: el cierre es la foto final.');
             }
+            // El que GANA el cierre del control es el que mueve el stock: dos "Aplicar" a la vez (doble clic,
+            // dos pantallas) leían los dos "cerrado" y los dos sumaban el mismo ajuste. El UPDATE condicionado
+            // hace que el segundo espere y, al volver, ya no encuentre el control cerrado.
+            $gano = DB::table('conteos')->where('id', $id)->where('estado', 'cerrado')
+                ->update(['estado' => 'aplicado', 'aplicado_en' => now(), 'aplicado_por' => $usuarioId, 'updated_at' => now()]);
+            if (! $gano) {
+                throw new ErrorDeNegocio('Ese control ya se aplicó (o cambió de estado): actualizá la pantalla.');
+            }
             $items = DB::table('conteo_items')->where('conteo_id', $id)->whereNotNull('contado')->get();
             $avisos = [];
             $ajustes = 0;
@@ -322,8 +330,6 @@ class ConteosService extends StockCore
                 ]);
                 $ajustes++;
             }
-            DB::table('conteos')->where('id', $id)->update(['estado' => 'aplicado', 'aplicado_en' => now(), 'aplicado_por' => $usuarioId, 'updated_at' => now()]);
-
             return [...(array) DB::table('conteos')->find($id), 'ajustes' => $ajustes, 'sinDiferencia' => $items->count() - $ajustes, 'avisos' => $avisos];
         });
     }

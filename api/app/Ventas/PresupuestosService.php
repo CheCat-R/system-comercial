@@ -26,7 +26,7 @@ class PresupuestosService
 {
     public const ENTREGAS = ['retiro', 'cadete', 'camioneta'];
 
-    public function __construct(private readonly OperacionesService $inv, private readonly ConfiguracionService $cfg, private readonly ClientesService $clientes) {}
+    public function __construct(private readonly OperacionesService $inv, private readonly ConfiguracionService $cfg, private readonly ClientesService $clientes, private readonly Portero $portero) {}
 
     private function exigirSucursal(object $p, array $opciones): void
     {
@@ -35,31 +35,49 @@ class PresupuestosService
         }
     }
 
-    /** Normaliza renglones y calcula los totales que se CONGELAN. */
-    private function totales(array $items): array
+    /**
+     * Normaliza renglones y calcula los totales que se CONGELAN.
+     *
+     * El precio y el IVA NO son del cliente HTTP: pasan por el mismo portero que
+     * una venta (lista habilitada, precio de la fila, tope de descuento). Lo que
+     * se congela acá es la palabra dada, y después la venta la honra sin pedir
+     * `precio_manual`: si cualquiera pudiera cotizar a cualquier precio, ese
+     * permiso no valdría nada. Pisar el precio de una cotización lo puede hacer
+     * solo quien tiene `precio_manual`.
+     */
+    private function totales(array $items, int $clienteId, int $sucursalId, bool $puedePisarPrecio): array
     {
-        $neto = 0.0;
-        $iva = 0.0;
-        $limpios = [];
+        $validos = [];
         foreach ($items as $it) {
             $cantidad = (float) ($it['cantidad'] ?? 0);
             $precio = (float) ($it['precioLista'] ?? 0);
             $desc = (float) ($it['descuento'] ?? 0);
-            $alic = isset($it['iva']) && is_numeric($it['iva']) ? (float) $it['iva'] : 21.0;
             if (! (int) ($it['productoId'] ?? 0) || $cantidad <= 0) {
                 continue;
             }
-            if ($cantidad > 1_000_000 || $precio > 100_000_000 || $desc < 0 || $desc > 100 || $alic < 0 || $alic > 100) {
+            if ($cantidad > 1_000_000 || $precio > 100_000_000 || $desc < 0 || $desc > 100) {
                 throw new ErrorDeNegocio('Un renglón tiene números fuera de rango.');
             }
-            $netoItem = $cantidad * $precio * (1 - $desc / 100);
+            $validos[] = $it;
+        }
+        $resueltos = $this->portero->resolverRenglones(array_map(fn ($it) => [
+            'productoId' => (int) $it['productoId'], 'presentacionId' => (int) ($it['presentacionId'] ?? 0) ?: null, 'cantidad' => (float) $it['cantidad'],
+            'listaId' => (int) ($it['listaId'] ?? 0) ?: null, 'precioUnitario' => (float) ($it['precioLista'] ?? 0), 'descuento' => (float) ($it['descuento'] ?? 0),
+        ], $validos), $clienteId, $this->cfg->get('ventas'), $puedePisarPrecio, [], [], $sucursalId, false);
+
+        $neto = 0.0;
+        $iva = 0.0;
+        $limpios = [];
+        foreach ($validos as $i => $it) {
+            $r = $resueltos[$i];
+            $netoItem = $r['cantidad'] * $r['precioUnitario'] * (1 - $r['descuento'] / 100);
             $neto += $netoItem;
-            $iva += $netoItem * $alic / 100;
+            $iva += $netoItem * $r['iva'] / 100;
             $limpios[] = [
-                'producto_id' => (int) $it['productoId'], 'presentacion_id' => (int) ($it['presentacionId'] ?? 0) ?: null,
+                'producto_id' => $r['productoId'], 'presentacion_id' => $r['presentacionId'],
                 'nombre' => trim((string) ($it['nombre'] ?? '')), 'detalle' => trim((string) ($it['detalle'] ?? '')),
-                'cantidad' => $cantidad, 'cantidad_armada' => null, 'precio_lista' => Pricing::money($precio), 'descuento' => $desc, 'iva' => $alic,
-                'lista' => (string) ($it['lista'] ?? ''), 'lista_id' => (int) ($it['listaId'] ?? 0) ?: null, 'oferta_nombre' => (string) ($it['ofertaNombre'] ?? ''), 'motivo' => '',
+                'cantidad' => $r['cantidad'], 'cantidad_armada' => null, 'precio_lista' => Pricing::money($r['precioUnitario']), 'descuento' => $r['descuento'], 'iva' => $r['iva'],
+                'lista' => (string) $r['lista'], 'lista_id' => $r['listaId'], 'oferta_nombre' => (string) ($it['ofertaNombre'] ?? ''), 'motivo' => '',
             ];
         }
 
@@ -176,13 +194,13 @@ class PresupuestosService
         return $out;
     }
 
-    public function crear(array $dto, int $sucursalId, int $usuarioId): array
+    public function crear(array $dto, int $sucursalId, int $usuarioId, bool $puedePisarPrecio = false): array
     {
         if (empty($dto['clienteId'])) {
             throw new ErrorDeNegocio('Elegí el cliente del presupuesto.');
         }
         $this->clientes->get((int) $dto['clienteId']);
-        $t = $this->totales($dto['items'] ?? []);
+        $t = $this->totales($dto['items'] ?? [], (int) $dto['clienteId'], $sucursalId, $puedePisarPrecio);
         if (! $t['limpios']) {
             throw new ErrorDeNegocio('Agregá al menos un renglón.');
         }
@@ -210,7 +228,8 @@ class PresupuestosService
         if ($p->estado !== 'borrador') {
             throw new ErrorDeNegocio('Solo un borrador se edita — usá "Reabrir" para re-cotizar.');
         }
-        $t = $this->totales($dto['items'] ?? []);
+        $clienteId = ! empty($dto['clienteId']) ? (int) $dto['clienteId'] : (int) $p->cliente_id;
+        $t = $this->totales($dto['items'] ?? [], $clienteId, (int) $p->sucursal_id, ! empty($opciones['puedePisarPrecio']));
         if (! $t['limpios']) {
             throw new ErrorDeNegocio('Agregá al menos un renglón.');
         }

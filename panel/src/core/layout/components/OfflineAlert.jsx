@@ -11,11 +11,13 @@
  *    una notificación puntual, no un estado permanente.
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Snackbar, Alert } from '@mui/material';
+import { Snackbar, Alert, Button } from '@mui/material';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import { conectividad } from '@core/services/conectividad.js';
 import { sincronizadorOffline } from '@core/offline/sincronizador.js';
-import { contarPendientes } from '@core/offline/colaVentas.js';
+import {
+  contarPendientes, listarConError, reintentarConError, descartarConError,
+} from '@core/offline/colaVentas.js';
 
 const MOSTRAR_RESULTADO_MS = 8000;
 
@@ -33,6 +35,16 @@ export function OfflineAlert() {
     const id = setInterval(tick, 2000);
     return () => clearInterval(id);
   }, [offline]);
+
+  /* Las que el servidor rechazó: no salen solas de la cola, hay que mostrarlas hasta que alguien decida. */
+  const [conError, setConError] = useState([]);
+  useEffect(() => {
+    if (offline) { setConError([]); return undefined; }
+    const tick = () => listarConError().then(setConError);
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => clearInterval(id);
+  }, [offline, sincronizando, ultimoResultado]);
 
   const [resultadoVisible, setResultadoVisible] = useState(null);
   useEffect(() => {
@@ -74,10 +86,40 @@ export function OfflineAlert() {
       >
         <Alert severity={hayProblema ? 'warning' : 'success'} variant="filled" onClose={() => setResultadoVisible(null)} sx={{ alignItems: 'center' }}>
           {sincronizadas} venta{sincronizadas === 1 ? '' : 's'} sincronizada{sincronizadas === 1 ? '' : 's'}.
-          {fallidas > 0 && ` ${fallidas} no se pudo sincronizar — revisala en Ventas.`}
+          {fallidas > 0 && ` ${fallidas} no se pudo registrar: quedó guardada en este equipo.`}
           {stockNegativo.length > 0 && (
             ` Atención, quedó en negativo: ${stockNegativo.map((x) => `${x.producto} (${x.cantidad})`).join(', ')}.`
           )}
+        </Alert>
+      </Snackbar>
+    );
+  }
+
+  if (conError.length > 0) {
+    const n = conError.length;
+    const s1 = n === 1 ? '' : 's';
+    const reintentar = async () => { await reintentarConError(); setConError([]); sincronizadorOffline.intentar(); };
+    const descartar = async () => {
+      const ok = window.confirm(`Vas a descartar ${n} venta${s1} cobrada${s1} sin conexión. Esa plata ya se cobró y NO va a figurar en el sistema. ¿Seguro?`);
+      if (!ok) return;
+      await descartarConError();
+      setConError([]);
+    };
+    return (
+      <Snackbar open anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert
+          severity="error"
+          variant="filled"
+          sx={{ alignItems: 'center' }}
+          action={(
+            <>
+              <Button color="inherit" size="small" onClick={descartar}>Descartar</Button>
+              <Button color="inherit" size="small" sx={{ fontWeight: 700 }} onClick={reintentar}>Reintentar</Button>
+            </>
+          )}
+        >
+          {n} venta{s1} cobrada{s1} sin conexión no se pudo registrar en el sistema.
+          {conError[0]?.ultimoError && ` Motivo: ${conError[0].ultimoError}`}
         </Alert>
       </Snackbar>
     );

@@ -9,11 +9,30 @@ use App\Http\Requests\Compras\GuardarGastoRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class GastosController extends Controller
 {
     public function __construct(private readonly GastosService $svc) {}
+
+    /**
+     * Un gasto existente (su ficha, sus comprobantes, anularlo, pagarlo) solo lo abre el jefe
+     * o la sucursal DEL GASTO. El listado ya filtraba; pedir el id a mano no. Un gasto de toda
+     * la empresa (sin sucursal) es del jefe.
+     */
+    private function exigirGasto(Sesion $sesion, int $gastoId, bool $deLaEmpresa = false): void
+    {
+        if ($sesion->soloSuSucursal() === null) {
+            return;
+        }
+        $fila = DB::table('gastos')->where('id', $gastoId)->first(['sucursal_id']);
+        // `$deLaEmpresa`: para ver y PAGAR, un gasto sin sucursal (la luz, el alquiler) es de todos — la cajera le
+        // paga al proveedor con su caja. Para editarlo, anularlo o tocar sus comprobantes, no.
+        if ($fila && ! ($deLaEmpresa && ! $fila->sucursal_id)) {   // si no existe, el servicio responde 404
+            $sesion->exigirSucursal($fila->sucursal_id ? (int) $fila->sucursal_id : null, 'Ese gasto');
+        }
+    }
 
     public function bootstrap(Sesion $sesion): JsonResponse
     {
@@ -110,8 +129,9 @@ class GastosController extends Controller
 
     /* Adjuntos */
 
-    public function adjunto(int $id): Response
+    public function adjunto(int $id, Sesion $sesion): Response
     {
+        $this->exigirGasto($sesion, (int) DB::table('gasto_adjuntos')->where('id', $id)->value('gasto_id'), true);
         $a = $this->svc->adjunto($id);
 
         return response($a['bytes'], 200, [
@@ -120,15 +140,17 @@ class GastosController extends Controller
         ]);
     }
 
-    public function subirAdjunto(Request $request, int $id): JsonResponse
+    public function subirAdjunto(Request $request, int $id, Sesion $sesion): JsonResponse
     {
         $d = $request->validate(['nombre' => ['nullable', 'string', 'max:160'], 'data' => ['required', 'string']]);
+        $this->exigirGasto($sesion, $id);
 
         return response()->json($this->svc->subirAdjunto($id, $d['nombre'] ?? null, $d['data']), 201);
     }
 
-    public function borrarAdjunto(int $id): JsonResponse
+    public function borrarAdjunto(int $id, Sesion $sesion): JsonResponse
     {
+        $this->exigirGasto($sesion, (int) DB::table('gasto_adjuntos')->where('id', $id)->value('gasto_id'));
         $this->svc->borrarAdjunto($id);
 
         return response()->json(['ok' => true]);
@@ -146,8 +168,10 @@ class GastosController extends Controller
         return response()->json($this->svc->listar($q));
     }
 
-    public function show(int $id): JsonResponse
+    public function show(int $id, Sesion $sesion): JsonResponse
     {
+        $this->exigirGasto($sesion, $id, true);
+
         return response()->json($this->svc->get($id));
     }
 
@@ -158,12 +182,15 @@ class GastosController extends Controller
 
     public function update(GuardarGastoRequest $request, int $id, Sesion $sesion): JsonResponse
     {
+        $this->exigirGasto($sesion, $id);
+
         return response()->json($this->svc->editar($id, $request->validated(), $sesion));
     }
 
-    public function anular(Request $request, int $id): JsonResponse
+    public function anular(Request $request, int $id, Sesion $sesion): JsonResponse
     {
         $d = $request->validate(['motivo' => ['nullable', 'string', 'max:300']]);
+        $this->exigirGasto($sesion, $id);
 
         return response()->json($this->svc->anular($id, $d['motivo'] ?? null));
     }
@@ -174,12 +201,16 @@ class GastosController extends Controller
             'referencia' => ['nullable', 'string', 'max:200'], 'cajaSesionId' => ['nullable', 'integer'], 'operadorId' => ['nullable', 'integer'],
             'formas' => ['nullable', 'array', 'max:10'], 'formas.*.medio' => ['required', 'string'], 'formas.*.importe' => ['required', 'numeric', 'min:0.01'], 'formas.*.fecha' => ['nullable', 'string']]);
 
+        $this->exigirGasto($sesion, $id, true);
+
         return response()->json($this->svc->pagar($id, $d, $sesion));
     }
 
     public function aplicarPago(Request $request, int $id, Sesion $sesion): JsonResponse
     {
         $d = $request->validate(['pagoId' => ['required', 'integer'], 'importe' => ['required', 'numeric', 'min:0.01']]);
+
+        $this->exigirGasto($sesion, $id, true);
 
         return response()->json($this->svc->aplicarPago($id, (int) $d['pagoId'], (float) $d['importe'], $sesion));
     }

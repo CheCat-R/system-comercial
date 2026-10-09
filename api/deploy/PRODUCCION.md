@@ -39,6 +39,14 @@ de fábrica, **plan fijado** (sin plan la instalación se comporta como Corporat
 escritura, configuración en caché y copias automáticas. Sale con código 1 si hay un fallo: sirve para cortar
 un script de instalación. No modifica nada.
 
+### Si la API está detrás de un proxy (Traefik, nginx, Cloudflare)
+
+Definí `TRUSTED_PROXIES` en el `.env` con la IP o red del proxy (`10.0.0.2,172.16.0.0/12`). Sin eso, Laravel ve la IP
+del proxy en TODOS los pedidos: el freno del login cuenta "por IP" a toda la empresa junta (20 intentos fallidos de
+un anónimo dejan afuera a todos) y la auditoría guarda una IP que no es de nadie. Si la API recibe a los clientes
+directo, se deja vacío. Usá `*` solo si la API NO se puede alcanzar sin pasar por el proxy (si no, cualquiera puede
+mandar un `X-Forwarded-For` inventado). Se verifica con `produccion:verificar`.
+
 ## 4. Si alguien se olvida la contraseña
 
 - **Un usuario común:** un administrador se la restablece desde *Gerencia › Usuarios* (la persona elige una
@@ -66,6 +74,7 @@ php artisan produccion:verificar
 
 - El **certificado y la clave privada de ARCA**: guardarlos aparte. Perderlos no se restaura, se tramita otro.
 - El `.env`.
+- Los **tickets de acceso a ARCA** y las **sesiones abiertas** (tablas `arca_tokens` y `personal_access_tokens`): son credenciales vivas y no tienen que viajar en un archivo que se descarga y se guarda en una PC o un mail. Al restaurar, todos vuelven a entrar y el sistema pide un ticket de ARCA nuevo.
 - Las copias automáticas viven en el mismo servidor que la base: no reemplazan a la descarga manual
   (Sistema › Respaldos), que es la copia de afuera.
 

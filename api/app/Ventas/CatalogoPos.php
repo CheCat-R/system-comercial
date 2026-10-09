@@ -64,7 +64,7 @@ class CatalogoPos
                     ->map(function ($f) use ($costo, $opts, $porLista) {
                         $pv = Pricing::precioVentaFila($costo, FilaVenta::desde((array) $f), $opts);
 
-                        return ['listaId' => (int) $f->lista_id, 'orden' => $porLista->get($f->lista_id)['orden'], 'precio' => Pricing::money($pv->netoUnitario), 'precioFinal' => Pricing::money($pv->finalUnitario),
+                        return ['listaId' => (int) $f->lista_id, 'orden' => $porLista->get($f->lista_id)['orden'], 'precio' => Pricing::unitario($pv->netoUnitario), 'precioFinal' => Pricing::money($pv->finalUnitario),
                             'unidadesMinimas' => (float) $f->unidades_minimas, 'unidades' => (float) $f->unidades, 'codigoBarras' => $f->codigo_barras];
                     })->sortBy('orden')->values();
             };
@@ -83,7 +83,7 @@ class CatalogoPos
                 $piso = $filaPiso($efectivas);
                 $items[] = [...$comun, 'key' => 'p'.$p->id, 'presentacionId' => null, 'codigo' => $p->codigo_barras ?: $p->codigo_propio, 'codigoBarras' => $p->codigo_barras,
                     'detalle' => $p->tipo === 'granel' ? 'Suelto (por kg)' : 'Unidad', 'unidad' => $p->tipo === 'granel' ? 'kg' : 'u', 'fraccionable' => $p->tipo === 'granel',
-                    'precio' => Pricing::money($piso['precio'] ?? 0), 'precioFinal' => Pricing::money($piso['precioFinal'] ?? 0), 'sinFormato' => $efectivas->isEmpty(),
+                    'precio' => Pricing::unitario($piso['precio'] ?? 0), 'precioFinal' => Pricing::money($piso['precioFinal'] ?? 0), 'sinFormato' => $efectivas->isEmpty(),
                     'precios' => $precios($efectivas), 'formatosVenta' => $formatosVenta($efectivas),
                     'stock' => Pricing::money($stockDe[$clave((int) $p->id, null, $sucursalId)] ?? 0), 'stockSucursales' => $desglose((int) $p->id, null)];
             }
@@ -93,7 +93,7 @@ class CatalogoPos
                 $tam = (float) $pres->tam_kg;
                 $items[] = [...$comun, 'key' => 's'.$pres->id, 'presentacionId' => (int) $pres->id, 'codigo' => $pres->codigo_barras, 'codigoBarras' => $pres->codigo_barras,
                     'detalle' => $tam < 1 ? round($tam * 1000).' g' : $tam.' kg', 'unidad' => 'u', 'fraccionable' => false,
-                    'precio' => Pricing::money($pisoPres['precio'] ?? 0), 'precioFinal' => Pricing::money($pisoPres['precioFinal'] ?? 0), 'sinFormato' => $suyas->isEmpty(),
+                    'precio' => Pricing::unitario($pisoPres['precio'] ?? 0), 'precioFinal' => Pricing::money($pisoPres['precioFinal'] ?? 0), 'sinFormato' => $suyas->isEmpty(),
                     'precios' => $precios($suyas), 'formatosVenta' => $formatosVenta($suyas),
                     'stock' => Pricing::money($stockDe[$clave((int) $p->id, (int) $pres->id, $sucursalId)] ?? 0), 'stockSucursales' => $desglose((int) $p->id, (int) $pres->id)];
             }

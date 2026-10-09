@@ -115,6 +115,22 @@ abstract class StockCore
     }
 
     /**
+     * RESTA stock SOLO SI HAY, en un único UPDATE: el WHERE re-verifica el saldo
+     * en el mismo instante en que descuenta. Leer el disponible y restar después
+     * (como se hacía) deja pasar a dos ventas del último kilo que leyeron a la vez:
+     * las dos veían 20, las dos restaban, y el stock quedaba en negativo aunque la
+     * configuración lo prohíbe. Devuelve false si no había (quien llama arma el mensaje).
+     */
+    protected function restarSiHay(array $c, float $cantidad): bool
+    {
+        $e = $this->entradaOCrear($c);
+
+        return (bool) DB::table('stock')->where('id', $e->id)
+            ->whereRaw('cantidad >= '.$this->sql($cantidad - self::EPS))
+            ->update(['cantidad' => DB::raw('cantidad - '.$this->sql($cantidad)), 'updated_at' => now()]);
+    }
+
+    /**
      * ENTRÓ MERCADERÍA DE UN PRODUCTO ARCHIVADO → vuelve a discontinuado.
      * "Archivado con stock" es un estado imposible: mercadería que existe y que
      * el sistema no deja vender. Va acá porque es el único lugar por donde

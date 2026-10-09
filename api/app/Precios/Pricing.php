@@ -29,6 +29,16 @@ final class Pricing
     }
 
     /**
+     * Precio NETO de UNA unidad. Con 4 decimales y no 2: el precio de góndola es el que tiene IVA ($581), y su neto
+     * ($480,1653…) redondeado a centavos multiplicado por 10 kg y con IVA daba $5.810,06. Con 4 decimales las cuentas del
+     * ticket vuelven a dar $5.810,00. Las columnas de precio son `double`, guardan esto sin problema.
+     */
+    public static function unitario(float $n): float
+    {
+        return round($n * 10000) / 10000;
+    }
+
+    /**
      * Descuento efectivo de una escala en cascada, en %. Cada uno se aplica
      * sobre lo que quedó del anterior: "30 y 10" es `1 − 0,70 × 0,90 = 37%`,
      * no 40%. Sumarlos es el error caro y silencioso que este cálculo evita.
@@ -199,7 +209,7 @@ final class Pricing
         }
         $final = self::redondearPrecio($neto * (1 + $opts->iva / 100), $opts->redondeo);
 
-        return self::money($final / (1 + $opts->iva / 100));
+        return self::unitario($final / (1 + $opts->iva / 100));
     }
 
     /** Precio NETO de venta de una lista, ajustado al redondeo de góndola. */
@@ -228,7 +238,7 @@ final class Pricing
 
             return new PrecioVenta(
                 unidades: $unidades,
-                netoUnitario: self::money($finalFormato / (1 + $iva / 100) / $unidades),
+                netoUnitario: self::unitario($finalFormato / (1 + $iva / 100) / $unidades),
                 finalUnitario: $finalUnitario,
                 finalFormato: $finalFormato,
             );

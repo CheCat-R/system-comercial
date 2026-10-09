@@ -55,3 +55,18 @@ export async function marcarError(idLocal, motivo) {
   if (!fila) return;
   await put(CAJON, { ...fila, estado: 'error', ultimoError: motivo });
 }
+
+/** Las que el servidor rechazó y esperan que alguien las mire (nunca salen solas de la cola). */
+export async function listarConError() {
+  return (await listarPendientes()).filter((f) => f.estado === 'error');
+}
+
+/** Vuelven a la fila de salida: el próximo envío las intenta de nuevo. */
+export async function reintentarConError() {
+  for (const f of await listarConError()) await put(CAJON, { ...f, estado: 'pendiente', ultimoError: null });
+}
+
+/** La persona decidió dejarlas: la venta cobrada NO queda registrada en el sistema. */
+export async function descartarConError() {
+  for (const f of await listarConError()) await eliminar(CAJON, f.idLocal);
+}

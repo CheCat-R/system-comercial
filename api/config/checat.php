@@ -35,6 +35,12 @@ return [
         'retencion' => (int) env('RESPALDOS_RETENCION', 14),
     ],
 
+    /*
+     * Proxies en los que se confía para leer la IP real del cliente (ver `ProxiesConfiables`).
+     * Vacío = la API recibe a los clientes directo.
+     */
+    'proxies_confiables' => env('TRUSTED_PROXIES'),
+
     /** Largo mínimo de contraseña para contraseñas NUEVAS. */
     'min_password' => 8,
 

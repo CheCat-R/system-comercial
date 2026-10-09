@@ -26,9 +26,12 @@ class CobranzasController extends Controller
         ]));
     }
 
-    public function show(int $id): JsonResponse
+    public function show(int $id, Sesion $sesion): JsonResponse
     {
-        return response()->json($this->svc->get($id));
+        $c = $this->svc->get($id);
+        $sesion->exigirSucursal($c['sucursalId'] ?? null, 'Ese recibo');
+
+        return response()->json($c);
     }
 
     public function pendientesResumen(): JsonResponse
