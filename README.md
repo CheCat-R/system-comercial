@@ -16,7 +16,7 @@ Cada carpeta tiene su propio README con la puesta en marcha.
 
 ## Levantar en local (XAMPP)
 
-Requiere MySQL/MariaDB de XAMPP corriendo, PHP 8.2+ y Node 20+.
+Requiere MySQL/MariaDB de XAMPP corriendo, PHP 8.2+ y Node 22+.
 
 ```bash
 # API (desde api/): primera vez

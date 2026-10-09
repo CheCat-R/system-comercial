@@ -5,7 +5,7 @@
   "description": "Modular, scalable CRM/ERP framework for retail businesses. Feature-based architecture ready for enterprise growth and TypeScript migration.",
   "type": "module",
   "engines": {
-    "node": ">=18.18.0"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "vite",
