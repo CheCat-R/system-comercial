@@ -489,7 +489,10 @@ export function GastoFormModal({ gastoId, onChange }) {
         <div className={s.field}>
           <label>Tipo</label>
           <select value={f.tipoDoc} onChange={set('tipoDoc')} disabled={bloqueado}>
-            {Object.entries(TIPOS_DOC_GASTO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {Object.entries(TIPOS_DOC_GASTO)
+              // La nota de crédito no se ofrece para cargar (sumaría en vez de restar); un gasto viejo que ya lo es la conserva.
+              .filter(([k]) => k !== 'nota_credito' || f.tipoDoc === 'nota_credito')
+              .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </div>
         <div className={s.field}>

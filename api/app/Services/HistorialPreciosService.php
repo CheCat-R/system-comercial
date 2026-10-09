@@ -19,13 +19,15 @@ class HistorialPreciosService
 {
     public function __construct(private readonly ConfiguracionService $cfg) {}
 
-    /** @return array<int, array{productoId:int, listaId:int, precio:float}> */
+    /** @return array<int, array{productoId:int, presentacionId:?int, listaId:int, precio:float}> */
     private function preciosActuales(array $productoIds): array
     {
         $cfg = $this->cfg->get('ventas');
         $prods = DB::table('productos')->whereIn('id', $productoIds)->get();
         $formatos = DB::table('producto_proveedores')->whereIn('producto_id', $productoIds)->orderBy('id')->get()->groupBy('producto_id');
-        $plistas = DB::table('producto_listas')->whereIn('producto_id', $productoIds)->whereNull('presentacion_id')->get()->groupBy('producto_id');
+        // Las filas de TODOS los formatos de venta: el de la madre (presentacion_id null) y el de cada paquete fraccionado.
+        $plistas = DB::table('producto_listas')->whereIn('producto_id', $productoIds)->get()->groupBy('producto_id');
+        $tamPaquete = DB::table('presentaciones')->whereIn('producto_id', $productoIds)->pluck('tam_kg', 'id');
         $vivas = DB::table('listas_venta')->where('activa', true)->pluck('id')->flip();
 
         $out = [];
@@ -37,7 +39,13 @@ class HistorialPreciosService
                 if (! isset($vivas[$pl->lista_id])) {
                     continue;
                 }
-                $out[] = ['productoId' => $p->id, 'listaId' => $pl->lista_id, 'precio' => Pricing::precioVentaFila($cn, FilaVenta::desde((array) $pl), $opts)->finalUnitario];
+                // El paquete se cotiza con el costo del kilo × su tamaño (igual que al venderlo).
+                $presId = $pl->presentacion_id ? (int) $pl->presentacion_id : null;
+                if ($presId && ! isset($tamPaquete[$presId])) {
+                    continue;
+                }
+                $costo = $presId ? Pricing::costoNetoPresentacion($cn, (float) $tamPaquete[$presId]) : $cn;
+                $out[] = ['productoId' => $p->id, 'presentacionId' => $presId, 'listaId' => $pl->lista_id, 'precio' => Pricing::precioVentaFila($costo, FilaVenta::desde((array) $pl), $opts)->finalUnitario];
             }
         }
 
@@ -54,24 +62,24 @@ class HistorialPreciosService
         // El último precio registrado por (producto, lista).
         $ultimos = DB::table('precio_historial as h')
             ->whereIn('producto_id', $ids)
-            ->whereRaw('h.id = (SELECT MAX(id) FROM precio_historial WHERE producto_id = h.producto_id AND lista_id = h.lista_id)')
-            ->get(['producto_id', 'lista_id', 'precio']);
+            ->whereRaw('h.id = (SELECT MAX(id) FROM precio_historial WHERE producto_id = h.producto_id AND lista_id = h.lista_id AND presentacion_id <=> h.presentacion_id)')
+            ->get(['producto_id', 'presentacion_id', 'lista_id', 'precio']);
         $ultimo = [];
         foreach ($ultimos as $r) {
-            $ultimo[$r->producto_id.':'.$r->lista_id] = (float) $r->precio;
+            $ultimo[$r->producto_id.':'.($r->presentacion_id ?? '').':'.$r->lista_id] = (float) $r->precio;
         }
         $filas = [];
         // Una sola fecha para todo el lote: `ultimoCambio()` agrupa por igualdad
         // exacta de `fecha` para contar cuántos productos cambiaron en esta tanda.
         $fecha = now();
         foreach ($actuales as $a) {
-            $k = $a['productoId'].':'.$a['listaId'];
+            $k = $a['productoId'].':'.($a['presentacionId'] ?? '').':'.$a['listaId'];
             $prev = $ultimo[$k] ?? null;
             if ($prev !== null && abs($prev - $a['precio']) <= 0.005) {
                 continue;
             }
             $filas[] = [
-                'producto_id' => $a['productoId'], 'lista_id' => $a['listaId'], 'fecha' => $fecha,
+                'producto_id' => $a['productoId'], 'presentacion_id' => $a['presentacionId'], 'lista_id' => $a['listaId'], 'fecha' => $fecha,
                 'precio_anterior' => $prev, 'precio' => Pricing::money($a['precio']),
                 'origen' => $prev === null ? 'inicial' : $origen,
                 'detalle' => $opts['detalle'] ?? '', 'usuario_id' => $opts['usuarioId'] ?? null,
@@ -110,20 +118,21 @@ class HistorialPreciosService
             ->join('listas_venta as l', 'l.id', '=', 'h.lista_id')
             ->join('modalidades_venta as mo', 'mo.id', '=', 'l.modalidad_id')
             ->leftJoin('usuarios as u', 'u.id', '=', 'h.usuario_id')
+            ->leftJoin('presentaciones as pr', 'pr.id', '=', 'h.presentacion_id')
             ->when(! empty($q['productoId']), fn ($b) => $b->where('h.producto_id', (int) $q['productoId']))
             ->when(! empty($q['desde']), fn ($b) => $b->where('h.fecha', '>=', Carbon::parse($q['desde'])))
             ->orderByDesc('h.id')
             ->limit(min((int) ($q['limit'] ?? 500), 2000))
             ->get([
                 'h.id', 'h.fecha', 'h.producto_id', 'h.lista_id', 'h.precio_anterior', 'h.precio', 'h.origen', 'h.detalle',
-                'p.nombre as producto', 'p.codigo_barras as codigo', 'p.codigo_propio', 'p.marca_id', 'm.nombre as marca',
+                'h.presentacion_id', 'pr.tam_kg as paquete_kg', 'p.nombre as producto', 'p.codigo_barras as codigo', 'p.codigo_propio', 'p.marca_id', 'm.nombre as marca',
                 'l.numero as lista_numero', 'l.nombre as lista_nombre', 'mo.nombre as modalidad', 'u.nombre as usuario',
             ]);
 
         return $filas->map(fn ($f) => [
-            'id' => $f->id, 'fecha' => $f->fecha, 'productoId' => $f->producto_id, 'listaId' => $f->lista_id,
+            'id' => $f->id, 'fecha' => $f->fecha, 'productoId' => $f->producto_id, 'presentacionId' => $f->presentacion_id, 'listaId' => $f->lista_id,
             'precioAnterior' => $f->precio_anterior !== null ? (float) $f->precio_anterior : null, 'precio' => (float) $f->precio,
-            'origen' => $f->origen, 'detalle' => $f->detalle, 'producto' => $f->producto, 'codigo' => $f->codigo,
+            'origen' => $f->origen, 'detalle' => $f->detalle, 'producto' => $f->producto.($f->presentacion_id ? ' · paquete '.(float) $f->paquete_kg.' kg' : ''), 'codigo' => $f->codigo,
             'codigoPropio' => $f->codigo_propio, 'marcaId' => $f->marca_id, 'marca' => $f->marca,
             'listaNumero' => $f->lista_numero, 'listaNombre' => $f->lista_nombre, 'modalidad' => $f->modalidad, 'usuario' => $f->usuario,
             'lista' => $f->modalidad.' '.$f->lista_numero.($f->lista_nombre ? ' · '.$f->lista_nombre : ''),

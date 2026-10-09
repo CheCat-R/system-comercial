@@ -373,6 +373,7 @@ class GastosService
         if (! in_array($letra, Documentos::LETRAS, true) || ! in_array($tipoDoc, self::TIPOS_DOC, true)) {
             throw new ErrorDeNegocio('Tipo o letra del comprobante inválidos.');
         }
+        self::rechazarNotaDeCredito($tipoDoc);
         $this->chequearDuplicado($proveedorId, $letra, $numero);
         // La sucursal del gasto: el jefe elige (null = toda la empresa), el resto graba en la suya.
         $sucursalId = $sesion->esJefe() ? ((int) ($d['sucursalId'] ?? 0) ?: null) : $sesion->sucursalId;
@@ -407,6 +408,18 @@ class GastosService
         });
 
         return $this->get($id);
+    }
+
+    /**
+     * Un gasto cargado como "nota de crédito" SUMABA: se guardaba con importe positivo y todos los totales (resumen,
+     * cuentas a pagar, estado de cuenta del proveedor) lo trataban como un gasto más. Restar de verdad pide tocar cada
+     * total; hasta entonces no se carga de esa forma. Los que ya existen se siguen mostrando.
+     */
+    private static function rechazarNotaDeCredito(string $tipoDoc): void
+    {
+        if ($tipoDoc === 'nota_credito') {
+            throw new ErrorDeNegocio('Una nota de crédito no se carga como gasto: sumaría en vez de restar. Si el proveedor corrigió una factura, anulá el gasto original y cargá el importe correcto.');
+        }
     }
 
     /** Con pagos registrados solo se tocan los campos descriptivos. */
@@ -447,6 +460,9 @@ class GastosService
             if (! empty($d['tipoDoc'])) {
                 if (! in_array($d['tipoDoc'], self::TIPOS_DOC, true)) {
                     throw new ErrorDeNegocio('Tipo de comprobante inválido.');
+                }
+                if ($d['tipoDoc'] !== $g->tipo_doc) {
+                    self::rechazarNotaDeCredito($d['tipoDoc']);
                 }
                 $patch['tipo_doc'] = $d['tipoDoc'];
             }
@@ -732,7 +748,7 @@ class GastosService
         if ($plantillas->isEmpty()) {
             return ['periodo' => $periodo, 'inicio' => $inicio->toIso8601String(), 'pendientes' => [], 'emitidos' => []];
         }
-        $emitidos = DB::table('gastos')->whereIn('recurrente_id', $plantillas->pluck('id'))->where('estado', '!=', 'anulado')->get(['id', 'recurrente_id', 'fecha']);
+        $emitidos = DB::table('gastos')->whereIn('recurrente_id', $plantillas->pluck('id'))->where('estado', '!=', 'anulado')->get(['id', 'recurrente_id', 'fecha', 'periodo_recurrente']);
         $pendientes = [];
         $yaEstan = [];
         foreach ($plantillas as $p) {
@@ -740,10 +756,23 @@ class GastosService
             // Desde el día 1 (setMonth no desborda desde un día 1) hasta el mes siguiente, exclusivo.
             $desde = $inicio->copy()->subMonthsNoOverflow($meses - 1)->utc();
             $hasta = $inicio->copy()->addMonthNoOverflow()->utc();
-            $previo = $emitidos->first(function ($g) use ($p, $desde, $hasta) {
+            // Los períodos que cubre la frecuencia de esta plantilla, hasta el pedido inclusive ("2026-01", "2026-02", "2026-03").
+            $ventana = [];
+            for ($k = 0; $k < $meses; $k++) {
+                $ventana[] = $inicio->copy()->subMonthsNoOverflow($k)->format('Y-m');
+            }
+            // El período lo dice el gasto generado (`periodo_recurrente`), NO su fecha: la fecha se corrige cuando llega el
+            // comprobante y movía el gasto de mes (el período volvía a figurar pendiente y se generaba un segundo alquiler).
+            $previo = $emitidos->first(function ($g) use ($p, $desde, $hasta, $ventana) {
+                if ((int) $g->recurrente_id !== (int) $p->id) {
+                    return false;
+                }
+                if ($g->periodo_recurrente !== null) {
+                    return in_array($g->periodo_recurrente, $ventana, true);
+                }
                 $f = Carbon::parse($g->fecha);
 
-                return (int) $g->recurrente_id === (int) $p->id && $f->gte($desde) && $f->lt($hasta);
+                return $f->gte($desde) && $f->lt($hasta);
             });
             if ($previo) {
                 $yaEstan[] = ['plantilla' => Fila::camel($p), 'gastoId' => $previo->id, 'fecha' => Fila::iso($previo->fecha)];
@@ -776,7 +805,7 @@ class GastosService
                     'proveedor_id' => $p['proveedorId'], 'proveedor_texto' => '', 'categoria_id' => $p['categoriaId'], 'sucursal_id' => $p['sucursalId'],
                     'descripcion' => $p['nombre'].' · '.$periodo, 'condicion_pago' => 'cuenta_corriente', 'vencimiento' => Carbon::parse($x['vencimiento'])->utc(),
                     'neto' => Documentos::money($p['importeEstimado']), 'iva' => 0, 'otros' => 0, 'total' => Documentos::money($p['importeEstimado']), 'pagado' => 0, 'estado' => 'pendiente',
-                    'recurrente_id' => $p['id'], 'observaciones' => 'Generado desde Gastos fijos. Corregí el importe cuando llegue el comprobante.', 'usuario_id' => $usuarioId,
+                    'recurrente_id' => $p['id'], 'periodo_recurrente' => $periodo, 'observaciones' => 'Generado desde Gastos fijos. Corregí el importe cuando llegue el comprobante.', 'usuario_id' => $usuarioId,
                     'created_at' => now(), 'updated_at' => now(),
                 ]);
             }

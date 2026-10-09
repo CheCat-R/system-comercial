@@ -222,8 +222,11 @@ class ComprobantesService
 
     /* ============================ El pie ============================ */
 
-    /** Lo que ya no se trae NO entra por una factura de compra. */
-    private function validarProductosComprables(array $items): void
+    /**
+     * Lo que ya no se trae NO entra por una factura de compra. Una NOTA (devolución o ajuste) no es una compra: justo el
+     * caso típico de dar de baja un producto es devolverle al proveedor lo que quedó, así que ahí solo se exige que exista.
+     */
+    private function validarProductosComprables(array $items, bool $exigirActivos = true): void
     {
         $ids = array_values(array_unique(array_filter(array_map(fn ($it) => (int) ($it['productoId'] ?? 0), $items))));
         if (! $ids) {
@@ -234,7 +237,7 @@ class ComprobantesService
             throw new ErrorDeNegocio('Hay un producto inexistente en el detalle.');
         }
         $dados = $existen->where('estado', '!=', 'activo');
-        if ($dados->isNotEmpty()) {
+        if ($exigirActivos && $dados->isNotEmpty()) {
             throw new ErrorDeNegocio('Estos productos ya no se compran: '.$dados->map(fn ($d) => $d->nombre.' ('.$d->estado.')')->implode(', ').'. Si volvés a traerlos, reactivalos en Productos y cargá la factura de nuevo.');
         }
     }
@@ -307,7 +310,9 @@ class ComprobantesService
 
         return ['items' => $items, 'bonifPct' => $bonifPct, 'bonificacionImporte' => Documentos::money($bonificacionImporte), 'subtotalNeto' => Documentos::money($subtotalNeto),
             'ivaTotal' => Documentos::money($ivaTotal), 'percepciones' => $percepciones, 'percepcionesTotal' => Documentos::money($percTotal),
-            'total' => Documentos::money($subtotalNeto + $ivaTotal + $percTotal)];
+            // El total es la SUMA de las partes ya redondeadas (neto + IVA + percepciones): redondeándolo una sola vez sobre importes
+            // sin redondear, ~1 de cada 5 facturas con descuento quedaba un centavo arriba de lo que muestra su pie.
+            'total' => Documentos::money(Documentos::money($subtotalNeto) + Documentos::money($ivaTotal) + Documentos::money($percTotal))];
     }
 
     /** Las cuotas del compromiso, validadas contra lo que queda en cuenta corriente. */
@@ -461,7 +466,7 @@ class ComprobantesService
         if (empty($dto['items'])) {
             throw new ErrorDeNegocio('Agregá al menos un ítem.');
         }
-        $this->validarProductosComprables($dto['items']);
+        $this->validarProductosComprables($dto['items'], ! in_array($dto['tipo'] ?? '', ['nota_credito', 'nota_debito'], true));
         $usuarioId = $opciones['usuarioId'] ?? null;
 
         // Un monotributista o exento NO discrimina IVA.

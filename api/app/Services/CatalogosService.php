@@ -194,6 +194,11 @@ class CatalogosService
         DB::transaction(function () use ($d, $tipo, $desdeId, $haciaId) {
             foreach ($d['mover'] as [$tabla, $col, $unicoCon]) {
                 if ($unicoCon) {
+                    // Las subcategorías repetidas se borran, pero antes los productos que las usaban pasan a la equivalente del
+                    // destino: sin esto la FK (`nullOnDelete`) los dejaba SIN subcategoría, fuera de filtros, reglas y reportes por rubro.
+                    if ($tabla === 'subcategorias') {
+                        DB::statement('UPDATE productos p JOIN subcategorias o ON o.id = p.subcategoria_id JOIN subcategorias d ON d.categoria_id = ? AND d.nombre = o.nombre SET p.subcategoria_id = d.id WHERE o.categoria_id = ?', [$haciaId, $desdeId]);
+                    }
                     // Si el destino ya tiene el par, la fila del origen sobra (chocaría con el único).
                     DB::statement("DELETE o FROM `$tabla` o WHERE o.`$col` = ? AND EXISTS (SELECT 1 FROM (SELECT `$unicoCon` FROM `$tabla` WHERE `$col` = ?) d WHERE d.`$unicoCon` = o.`$unicoCon`)", [$desdeId, $haciaId]);
                 }

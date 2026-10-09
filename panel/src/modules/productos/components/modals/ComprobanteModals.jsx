@@ -755,7 +755,8 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
   /** Cuál de los dos modales chicos del pie está abierto: null | 'bonificacion' | 'percepciones'. */
   const [modalPie, setModalPie] = useState(null);
 
-  const total = tot.neto + tot.iva + percTotal;
+  // La suma de las partes ya redondeadas, igual que el pie que arma la API: el total y lo que se paga tienen que coincidir al centavo.
+  const total = r2(r2(tot.neto) + r2(tot.iva) + r2(percTotal));
 
   /**
    * ¿CIERRA CON EL PAPEL?
