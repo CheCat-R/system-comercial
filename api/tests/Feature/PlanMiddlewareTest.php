@@ -108,7 +108,10 @@ class PlanMiddlewareTest extends TestCase
         $this->conToken($token)->getJson('/api/auth/yo')->assertOk()
             ->assertJsonPath('plan.id', 'pymes')
             ->assertJsonPath('plan.claves', fn ($claves) => in_array('almacen.fraccionamiento', $claves, true)
-                && ! in_array('gerencia.auditoria', $claves, true));
+                && ! in_array('gerencia.auditoria', $claves, true))
+            // Los topes viajan para que el panel deshabilite "+ Nueva sucursal" antes de chocar con ellos.
+            ->assertJsonPath('plan.limites.sucursales', 3)
+            ->assertJsonPath('plan.limites.usuarios', 10);
     }
 
     public function test_corporativo_viaja_con_claves_null_no_una_lista(): void
@@ -118,6 +121,7 @@ class PlanMiddlewareTest extends TestCase
 
         $this->conToken($token)->getJson('/api/auth/yo')->assertOk()
             ->assertJsonPath('plan.id', 'corporativo')
-            ->assertJsonPath('plan.claves', null);
+            ->assertJsonPath('plan.claves', null)
+            ->assertJsonPath('plan.limites.sucursales', null);
     }
 }

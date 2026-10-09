@@ -11,7 +11,7 @@
  *   - roles de sistema: editables, no borrables.
  *   - usuarios: se desactivan, nunca se borran (viven en los historiales).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { httpClient } from '@core/services/httpClient.js';
 import { AyudaButton } from '@shared/components/AyudaButton/AyudaButton.jsx';
 import { useAuth } from '@core/auth/AuthContext.jsx';
@@ -156,6 +156,84 @@ function UsuarioModal({ usuario, roles, onGuardar, onCerrar }) {
   );
 }
 
+/* ---------------- Modal de sucursal (alta / edición) ---------------- */
+
+/**
+ * Una sucursal es un local: su nombre, su punto de venta de ARCA (cada local
+ * tiene el suyo) y el domicilio que sale impreso en SUS comprobantes. La
+ * distribuidora es el depósito central y hay una sola; el resto son express.
+ * La API valida lo mismo (punto de venta repetido, segunda distribuidora,
+ * tope del plan): acá se evita el viaje de ida y vuelta cuando se puede.
+ */
+function SucursalModal({ sucursal, sucursales, onGuardar, onCerrar }) {
+  const esAlta = !sucursal;
+  const [nombre, setNombre] = useState(sucursal?.nombre ?? '');
+  const [tipo, setTipo] = useState(sucursal?.tipo ?? 'express');
+  const [puntoVenta, setPuntoVenta] = useState(sucursal?.puntoVenta ?? '');
+  const [direccion, setDireccion] = useState(sucursal?.direccion ?? '');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState(null);
+
+  const otraDistribuidora = sucursales.find((x) => x.tipo === 'distribuidora' && x.id !== sucursal?.id);
+
+  const guardar = async () => {
+    setGuardando(true);
+    setError(null);
+    const fallo = await onGuardar({ nombre, tipo, puntoVenta, direccion });
+    setGuardando(false);
+    if (fallo) setError(fallo); else onCerrar();
+  };
+
+  return (
+    <ModalShell
+      title={esAlta ? 'Nueva sucursal' : `Editar ${sucursal.nombre}`}
+      onClose={onCerrar}
+      footer={[
+        { texto: 'Cancelar', clase: 'btn-ghost', onClick: onCerrar },
+        { texto: guardando ? 'Guardando…' : 'Guardar', clase: 'btn-primary', onClick: guardar },
+      ]}
+    >
+      {error && <div className={cx(s.callout, s.warn)}>{error}</div>}
+      <div className={s.field}>
+        <label>Nombre <span className={s.req}>*</span></label>
+        <input autoFocus value={nombre} maxLength={80} placeholder="Ej: Sucursal Centro" onChange={(e) => setNombre(e.target.value)} />
+      </div>
+      <div className={s['form-grid']}>
+        <div className={s.field}>
+          <label>Tipo</label>
+          <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <option value="express">Express (local de venta)</option>
+            <option value="distribuidora" disabled={!!otraDistribuidora}>Distribuidora (depósito central)</option>
+          </select>
+          {otraDistribuidora && (
+            <div className={s.hint}>La distribuidora ya es {otraDistribuidora.nombre}: hay una sola.</div>
+          )}
+        </div>
+        <div className={s.field}>
+          <label>Punto de venta de ARCA</label>
+          <input
+            value={puntoVenta}
+            maxLength={5}
+            inputMode="numeric"
+            placeholder="Ej: 00002"
+            style={{ fontFamily: 'var(--crm-font-mono, monospace)' }}
+            onChange={(e) => setPuntoVenta(e.target.value.replace(/\D/g, ''))}
+          />
+        </div>
+      </div>
+      <div className={s.field}>
+        <label>Domicilio del comprobante</label>
+        <input value={direccion} maxLength={200} placeholder="Calle 123, Formosa" onChange={(e) => setDireccion(e.target.value)} />
+        <div className={s.hint}>
+          Es el que sale impreso en la factura de este local. El punto de venta tiene que estar
+          dado de alta en ARCA (Administración de puntos de venta, sistema “Web Services”) antes
+          de facturar con él; dos locales no pueden compartirlo.
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
 /* ---------------- Modal de rol (alta / permisos) ---------------- */
 
 /**
@@ -289,7 +367,7 @@ function RolModal({ rol, catalogo, onGuardar, onCerrar }) {
 export function GerenciaPage() {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { planIncluye } = usePlan();
+  const { planIncluye, limites } = usePlan();
   // Solo las secciones del rol: lo no asignado no existe en el menú. El plan
   // NO filtra acá a propósito — una sección que el rol puede ver pero el plan
   // no incluye sigue en el sub-menú (con su candado), para que el dueño vea
@@ -301,10 +379,8 @@ export function GerenciaPage() {
   const [roles, setRoles] = useState([]);
   const [catalogo, setCatalogo] = useState([]);
   const [sucursales, setSucursales] = useState([]);
-  /** Ediciones sin guardar de la tabla de sucursales: { [id]: {puntoVenta, direccion} }. */
-  const [edits, setEdits] = useState({});
   const [aviso, setAviso] = useState(null);
-  const [modal, setModal] = useState(null); // {tipo:'usuario'|'rol', datos}
+  const [modal, setModal] = useState(null); // {tipo:'usuario'|'rol'|'sucursal', datos}
 
   /*
    * Solo se pide si el rol PUEDE ver Usuarios y roles. Antes se pedía siempre,
@@ -322,7 +398,6 @@ export function GerenciaPage() {
         httpClient.get('/sucursales'),
       ]);
       setUsuarios(us); setRoles(rs); setSucursales(sc);
-      setEdits({});
     } catch (e) {
       setAviso({ tipo: 'err', texto: e?.data?.message || 'No se pudo conectar con la API.' });
       setUsuarios([]);
@@ -348,6 +423,7 @@ export function GerenciaPage() {
     return () => clearTimeout(t);
   }, [aviso]);
 
+  const ultimoError = useRef(null);
   const mutar = useCallback(async (fn, okMsg) => {
     try {
       await fn();
@@ -355,7 +431,8 @@ export function GerenciaPage() {
       await cargar();
       return true;
     } catch (e) {
-      setAviso({ tipo: 'err', texto: e?.data?.message || 'No se pudo guardar.' });
+      ultimoError.current = e?.data?.message || 'No se pudo guardar.';
+      setAviso({ tipo: 'err', texto: ultimoError.current });
       return false;
     }
   }, [cargar]);
@@ -364,6 +441,9 @@ export function GerenciaPage() {
 
   const pagUsuarios = usePaginado(usuarios ?? [], 'gerenciaUsuarios');
 
+  // El plan pone un tope a las sucursales (null = sin tope): al llegar, el botón avisa en vez de fallar al guardar.
+  const topeSucursales = limites.sucursales ?? null;
+  const sucursalesAlTope = topeSucursales !== null && sucursales.length >= topeSucursales;
   if (!secciones.length) {
     return (
       <div style={{ padding: 'var(--crm-space-6)' }}>
@@ -386,14 +466,22 @@ export function GerenciaPage() {
         desc={`Sesión de ${user?.name ?? '—'} (superadmin). Los usuarios entran con su contraseña; cada rol define qué puede hacer cada uno.`}
         actions={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {/* Las sucursales no se crean desde acá: son estructura de la
-                empresa y se editan las que hay. Sin este `null`, la pestaña
-                ofrecía "+ Nuevo rol", que no es lo que se está mirando. */}
+            {/* Cada pestaña ofrece SU alta: sin esta separación, la de
+                sucursales ofrecía "+ Nuevo rol", que no es lo que se mira. */}
             {tab === 'usuarios' && (
               <Btn variant="btn-primary" onClick={() => setModal({ tipo: 'usuario', datos: null })}>+ Nuevo usuario</Btn>
             )}
             {tab === 'roles' && (
               <Btn variant="btn-primary" onClick={() => setModal({ tipo: 'rol', datos: null })}>+ Nuevo rol</Btn>
+            )}
+            {tab === 'sucursales' && (
+              <Btn
+                variant="btn-primary"
+                disabled={sucursalesAlTope}
+                onClick={() => setModal({ tipo: 'sucursal', datos: null })}
+              >
+                + Nueva sucursal
+              </Btn>
             )}
             <AyudaButton categoriaId="gerencia-usuarios" />
           </div>
@@ -407,9 +495,10 @@ export function GerenciaPage() {
             type="button"
             className={cx(s.badge)}
             style={{
-              cursor: 'pointer', padding: '7px 16px', fontSize: 13, border: '1px solid var(--crm-color-border)',
+              cursor: 'pointer', padding: '7px 16px', fontSize: 13,
+              border: `1px solid ${tab === id ? 'var(--crm-color-primary)' : 'var(--crm-color-border)'}`,
               ...(tab === id
-                ? { background: 'var(--crm-color-primary)', color: 'var(--crm-color-primary-contrast)', borderColor: 'var(--crm-color-primary)' }
+                ? { background: 'var(--crm-color-primary)', color: 'var(--crm-color-primary-contrast)' }
                 : {}),
             }}
             onClick={() => setTab(id)}
@@ -515,6 +604,12 @@ export function GerenciaPage() {
             domicilio y con su numeración correlativa aparte. El <strong>domicilio</strong> de acá
             es el que sale impreso en la factura de ese local — no el de la empresa.
           </div>
+          {sucursalesAlTope && (
+            <div className={cx(s.callout, s.warn)}>
+              Tu plan admite hasta <strong>{topeSucursales} sucursal{topeSucursales === 1 ? '' : 'es'}</strong> y ya
+              están cargadas. Para sumar otra hay que subir de plan: hablá con CheCAT.
+            </div>
+          )}
           <Table
             cols={[
               { h: 'Sucursal' }, { h: 'Tipo' }, { h: 'Punto de venta' },
@@ -522,62 +617,27 @@ export function GerenciaPage() {
             ]}
             empty="Sin sucursales."
           >
-            {sucursales.map((su) => {
-              const ed = edits[su.id] ?? {};
-              const pv = ed.puntoVenta ?? su.puntoVenta ?? '';
-              const dir = ed.direccion ?? su.direccion ?? '';
-              const sucio = pv !== (su.puntoVenta ?? '') || dir !== (su.direccion ?? '');
-              const set = (campo) => (e) => setEdits((p) => ({
-                ...p, [su.id]: { ...(p[su.id] ?? {}), [campo]: e.target.value },
-              }));
-              return (
-                <tr key={su.id}>
-                  <td><strong>{su.nombre}</strong></td>
-                  <td className={s.muted}>{su.tipo === 'distribuidora' ? 'Distribuidora' : 'Express'}</td>
-                  <td>
-                    <input
-                      value={pv}
-                      onChange={set('puntoVenta')}
-                      maxLength={5}
-                      placeholder="00028"
-                      style={{ width: 90, fontFamily: 'var(--crm-font-mono, monospace)' }}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      value={dir}
-                      onChange={set('direccion')}
-                      maxLength={200}
-                      placeholder="Calle 123, Formosa"
-                      style={{ width: '100%', minWidth: 220 }}
-                    />
-                  </td>
-                  <td className={s['actions-col']}>
-                    <Btn
-                      variant="btn-primary"
-                      small
-                      disabled={!sucio}
-                      onClick={() => mutar(
-                        /* Se manda el nombre y el tipo porque el DTO los exige:
-                         * esta pantalla edita dos campos, no la sucursal entera. */
-                        () => httpClient.patch(`/sucursales/${su.id}`, {
-                          nombre: su.nombre, tipo: su.tipo, puntoVenta: pv, direccion: dir,
-                        }),
-                        `${su.nombre}: punto de venta guardado.`,
-                      )}
-                    >
-                      Guardar
-                    </Btn>
-                  </td>
-                </tr>
-              );
-            })}
+            {sucursales.map((su) => (
+              <tr key={su.id}>
+                <td><strong>{su.nombre}</strong></td>
+                <td className={s.muted}>{su.tipo === 'distribuidora' ? 'Distribuidora' : 'Express'}</td>
+                <td style={{ fontFamily: 'var(--crm-font-mono, monospace)' }}>
+                  {su.puntoVenta || <span className={s.muted}>—</span>}
+                </td>
+                <td>{su.direccion || <span className={s.muted}>—</span>}</td>
+                <td className={s['actions-col']}>
+                  <div className={s['row-actions']}>
+                    <Btn variant="btn-edit" small onClick={() => setModal({ tipo: 'sucursal', datos: su })}>Editar</Btn>
+                  </div>
+                </td>
+              </tr>
+            ))}
           </Table>
           <div className={s.hint}>
-            Dejarlo vacío es válido con <strong>un solo local</strong>: ahí se usa el punto de venta
-            de la configuración del servidor. Con varios, cada uno necesita el suyo — dos locales
-            no pueden compartirlo. El estado de la conexión y el último número autorizado de cada
-            punto de venta están en <strong>Ventas › Configuración</strong>.
+            Dejar el punto de venta vacío es válido con <strong>un solo local</strong>: ahí se usa el
+            de la configuración del servidor. Con varios, cada uno necesita el suyo. El estado de la
+            conexión y el último número autorizado de cada punto de venta están en{' '}
+            <strong>Ventas › Configuración</strong>.
           </div>
         </>
       )}
@@ -646,6 +706,19 @@ export function GerenciaPage() {
           onGuardar={(payload) => (modal.datos
             ? mutar(() => httpClient.patch(`/usuarios/${modal.datos.id}`, payload), 'Usuario actualizado.')
             : mutar(() => httpClient.post('/usuarios', payload), 'Usuario creado.'))}
+        />
+      )}
+      {modal?.tipo === 'sucursal' && (
+        <SucursalModal
+          sucursal={modal.datos}
+          sucursales={sucursales}
+          onCerrar={() => setModal(null)}
+          onGuardar={async (payload) => {
+            const ok = await (modal.datos
+              ? mutar(() => httpClient.patch(`/sucursales/${modal.datos.id}`, payload), 'Sucursal actualizada.')
+              : mutar(() => httpClient.post('/sucursales', payload), 'Sucursal creada.'));
+            return ok ? null : ultimoError.current;
+          }}
         />
       )}
       {modal?.tipo === 'rol' && (

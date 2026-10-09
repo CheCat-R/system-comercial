@@ -37,7 +37,16 @@ class AuthController extends Controller
     {
         $plan = $this->licencia->plan();
 
-        return ['id' => $plan, 'claves' => PlanCatalogo::claves($plan), 'licencia' => $this->licencia->resumenPublico()];
+        return [
+            'id' => $plan,
+            'claves' => PlanCatalogo::claves($plan),
+            // Cuántas sucursales y usuarios admite (null = sin tope): el panel deshabilita "+ Nueva" antes de chocar con el límite.
+            'limites' => [
+                'sucursales' => PlanCatalogo::limite($plan, 'sucursales'),
+                'usuarios' => PlanCatalogo::limite($plan, 'usuarios'),
+            ],
+            'licencia' => $this->licencia->resumenPublico(),
+        ];
     }
     /**
      * Lo mínimo para la pantalla de login, y nada más: las sucursales, para
