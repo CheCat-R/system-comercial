@@ -122,8 +122,14 @@ class PedidosProveedorService
         if ($nuevo === 'pedido' && ! $actual['fechaPedido']) {
             $set['fecha_pedido'] = now();
         }
+        // La fecha de recepción se gana al recibir y NO se pisa si ya estaba; si el pedido vuelve atrás, deja de tenerla.
+        if ($nuevo !== 'recibido') {
+            $set['fecha_recepcion'] = null;
+        }
         if ($nuevo === 'recibido') {
-            $set['fecha_recepcion'] = now();
+            if (! $actual['fechaRecepcion']) {
+                $set['fecha_recepcion'] = now();
+            }
             if (! $actual['fechaPedido']) {
                 $set['fecha_pedido'] = now();
             }

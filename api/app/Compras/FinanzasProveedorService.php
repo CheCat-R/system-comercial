@@ -5,7 +5,9 @@ namespace App\Compras;
 use App\Auth\Sesion;
 use App\Exceptions\ErrorDeNegocio;
 use App\Support\Fila;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -165,7 +167,31 @@ class FinanzasProveedorService
      * arqueo, su bandeja) imputado a la factura si la hay, por el saldo VIVO
      * de esa factura (una NC pudo haberla bajado después de pactar).
      */
+    /**
+     * UN SOLO PAGO A LA VEZ por compromiso (y por echeq). Leían "pagado" sin candado: dos pedidos simultáneos (doble clic,
+     * dos pestañas) pagaban la misma cuota dos veces, con dos egresos de plata. El segundo espera y ve el compromiso ya pagado.
+     */
+    private function conCandado(string $clave, callable $operacion): mixed
+    {
+        $candado = Cache::lock($clave, 120);
+        try {
+            $candado->block((int) config('checat.candado_espera', 30));
+        } catch (LockTimeoutException) {
+            throw new ErrorDeNegocio('Hay otra operación en curso sobre esto. Esperá unos segundos y fijate cómo quedó antes de repetirla.');
+        }
+        try {
+            return $operacion();
+        } finally {
+            $candado->release();
+        }
+    }
+
     public function pagarCompromiso(int $id, array $d, Sesion $auth, bool $desdeEcheq = false): array
+    {
+        return $this->conCandado('compromiso:'.$id, fn () => $this->pagarCompromisoSinCandado($id, $d, $auth, $desdeEcheq));
+    }
+
+    private function pagarCompromisoSinCandado(int $id, array $d, Sesion $auth, bool $desdeEcheq): array
     {
         $k = $this->getCompromiso($id);
         if ($k['pagado']) {
@@ -336,6 +362,11 @@ class FinanzasProveedorService
 
     /** 'cobrado' es EL momento contable: el banco debitó — se crea el pago real (medio echeq, fecha = vencimiento). */
     public function estadoEcheq(int $id, string $estado, Sesion $auth): array
+    {
+        return $this->conCandado('echeq:'.$id, fn () => $this->estadoEcheqSinCandado($id, $estado, $auth));
+    }
+
+    private function estadoEcheqSinCandado(int $id, string $estado, Sesion $auth): array
     {
         if (! in_array($estado, ['emitido', 'entregado', 'cobrado', 'anulado'], true)) {
             throw new ErrorDeNegocio('Estado inválido.');

@@ -17,7 +17,11 @@ class PresupuestosController extends Controller
 
     private function opciones(Sesion $s): array
     {
-        return ['soloSuSucursal' => $s->soloSuSucursal(), 'puedePisarPrecio' => $s->puede('precio_manual')];
+        return [
+            'soloSuSucursal' => $s->soloSuSucursal(), 'puedePisarPrecio' => $s->puede('precio_manual'),
+            // Quien solo tiene "Órdenes web" atiende los pedidos del sitio, no el resto de los presupuestos.
+            'gestionaPresupuestos' => $s->puede('ventas.presupuestos', 'presupuestos'),
+        ];
     }
 
     public function index(Request $request, Sesion $sesion): JsonResponse

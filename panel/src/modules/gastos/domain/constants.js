@@ -36,6 +36,8 @@ export const MEDIOS_PAGO = {
   tarjeta_debito: 'Débito',
   tarjeta_credito: 'Crédito',
   cheque: 'Cheque',
+  deposito: 'Depósito',
+  echeq: 'Echeq',
   qr: 'QR',
   otro: 'Otro',
 };

@@ -390,6 +390,11 @@ class PresupuestosService
                 throw new NotFoundHttpException('Presupuesto inexistente.');
             }
             $this->exigirSucursal($p, $opciones);
+            // Con solo el permiso de "Órdenes web" se rechazan pedidos del sitio PENDIENTES: cancelar un presupuesto confirmado
+            // (que tiene stock reservado) o cualquier otro es de quien gestiona presupuestos.
+            if (! ($opciones['gestionaPresupuestos'] ?? true) && ! ($p->origen === 'web' && $p->estado === 'pendiente')) {
+                throw new AccessDeniedHttpException('Con el permiso de Órdenes web solo se rechazan pedidos del sitio que están pendientes. Cancelar este presupuesto pide el permiso de presupuestos.');
+            }
             if (in_array($p->estado, ['cerrado', 'cancelado'], true)) {
                 throw new ErrorDeNegocio('Ese presupuesto ya está terminado.');
             }

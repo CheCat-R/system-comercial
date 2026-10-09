@@ -31,7 +31,24 @@
  */
 
 const r2 = (x) => Math.round((Number(x) || 0) * 100) / 100;
-export const num = (v) => Number(String(v ?? '0').replace(',', '.')) || 0;
+/**
+ * Un importe del archivo viejo → número. El separador decimal puede ser la coma ("12,5") o el punto ("12.5"), y un importe
+ * grande puede traer separador de miles ("1.234,56" o "1,234.56"): si vienen los dos, el que aparece ÚLTIMO es el decimal y
+ * el otro es de miles. Antes "1.234,56" se convertía en 0 y el producto se descartaba como "sin costo" en silencio.
+ */
+export const num = (v) => {
+  let t = String(v ?? '0').trim().replace(/[\s$]/g, '');
+  const coma = t.lastIndexOf(',');
+  const punto = t.lastIndexOf('.');
+  if (coma >= 0 && punto >= 0) {
+    t = coma > punto ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, '');
+  } else if (coma >= 0) {
+    t = t.replace(/,/g, (m, i) => (i === coma ? '.' : ''));
+  } else if ((t.match(/\./g) || []).length > 1) {
+    t = t.replace(/\./g, '');
+  }
+  return Number(t) || 0;
+};
 
 /* ============================ 1. LEER EL ARCHIVO ============================ */
 

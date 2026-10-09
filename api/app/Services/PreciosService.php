@@ -81,7 +81,8 @@ class PreciosService
                 $nuevo = [
                     'id' => (int) $c['id'],
                     'costo' => Pricing::money(max(0, (float) ($c['costo'] ?? $a->costo))),
-                    'descuento' => Pricing::money(max(0, (float) ($c['descuento'] ?? $a->descuento))),
+                    // Entre 0 y 100, como en `setFormatosCompra`: un descuento de 150 % daba un costo negativo y un precio negativo.
+                    'descuento' => Pricing::money(min(100, max(0, (float) ($c['descuento'] ?? $a->descuento)))),
                     'flete' => Pricing::money(max(0, (float) ($c['flete'] ?? $a->flete))),
                     // El tamaño del bulto: una factura puede cambiarlo junto con el costo, y el costo unitario depende de los dos.
                     'cantidad' => (float) ($c['cantidad'] ?? 0) > 0 ? (float) $c['cantidad'] : (float) $a->cantidad,

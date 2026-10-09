@@ -534,11 +534,34 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
 
   // Al elegir el producto: precarga IVA, el costo DE ESTE proveedor (no el del
   // activo) y el tamaño de su bulto. Se carga en BULTOS: "llegaron 2 bolsas".
+  /*
+   * Un proveedor MONOTRIBUTISTA o EXENTO no discrimina IVA: sus renglones llevan IVA 0. La API lo hace sola cuando el renglón
+   * no trae IVA, pero acá siempre se mandaba el del producto y había que corregirlo a mano en cada renglón.
+   */
+  const discriminaIva = (() => {
+    const pv = store.state.proveedores.find((x) => x.id === parseInt(provId, 10));
+    return !pv || pv.condicionIva === 'responsable_inscripto';
+  })();
+  const ivaDe = (prod) => String(discriminaIva ? (prod.iva ?? 21) : 0);
+  const primeraVez = useRef(true);
+  useEffect(() => {
+    // Al CAMBIAR de proveedor (no al abrir: ahí los renglones pueden venir del papel) los renglones siguen su condición.
+    if (primeraVez.current) { primeraVez.current = false; return; }
+    setItems((prev) => prev.map((it) => {
+      if (!it.productoId) return it;
+      if (!discriminaIva) return it.iva === '0' ? it : { ...it, iva: '0' };
+      if (Number(it.iva) !== 0) return it;
+      const prod = store.getProducto(parseInt(it.productoId, 10));
+      return prod && prod.iva > 0 ? { ...it, iva: String(prod.iva) } : it;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discriminaIva]);
+
   const onProducto = (i, prod) => {
     const entry = (prod.formatosCompra || []).find((e) => e.proveedorId === parseInt(provId, 10));
     setItem(i, {
       productoId: String(prod.id),
-      iva: String(prod.iva ?? 21),
+      iva: ivaDe(prod),
       costoBulto: entry ? String(entry.costo) : '',
       porBulto: entry ? String(entry.cantidad || 1) : (prod.tipo === 'entero' ? String(prod.unidadesPorBulto || 1) : '1'),
       costoAuto: true,
@@ -558,7 +581,7 @@ function ComprobanteFormInner({ proveedorId, tipo: tipoInit, lectura, remito }) 
         porBulto: c.entry ? String(c.entry.cantidad || 1) : '1',
         costoBulto: c.entry ? String(c.entry.costo) : '',
         descuento: '0',
-        iva: String(c.prod.iva ?? 21),
+        iva: ivaDe(c.prod),
         costoAuto: true,
       }));
       return [...vivos, ...nuevos];

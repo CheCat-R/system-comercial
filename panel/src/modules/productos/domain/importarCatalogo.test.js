@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { armarPlan } from './importarCatalogo.js';
+import { armarPlan, num } from './importarCatalogo.js';
 
 const maestro = [
   { Codigo: 'A1', Concepto: 'ALMENDRAS MADRE', TipoProducto: '1', MedidaStock: 'Kilos', IVAP1: '21', CodBar: '', Marca: 'GRANEL', IVA: '21' },
@@ -27,4 +27,16 @@ test('armarPlan: cada paquete fraccionado viaja con su formato de venta (listas)
   );
   assert.equal(pres[0].listas[0].listaId, 7);
   assert.equal(pres[0].listas[0].markup, 66);
+});
+
+test('num: lee los importes con coma, con punto y con separador de miles', () => {
+  assert.equal(num('12,5'), 12.5);
+  assert.equal(num('12.5'), 12.5);
+  assert.equal(num('1.234,56'), 1234.56);
+  assert.equal(num('1,234.56'), 1234.56);
+  assert.equal(num('1.234.567'), 1234567);
+  assert.equal(num('$ 10.000,00'), 10000);
+  assert.equal(num(''), 0);
+  assert.equal(num(null), 0);
+  assert.equal(num('abc'), 0);
 });
