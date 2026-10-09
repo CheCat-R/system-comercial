@@ -6,6 +6,7 @@ use App\Licencias\Licencia;
 use App\Licencias\LicenciaInvalida;
 use App\Models\Configuracion;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -136,6 +137,12 @@ class LicenciaService
         return $pem;
     }
 
+    /** Lee y verifica una clave (firma) SIN guardarla: para saber de qué plan es antes de activarla. */
+    public function inspeccionar(string $clave): Licencia
+    {
+        return Licencia::leer($clave, $this->clavePublica());
+    }
+
     /**
      * Activa una clave de activación: comprueba la firma, que sea de ESTA
      * instalación y que no esté vencida, y la guarda.
@@ -218,7 +225,7 @@ class LicenciaService
      * Las filas de configuración que usa este servicio y la licencia ya leída y
      * verificada (o `null` con el motivo). UNA consulta para todo.
      *
-     * @return array{filas:\Illuminate\Support\Collection, licencia:?Licencia, motivo:?string}
+     * @return array{filas:Collection, licencia:?Licencia, motivo:?string}
      */
     private function cargar(): array
     {

@@ -57,6 +57,22 @@ Por cada cliente: mantenimiento → copia de la base → migraciones → configu
 si falla, no se toca a nadie más. Un cliente que falla no frena a los demás; el resumen final dice cuáles y cómo retomar.
 Si fallan las **migraciones**, ese cliente queda en mantenimiento a propósito (mejor un corte corto que operar con la base a medio cambiar).
 
+## Cambiar de plan (subir o bajar)
+
+El plan lo define la **licencia firmada**, y la clave privada que la firma vive en tu máquina (nunca en el servidor). Por eso son dos pasos:
+
+1. En el servidor: `php artisan ccs:plan kiosco-lopez.tudominio.com pymes`
+   Muestra cómo está el cliente, avisa si el plan nuevo le queda chico y te deja armado el comando `licencia:emitir`.
+2. En tu máquina: ese comando de `licencia:emitir` te da la clave.
+3. En el servidor: `php artisan ccs:plan kiosco-lopez.tudominio.com pymes --clave=CCS1.…`
+   Verifica que la clave sea **de ese plan y de ese cliente**, la activa y anota el cambio en su ficha (`cliente.json`).
+
+Al **bajar** de plan no se borra nada: lo que el cliente ya tiene queda, y solo se le impide crear más por encima del tope del plan
+(3 sucursales y 10 usuarios en Pymes; 1 y 3 en Emprendedor). Conviene avisarle antes y que rija desde su próximo vencimiento.
+Una instalación de demostración (`LICENCIA_EXIGIDA=false`) cambia de plan directo, sin clave.
+
+**Pasar a Corporativo dedicado** es una mudanza (otro servidor), no solo un cambio de licencia: hay que llevar su base, su carpeta
+`arca/` y su `.env`; el ID de instalación viaja dentro de la base, así que la licencia nueva se emite con el mismo ID.
 ## Copia diaria de todos
 
 Un solo cron del hosting, una vez por día (el hosting usa UTC: 06:00 UTC son las 03:00 de Argentina):

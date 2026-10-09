@@ -4,6 +4,8 @@ namespace App\Console\Commands\Clientes;
 
 use App\Clientes\Registro;
 use App\Clientes\SelectorDeCliente;
+use App\Models\Sucursal;
+use App\Models\Usuario;
 use App\Services\LicenciaService;
 use App\Services\RespaldosService;
 use Illuminate\Console\Command;
@@ -37,6 +39,9 @@ class ClienteEstado extends Command
             $d = [
                 'dominio' => SelectorDeCliente::nombre(),
                 'plan' => $licencia->plan(),
+                'instalacion' => $licencia->instalacionId(),
+                'sucursales' => Sucursal::query()->count(),
+                'usuariosActivos' => Usuario::query()->where('activo', true)->count(),
                 'licencia' => ['estado' => $estado['estado'], 'vence' => $estado['vence'], 'diasRestantes' => $estado['diasRestantes'], 'cliente' => $estado['cliente']],
                 'migracionesPendientes' => count(array_diff($archivos, $ran)),
                 'ultimaCopia' => $copias['copias'][0]['fecha'] ?? null,

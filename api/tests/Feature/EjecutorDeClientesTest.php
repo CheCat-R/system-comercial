@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Licencias\Firma;
+use App\Licencias\Licencia;
 use Symfony\Component\Process\Process;
 use Tests\Concerns\UsaClientesDePrueba;
 use Tests\TestCase;
@@ -152,6 +154,106 @@ class EjecutorDeClientesTest extends TestCase
         $this->assertSame('pymes', $det[0]['detalle']['plan']);
     }
 
+    // ------------------------------------------------------------------ cambio de plan
+
+    /** Agrega líneas al `.env` de estos clientes mientras corre `$prueba`, y los deja como estaban. */
+    private function conEntorno(array $dominios, string $lineas, \Closure $prueba): void
+    {
+        $originales = [];
+        foreach ($dominios as $d) {
+            $originales[$d] = (string) file_get_contents($this->carpeta($d).'/.env');
+            @unlink($this->carpeta($d).'/cache/config.php');   // que se lea el .env nuevo
+            file_put_contents($this->carpeta($d).'/.env', $originales[$d].$lineas);
+        }
+        try {
+            $prueba();
+        } finally {
+            foreach ($originales as $d => $env) {
+                file_put_contents($this->carpeta($d).'/.env', $env);
+                @unlink($this->carpeta($d).'/cache/config.php');
+            }
+        }
+    }
+
+    public function test_en_una_demo_sin_licencia_exigida_el_plan_cambia_directo_y_queda_anotado(): void
+    {
+        $this->conEntorno([self::A, self::B], "LICENCIA_EXIGIDA=false\n", $this->cambiosDirectos(...));
+    }
+
+    private function cambiosDirectos(): void
+    {
+        $p = $this->artisanOk(null, ['ccs:plan', self::B, 'pymes']);
+
+        $this->assertStringContainsString('pasó a pymes', $p->getOutput());
+        $this->assertSame('pymes', $this->estado(self::B)['plan']);
+        $ficha = json_decode((string) file_get_contents($this->carpeta(self::B).'/cliente.json'), true);
+        $this->assertSame('pymes', $ficha['plan']);
+        $this->assertSame(['de' => 'emprendedor', 'a' => 'pymes'], array_intersect_key($ficha['cambiosDePlan'][0], ['de' => 1, 'a' => 1]));
+
+        // Bajar avisa qué le queda grande, y NO borra nada: sigue teniendo lo que tenía.
+        $sucursales = $this->estado(self::A)['sucursales'];
+        $this->assertGreaterThan(1, $sucursales, 'precondición: el Pymes arranca con más de una sucursal');
+        $baja = $this->artisanOk(null, ['ccs:plan', self::A, 'emprendedor']);
+        $this->assertStringContainsString('admite 1 sucursal(es) y tiene '.$sucursales, $baja->getOutput());
+        $this->assertSame($sucursales, $this->estado(self::A)['sucursales']);
+        $this->assertSame('emprendedor', $this->estado(self::A)['plan']);
+
+        // Vuelven a como estaban para las demás pruebas.
+        $this->artisanOk(null, ['ccs:plan', self::A, 'pymes']);
+        $this->artisanOk(null, ['ccs:plan', self::B, 'emprendedor']);
+        $this->assertSame(['pymes', 'emprendedor'], [$this->estado(self::A)['plan'], $this->estado(self::B)['plan']]);
+
+        $mismo = $this->artisanOk(null, ['ccs:plan', self::B, 'emprendedor']);
+        $this->assertStringContainsString('Ya está en el plan emprendedor', $mismo->getOutput());
+        $this->assertNotSame(0, $this->artisanDe(null, ['ccs:plan', self::B, 'platino'])->getExitCode());
+        $this->assertNotSame(0, $this->artisanDe(null, ['ccs:plan', 'no-existe.ccs.test', 'pymes'])->getExitCode());
+    }
+
+    public function test_con_licencia_exigida_el_plan_solo_cambia_con_la_clave_del_plan_y_del_cliente(): void
+    {
+        $par = Firma::generarPar();
+        $envB = $this->carpeta(self::B).'/.env';
+        $original = (string) file_get_contents($envB);
+        @unlink($this->carpeta(self::B).'/cache/config.php');   // que se lea el .env nuevo
+        file_put_contents($envB, $original."LICENCIA_EXIGIDA=true\nLICENCIA_CLAVE_PUBLICA=\"".str_replace("\n", '\n', trim($par['publica']))."\"\n");
+        try {
+            $e = $this->estado(self::B);
+            $this->assertSame('sin_licencia', $e['licencia']['estado'], 'precondición: ahora B exige licencia');
+            $emitir = fn (string $plan, string $instalacion) => Licencia::emitir([
+                'instalacion' => $instalacion, 'cliente' => 'Verdulería B', 'plan' => $plan, 'modalidad' => 'mensual',
+                'emitida' => now()->toDateString(), 'vence' => now()->addMonth()->toDateString(),
+            ], $par['privada']);
+
+            // Sin clave: no cambia nada y deja armado el comando para emitirla.
+            $sin = $this->artisanOk(null, ['ccs:plan', self::B, 'pymes']);
+            $this->assertStringContainsString('licencia:emitir', $sin->getOutput());
+            $this->assertStringContainsString('--instalacion='.$e['instalacion'], $sin->getOutput());
+            $this->assertStringContainsString('--plan=pymes', $sin->getOutput());
+
+            // Una clave de OTRO plan, o de OTRA instalación, no se acepta y el plan no cambia.
+            foreach (['de otro plan' => $emitir('corporativo', $e['instalacion']), 'de otro cliente' => $emitir('pymes', 'otra-instalacion')] as $que => $clave) {
+                $mal = $this->artisanDe(null, ['ccs:plan', self::B, 'pymes', '--clave='.$clave]);
+                $this->assertNotSame(0, $mal->getExitCode(), $que);
+                $this->assertStringContainsString('El plan NO cambió', $this->salida($mal), $que);
+            }
+            $this->assertSame('sin_licencia', $this->estado(self::B)['licencia']['estado']);
+
+            // La correcta sí.
+            $ok = $this->artisanOk(null, ['ccs:plan', self::B, 'pymes', '--clave='.$emitir('pymes', $e['instalacion'])]);
+            $this->assertStringContainsString('pasó de emprendedor a pymes', $ok->getOutput());
+            $despues = $this->estado(self::B);
+            $this->assertSame('pymes', $despues['plan']);
+            $this->assertSame('activa', $despues['licencia']['estado']);
+            $this->assertSame('pymes', json_decode((string) file_get_contents($this->carpeta(self::B).'/cliente.json'), true)['plan']);
+        } finally {
+            file_put_contents($envB, $original);
+            @unlink($this->carpeta(self::B).'/cache/config.php');
+            // La licencia de prueba queda guardada en su base: vuelve a como estaba (sin licencia, plan fijado).
+            self::pdo('ccs_ejecutor_b')->exec("DELETE FROM configuracion WHERE clave IN ('licencia_firmada', 'licencia_reloj')");
+            $this->artisanOk(null, ['ccs:plan', self::B, 'emprendedor']);
+        }
+        $this->assertSame('emprendedor', $this->estado(self::B)['plan']);
+    }
     // ------------------------------------------------------------------ actualizar
 
     public function test_actualizar_migra_a_todos_con_copia_previa_y_los_deja_en_linea(): void
