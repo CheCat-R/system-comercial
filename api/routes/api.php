@@ -166,6 +166,9 @@ Route::middleware(['auth:sanctum', 'cambio.password', 'licencia'])->group(functi
         Route::post('/proveedores', [ProveedoresController::class, 'store']);
         Route::patch('/proveedores/{proveedor}', [ProveedoresController::class, 'update']);
         Route::delete('/proveedores/{proveedor}', [ProveedoresController::class, 'destroy']);
+        Route::get('/proveedores/{proveedor}/previa-de-baja', [ProveedoresController::class, 'previaDeBaja']);
+        Route::post('/proveedores/{proveedor}/baja', [ProveedoresController::class, 'baja']);
+        Route::post('/proveedores/{proveedor}/reactivar', [ProveedoresController::class, 'reactivar']);
     });
 
     /* ---------------- Formato de venta ---------------- */

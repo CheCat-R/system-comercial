@@ -570,7 +570,8 @@ class ProductosService
         $rubrosCreados = [];
         $ids = [];
 
-        DB::transaction(function () use ($aCrear, $aVincular, $proveedorId, $listasActivas, &$marcasCreadas, &$rubrosCreados, &$ids) {
+        $paquetesSinPrecio = [];
+        DB::transaction(function () use ($aCrear, $aVincular, $proveedorId, $listasActivas, &$marcasCreadas, &$rubrosCreados, &$ids, &$paquetesSinPrecio) {
             $clave = fn (string $s) => mb_strtolower(trim($s));
             $marcaPorNombre = Marca::query()->pluck('id', 'nombre')->mapWithKeys(fn ($id, $n) => [$clave($n) => $id]);
             $catPorNombre = Categoria::query()->pluck('id', 'nombre')->mapWithKeys(fn ($id, $n) => [$clave($n) => $id]);
@@ -668,10 +669,11 @@ class ProductosService
                 DB::table('producto_proveedores')->insert([
                     'producto_id' => $creado->id, 'proveedor_id' => $proveedorId,
                     'cantidad' => (float) ($f['cantidad'] ?? 0) > 0 ? (float) $f['cantidad'] : 1,
-                    'costo' => (float) ($f['costo'] ?? 0), 'descuento' => (float) ($f['descuento'] ?? 0),
-                    'descuento2' => (float) ($f['descuento2'] ?? 0), 'descuento3' => (float) ($f['descuento3'] ?? 0), 'descuento4' => (float) ($f['descuento4'] ?? 0),
-                    'flete' => (float) ($f['flete'] ?? 0), 'modo_costo' => ($f['modoCosto'] ?? '') === 'final' ? 'final' : 'lista',
-                    'costo_final' => (float) ($f['costoFinal'] ?? 0),
+                    // Acotados como en `setFormatosCompra`: un descuento de 150 % o un costo negativo daban un producto con precio negativo.
+                    'costo' => max(0.0, (float) ($f['costo'] ?? 0)), 'descuento' => min(100.0, max(0.0, (float) ($f['descuento'] ?? 0))),
+                    'descuento2' => min(100.0, max(0.0, (float) ($f['descuento2'] ?? 0))), 'descuento3' => min(100.0, max(0.0, (float) ($f['descuento3'] ?? 0))), 'descuento4' => min(100.0, max(0.0, (float) ($f['descuento4'] ?? 0))),
+                    'flete' => max(0.0, (float) ($f['flete'] ?? 0)), 'modo_costo' => ($f['modoCosto'] ?? '') === 'final' ? 'final' : 'lista',
+                    'costo_final' => max(0.0, (float) ($f['costoFinal'] ?? 0)),
                     'usar_para_precio' => true, // es el único formato del producto recién creado
                     'codigo_proveedor' => trim((string) ($f['codigoProveedor'] ?? '')),
                     'created_at' => now(), 'updated_at' => now(),
@@ -709,6 +711,9 @@ class ProductosService
                         $suyas = $filasVenta($x['listas'] ?? [], $creado->id, $pres->id);
                         if ($suyas) {
                             DB::table('producto_listas')->insert($suyas);
+                        } else {
+                            // Sin formato de venta el POS no lo puede vender: que el usuario se entere en vez de descubrirlo en el mostrador.
+                            $paquetesSinPrecio[] = trim($p['nombre']).' · '.(float) $x['tamKg'].' kg';
                         }
                     }
                 }
@@ -747,6 +752,7 @@ class ProductosService
             'creados' => count($ids),
             'vinculados' => array_map(fn ($v) => ['codigo' => $v['codigo'], 'nombre' => $v['nombre'], 'fijaPrecio' => $v['esPrimero']], $aVincular),
             'saltados' => $saltados,
+            'paquetesSinPrecio' => $paquetesSinPrecio,
             'marcasCreadas' => $marcasCreadas,
             'rubrosCreados' => $rubrosCreados,
         ];

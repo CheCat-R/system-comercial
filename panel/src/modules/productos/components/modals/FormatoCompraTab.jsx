@@ -81,7 +81,7 @@ function FormatoCard({ prod, fila, i, onChange, onQuitar, onActivar, proveedores
           disabled={!esAdmin}
           onChange={(e) => setProveedor(Number(e.target.value))}
         >
-          {proveedores.map((pv) => <option key={pv.id} value={pv.id}>{pv.nombre}</option>)}
+          {proveedores.filter((pv) => pv.activo !== false || pv.id === fila.proveedorId).map((pv) => <option key={pv.id} value={pv.id}>{pv.nombre}{pv.activo === false ? ' (de baja)' : ''}</option>)}
         </select>
 
         <input

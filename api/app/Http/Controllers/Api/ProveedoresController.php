@@ -6,6 +6,7 @@ use App\Auth\Sesion;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Proveedores\GuardarProveedorRequest;
 use App\Models\Proveedor;
+use App\Services\ProductosService;
 use App\Services\ProveedoresService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,6 +40,24 @@ class ProveedoresController extends Controller
         $this->svc->borrar($proveedor);
 
         return response()->json(['ok' => true]);
+    }
+
+    /** Qué pasa con su historia y con sus productos antes de darlo de baja o borrarlo. */
+    public function previaDeBaja(Proveedor $proveedor): JsonResponse
+    {
+        return response()->json($this->svc->previaDeBaja($proveedor));
+    }
+
+    public function baja(Request $request, Proveedor $proveedor, Sesion $sesion, ProductosService $productos): JsonResponse
+    {
+        $d = $request->validate(['motivo' => ['nullable', 'string', 'max:300'], 'discontinuarProductos' => ['nullable', 'boolean']]);
+
+        return response()->json($this->svc->publica($this->svc->darDeBaja($proveedor, $d, $sesion->usuarioId, $productos)));
+    }
+
+    public function reactivar(Proveedor $proveedor, Sesion $sesion): JsonResponse
+    {
+        return response()->json($this->svc->publica($this->svc->reactivar($proveedor, $sesion->usuarioId)));
     }
 
     public function percepciones(Proveedor $proveedor): JsonResponse

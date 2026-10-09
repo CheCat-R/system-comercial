@@ -36,6 +36,10 @@ export const provApi = {
   crearProveedor: (data) => httpClient.post('/proveedores', data),
   editarProveedor: (id, data) => httpClient.patch(`/proveedores/${id}`, data),
   eliminarProveedor: (id) => httpClient.delete(`/proveedores/${id}`),
+  /** Qué tiene cargado (historia, productos) antes de borrarlo o darlo de baja. */
+  previaDeBaja: (id) => httpClient.get(`/proveedores/${id}/previa-de-baja`),
+  darDeBaja: (id, data) => httpClient.post(`/proveedores/${id}/baja`, data),
+  reactivar: (id) => httpClient.post(`/proveedores/${id}/reactivar`, {}),
   cuentas: (id) => httpClient.get(`/proveedores/${id}/cuentas`),
   guardarCuentas: (id, cuentas) => httpClient.put(`/proveedores/${id}/cuentas`, { cuentas }),
   /* La migración desde el sistema viejo (26/8): el CSV del padrón entero en

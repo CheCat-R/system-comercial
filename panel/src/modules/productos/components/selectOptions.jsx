@@ -84,7 +84,7 @@ export function proveedorOptions(store) {
   // únicamente factura gastos (el plomero) no tiene nada que elegir.
   return [<option key="_none" value="">— Sin proveedor —</option>].concat(
     store.state.proveedores
-      .filter((p) => p.proveeMercaderia !== false)
+      .filter((p) => p.proveeMercaderia !== false && p.activo !== false)
       .map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>),
   );
 }

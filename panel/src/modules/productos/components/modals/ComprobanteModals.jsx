@@ -2659,7 +2659,7 @@ function productoProveedorOptions(store) {
   // El padrón es UNO, pero acá solo tienen sentido los que traen mercadería:
   // al plomero no se le compra stock (sus facturas van por el módulo Gastos).
   return store.state.proveedores
-    .filter((p) => p.proveeMercaderia !== false)
+    .filter((p) => p.proveeMercaderia !== false && p.activo !== false)
     .map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>);
 }
 

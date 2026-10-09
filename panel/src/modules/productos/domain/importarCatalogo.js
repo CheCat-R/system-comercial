@@ -279,6 +279,9 @@ export function armarPlan({ maestro = [], compras = [], ventas = [] }, opciones 
         recargo,
         codigoBarras: x.codigoBarras || '',
         nombre: x.nombre,
+        // El FORMATO DE VENTA del paquete (desde la migración 0053 cada paquete tiene el suyo; el `recargo` ya no
+        // existe). Sin esto el paquete se creaba sin precio y el POS lo bloqueaba.
+        listas: listasDe(x.csv.Codigo).filas,
         precioViejo: mk ? mk.precio : 0,
         precioNuevo: redondear(netoUnit * (1 + markupBase / 100) * x.kg * (1 + recargo / 100) * (1 + iva / 100)),
       };

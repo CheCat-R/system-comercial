@@ -95,7 +95,7 @@ export function ImportarCatalogoModal() {
   const [listaMinorista, setListaMinorista] = useState(() => sugerida('min'));
   const [listaMayorista, setListaMayorista] = useState(() => sugerida('may'));
 
-  const proveedores = store.state.proveedores.filter((p) => p.proveeMercaderia !== false);
+  const proveedores = store.state.proveedores.filter((p) => p.proveeMercaderia !== false && p.activo !== false);
 
   /*
    * EL PROVEEDOR QUE DICE EL ARCHIVO (27/8, pedido del dueño). El CSV de

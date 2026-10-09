@@ -387,7 +387,7 @@ export function ProductoFormModal({ prodId }) {
                 <select value={f.proveedorId} onChange={(e) => set('proveedorId', e.target.value)}>
                   <option value="">Elegir después (Formato de Compra)</option>
                   {store.state.proveedores
-                    .filter((p) => p.proveeMercaderia !== false)
+                    .filter((p) => p.proveeMercaderia !== false && p.activo !== false)
                     .map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>

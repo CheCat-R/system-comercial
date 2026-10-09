@@ -35,6 +35,7 @@ class ProveedoresService
             'medioHabitual' => $p->medio_habitual?->value, 'diasPago' => $p->dias_pago, 'modoCuenta' => $p->modo_cuenta?->value,
             'conciliadoHasta' => $p->conciliado_hasta?->toIso8601String(), 'productosEsperados' => $p->productos_esperados,
             'migracionLista' => $p->migracion_lista,
+            'activo' => (bool) $p->activo, 'bajaEn' => $p->baja_en?->toIso8601String(), 'motivoBaja' => $p->motivo_baja,
         ];
     }
 
@@ -91,9 +92,141 @@ class ProveedoresService
         ];
     }
 
+    /** Tablas con la HISTORIA de un proveedor: si alguna tiene filas, borrarlo borraría o rompería esa historia. */
+    private const TABLAS_CON_HISTORIA = [
+        'comprobantes' => 'facturas o comprobantes', 'proveedor_pagos' => 'pagos', 'proveedor_compromisos' => 'compromisos de pago',
+        'proveedor_echeqs' => 'echeqs', 'proveedor_ajustes' => 'ajustes de cuenta', 'pedidos_proveedor' => 'pedidos', 'gastos' => 'gastos',
+        'gastos_recurrentes' => 'gastos fijos',
+    ];
+
+    /** Qué tiene el proveedor que impide borrarlo: ['facturas o comprobantes' => 12, 'pagos' => 3]. */
+    private function historia(Proveedor $p): array
+    {
+        $out = [];
+        foreach (self::TABLAS_CON_HISTORIA as $tabla => $nombre) {
+            $n = DB::table($tabla)->where('proveedor_id', $p->id)->count();
+            if ($n > 0) {
+                $out[$nombre] = $n;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Los productos que este proveedor tiene cargados, partidos en lo que importa para darlo de baja:
+     *  - `conAlternativa`: él es el proveedor ACTIVO (el que fija el precio) y el producto tiene otro cargado.
+     *    Hay que activar otro antes, o el precio seguiría saliendo de alguien que ya no se usa.
+     *  - `soloEste`: nadie más lo vende. Se puede dar de baja el producto con el proveedor (si ya no lo va a traer).
+     *  - `otros`: tiene otro proveedor activo; solo se le quita este.
+     */
+    public function productosDelProveedor(Proveedor $p): array
+    {
+        $filas = DB::table('producto_proveedores as pp')
+            ->join('productos as pr', 'pr.id', '=', 'pp.producto_id')
+            ->where('pp.proveedor_id', $p->id)
+            ->where('pr.estado', '!=', 'archivado')
+            ->get(['pr.id', 'pr.nombre', 'pr.estado', 'pp.usar_para_precio']);
+        $otrosPorProducto = DB::table('producto_proveedores')->where('proveedor_id', '!=', $p->id)
+            ->whereIn('producto_id', $filas->pluck('id'))->selectRaw('producto_id, COUNT(*) n')->groupBy('producto_id')->pluck('n', 'producto_id');
+        $res = ['conAlternativa' => [], 'soloEste' => [], 'otros' => []];
+        foreach ($filas as $f) {
+            $item = ['id' => (int) $f->id, 'nombre' => $f->nombre, 'estado' => $f->estado];
+            $tieneOtro = ($otrosPorProducto[$f->id] ?? 0) > 0;
+            if (! $tieneOtro) {
+                $res['soloEste'][] = $item;
+            } elseif ($f->usar_para_precio) {
+                $res['conAlternativa'][] = $item;
+            } else {
+                $res['otros'][] = $item;
+            }
+        }
+
+        return $res;
+    }
+
+    /** Lo que el panel muestra antes de dar de baja (o de borrar): qué pasa con la historia y con los productos. */
+    public function previaDeBaja(Proveedor $p): array
+    {
+        return [
+            'activo' => (bool) $p->activo, 'historia' => $this->historia($p), 'productos' => $this->productosDelProveedor($p),
+            'puedeBorrarse' => ! $this->historia($p) && DB::table('producto_proveedores')->where('proveedor_id', $p->id)->doesntExist(),
+        ];
+    }
+
+    private static function listaDeNombres(array $items, int $max = 6): string
+    {
+        $nombres = array_column($items, 'nombre');
+        $mostrar = array_slice($nombres, 0, $max);
+
+        return implode(', ', $mostrar).(count($nombres) > $max ? ' y '.(count($nombres) - $max).' más' : '');
+    }
+
+    /**
+     * BORRAR es solo para un proveedor cargado de más: sin facturas, pagos ni nada de historia, y sin productos
+     * asociados. Con historia no se borra nunca (hay que conservarla para la contabilidad y los controles): se da de baja.
+     * Antes un `delete()` pelado reventaba con 500 si tenía historia y, sin historia, se llevaba por cascada el costo
+     * de los productos que solo él vendía (que quedaban a precio $0).
+     */
     public function borrar(Proveedor $p): void
     {
+        $historia = $this->historia($p);
+        if ($historia) {
+            $detalle = implode(', ', array_map(fn ($n, $k) => $n.' '.$k, $historia, array_keys($historia)));
+            throw new ErrorDeNegocio('"'.$p->nombre.'" tiene historia ('.$detalle.') y no se puede borrar: la historia se conserva. Dalo de baja: sigue en el padrón para consultar su cuenta, pero deja de ofrecerse para compras nuevas.');
+        }
+        $productos = DB::table('producto_proveedores')->where('proveedor_id', $p->id)->count();
+        if ($productos > 0) {
+            throw new ErrorDeNegocio('"'.$p->nombre.'" tiene cargados '.$productos.' producto'.($productos === 1 ? '' : 's').' con su costo, y borrarlo se los llevaría. Dalo de baja: te muestro qué pasa con cada producto.');
+        }
         $p->delete();
+    }
+
+    /**
+     * DAR DE BAJA. Si el proveedor es el activo (el que fija el precio) de productos que tienen otro proveedor, se pide
+     * activar ese otro primero. Los productos que solo él vendía se pueden dar de baja con él (`discontinuarProductos`):
+     * quedan "discontinuados" (se venden hasta agotar y dejan de comprarse).
+     */
+    public function darDeBaja(Proveedor $p, array $dto, ?int $usuarioId = null, ?ProductosService $productos = null): Proveedor
+    {
+        if (! $p->activo) {
+            throw new ErrorDeNegocio('"'.$p->nombre.'" ya está dado de baja.');
+        }
+        $prod = $this->productosDelProveedor($p);
+        if ($prod['conAlternativa']) {
+            throw new ErrorDeNegocio('Antes de dar de baja a "'.$p->nombre.'", activá otro proveedor para estos productos (hoy el precio sale de él): '.self::listaDeNombres($prod['conAlternativa']).'.');
+        }
+        $motivo = trim((string) ($dto['motivo'] ?? ''));
+        DB::transaction(function () use ($p, $dto, $prod, $motivo, $productos) {
+            $p->forceFill(['activo' => false, 'baja_en' => now(), 'motivo_baja' => $motivo !== '' ? mb_substr($motivo, 0, 300) : null])->save();
+            if (! empty($dto['discontinuarProductos']) && $productos) {
+                foreach ($prod['soloEste'] as $x) {
+                    if ($x['estado'] === 'activo') {
+                        $productos->cambiarEstado(\App\Models\Producto::query()->findOrFail($x['id']), 'discontinuado', 'El proveedor '.$p->nombre.' se dio de baja');
+                    }
+                }
+            }
+        });
+        $this->audit->registrar([[
+            'entidad' => 'proveedor', 'entidadId' => $p->id, 'ambito' => 'Ficha del proveedor', 'usuarioId' => $usuarioId,
+            'campo' => 'Estado', 'antes' => 'Activo', 'despues' => 'Dado de baja'.($motivo !== '' ? ': '.$motivo : ''),
+        ]]);
+
+        return $p->refresh();
+    }
+
+    public function reactivar(Proveedor $p, ?int $usuarioId = null): Proveedor
+    {
+        if ($p->activo) {
+            return $p;
+        }
+        $p->forceFill(['activo' => true, 'baja_en' => null, 'motivo_baja' => null])->save();
+        $this->audit->registrar([[
+            'entidad' => 'proveedor', 'entidadId' => $p->id, 'ambito' => 'Ficha del proveedor', 'usuarioId' => $usuarioId,
+            'campo' => 'Estado', 'antes' => 'Dado de baja', 'despues' => 'Activo',
+        ]]);
+
+        return $p->refresh();
     }
 
     /* ---------------- Percepciones y cuentas (F3) ---------------- */

@@ -395,11 +395,8 @@ class ComprobantesService
                 if (! $e) {
                     continue;
                 }
-                // El tamaño del bulto de ESTA entrega, antes que el costo: el $/kg lo fija la góndola.
-                if ((float) ($x['cantidad'] ?? 0) > 0) {
-                    DB::table('producto_proveedores')->where('id', $e->id)->update(['cantidad' => (float) $x['cantidad']]);
-                }
-                $cambios[] = ['id' => $e->id, 'costo' => (float) $x['costo'], 'descuento' => $x['descuento'] ?? null, 'flete' => $x['flete'] ?? null];
+                // El tamaño del bulto de ESTA entrega viaja con el costo: queda en el historial y se puede deshacer junto con él.
+                $cambios[] = ['id' => $e->id, 'costo' => (float) $x['costo'], 'descuento' => $x['descuento'] ?? null, 'flete' => $x['flete'] ?? null, 'cantidad' => $x['cantidad'] ?? null];
             }
             if ($cambios) {
                 $this->precios->actualizarCostos(['cambios' => $cambios, 'origen' => 'recepcion', 'motivo' => $motivo, 'usuarioId' => $usuarioId, 'comprobanteId' => $comprobanteId], true);

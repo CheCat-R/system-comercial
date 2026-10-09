@@ -15,6 +15,7 @@ use App\Services\ConfiguracionService;
 use App\Services\ListasService;
 use App\Services\OfertasService;
 use App\Support\Fila;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -1065,7 +1066,36 @@ class VentasService
     }
 
     /** Cierra el borrador: número, stock, pagos. Lo que se confirma es exactamente lo último guardado. */
+    /**
+     * UNA OPERACIÓN FISCAL A LA VEZ POR VENTA.
+     *
+     * Confirmar, facturar, hacer una nota de crédito y anular chequean el estado de la venta ANTES de pedirle el
+     * CAE a ARCA y lo vuelven a chequear recién en la transacción de después. El candado de ARCA solo ordena los
+     * pedidos en fila: no evita que el segundo emita. Dos clics seguidos (o dos pestañas) sacaban DOS comprobantes
+     * en ARCA para la misma venta, y el segundo se perdía acá: IVA débito duplicado y nada a lo que hacerle una
+     * nota de crédito. Con este candado el segundo espera, lee la venta YA terminada y la rechaza con su motivo.
+     */
+    private function conCandadoFiscal(int $ventaId, callable $operacion): mixed
+    {
+        $candado = Cache::lock('venta-fiscal:'.$ventaId, 180);
+        try {
+            $candado->block((int) config('checat.candado_fiscal_espera', 60));
+        } catch (LockTimeoutException) {
+            throw new ErrorDeNegocio('Hay otra operación fiscal en curso sobre esta venta (facturar, anular o una nota de crédito). Esperá unos segundos y fijate cómo quedó antes de repetirla.');
+        }
+        try {
+            return $operacion();
+        } finally {
+            $candado->release();
+        }
+    }
+
     public function confirmar(int $id, array $dto, array $opciones): array
+    {
+        return $this->conCandadoFiscal($id, fn () => $this->confirmarSinCandado($id, $dto, $opciones));
+    }
+
+    private function confirmarSinCandado(int $id, array $dto, array $opciones): array
     {
         $borrador = $this->get($id);
         if ($borrador['estado'] !== 'borrador') {
@@ -1188,6 +1218,11 @@ class VentasService
     /** Factura una venta que quedó pendiente: solo emite el papel fiscal. Reintentar es inocuo. */
     public function facturarAhora(int $id, array $opciones): array
     {
+        return $this->conCandadoFiscal($id, fn () => $this->facturarAhoraSinCandado($id, $opciones));
+    }
+
+    private function facturarAhoraSinCandado(int $id, array $opciones): array
+    {
         $v = $this->fila($id);
         $this->exigirSucursal($v, $opciones, 'Esa venta');
         if ($v->estado !== 'confirmada') {
@@ -1239,6 +1274,11 @@ class VentasService
      * No se puede devolver dos veces: se descuenta lo ya acreditado.
      */
     public function notaCredito(int $ventaId, array $dto, array $opciones): array
+    {
+        return $this->conCandadoFiscal($ventaId, fn () => $this->notaCreditoSinCandado($ventaId, $dto, $opciones));
+    }
+
+    private function notaCreditoSinCandado(int $ventaId, array $dto, array $opciones): array
     {
         $original = $this->get($ventaId);
         if ($original['estado'] !== 'confirmada') {
@@ -1419,6 +1459,11 @@ class VentasService
      * comprobante con CAE (eso se corrige con nota de crédito).
      */
     public function anular(int $id, string $motivo, array $opciones): array
+    {
+        return $this->conCandadoFiscal($id, fn () => $this->anularSinCandado($id, $motivo, $opciones));
+    }
+
+    private function anularSinCandado(int $id, string $motivo, array $opciones): array
     {
         $v = $this->get($id);
         if ($v['estado'] === 'anulada') {

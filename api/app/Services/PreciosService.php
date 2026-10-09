@@ -83,8 +83,11 @@ class PreciosService
                     'costo' => Pricing::money(max(0, (float) ($c['costo'] ?? $a->costo))),
                     'descuento' => Pricing::money(max(0, (float) ($c['descuento'] ?? $a->descuento))),
                     'flete' => Pricing::money(max(0, (float) ($c['flete'] ?? $a->flete))),
+                    // El tamaño del bulto: una factura puede cambiarlo junto con el costo, y el costo unitario depende de los dos.
+                    'cantidad' => (float) ($c['cantidad'] ?? 0) > 0 ? (float) $c['cantidad'] : (float) $a->cantidad,
                 ];
-                $sinCambio = abs($nuevo['costo'] - $a->costo) < 0.005 && abs($nuevo['descuento'] - $a->descuento) < 0.005 && abs($nuevo['flete'] - $a->flete) < 0.005;
+                $sinCambio = abs($nuevo['costo'] - $a->costo) < 0.005 && abs($nuevo['descuento'] - $a->descuento) < 0.005 && abs($nuevo['flete'] - $a->flete) < 0.005
+                    && abs($nuevo['cantidad'] - (float) $a->cantidad) < 1e-9;
                 if (! $sinCambio) {
                     $finales[] = ['nuevo' => $nuevo, 'anterior' => $a];
                 }
@@ -93,13 +96,14 @@ class PreciosService
                 return ['ok' => true, 'actualizados' => 0, 'lote' => '', 'productoIds' => []];
             }
             $lote = $this->lote('L');
-            $this->actualizarMasivo('producto_proveedores', array_column($finales, 'nuevo'), ['costo', 'descuento', 'flete']);
+            $this->actualizarMasivo('producto_proveedores', array_column($finales, 'nuevo'), ['costo', 'descuento', 'flete', 'cantidad']);
             $historial = [];
             foreach ($finales as ['nuevo' => $n, 'anterior' => $a]) {
                 $historial[] = [
                     'producto_proveedor_id' => $n['id'], 'fecha' => now(),
                     'costo_anterior' => $a->costo, 'descuento_anterior' => $a->descuento, 'flete_anterior' => $a->flete,
                     'costo' => $n['costo'], 'descuento' => $n['descuento'], 'flete' => $n['flete'],
+                    'cantidad_anterior' => $a->cantidad, 'cantidad' => $n['cantidad'],
                     'origen' => $dto['origen'] ?? 'manual', 'motivo' => $dto['motivo'] ?? '', 'lote' => $lote,
                     'usuario_id' => $dto['usuarioId'] ?? null, 'comprobante_id' => $dto['comprobanteId'] ?? null,
                 ];
@@ -264,7 +268,8 @@ class PreciosService
 
                     continue;
                 }
-                $intacta = abs($a->costo - $f->costo) < 0.005 && abs($a->descuento - $f->descuento) < 0.005 && abs($a->flete - $f->flete) < 0.005;
+                $intacta = abs($a->costo - $f->costo) < 0.005 && abs($a->descuento - $f->descuento) < 0.005 && abs($a->flete - $f->flete) < 0.005
+                    && ($f->cantidad === null || abs((float) $a->cantidad - (float) $f->cantidad) < 1e-9);
                 if (! $intacta) {
                     $salteadas[] = ['id' => $f->producto_proveedor_id, 'motivo' => 'Cambió después de este lote.'];
 
@@ -284,8 +289,11 @@ class PreciosService
                 $nuevoLote = $this->lote('R');
                 $historial = [];
                 foreach ($revertibles as [$f, $a]) {
+                    // Vuelve también el tamaño del bulto si ese lote lo cambió: el costo unitario es costo ÷ bulto.
+                    $bultoVuelve = $f->cantidad_anterior !== null && (float) $f->cantidad_anterior > 0;
                     DB::table('producto_proveedores')->where('id', $f->producto_proveedor_id)
-                        ->update(['costo' => $f->costo_anterior, 'descuento' => $f->descuento_anterior, 'flete' => $f->flete_anterior, 'updated_at' => now()]);
+                        ->update(['costo' => $f->costo_anterior, 'descuento' => $f->descuento_anterior, 'flete' => $f->flete_anterior, 'updated_at' => now()]
+                            + ($bultoVuelve ? ['cantidad' => $f->cantidad_anterior] : []));
                     if ($f->activo_nuevo !== null) {
                         DB::table('producto_proveedores')->where('producto_id', $a->producto_id)->update(['usar_para_precio' => false]);
                         if ($f->activo_anterior !== null) {
@@ -296,6 +304,7 @@ class PreciosService
                         'producto_proveedor_id' => $f->producto_proveedor_id, 'fecha' => now(),
                         'costo_anterior' => $a->costo, 'descuento_anterior' => $a->descuento, 'flete_anterior' => $a->flete,
                         'costo' => $f->costo_anterior, 'descuento' => $f->descuento_anterior, 'flete' => $f->flete_anterior,
+                        'cantidad_anterior' => $bultoVuelve ? $a->cantidad : null, 'cantidad' => $bultoVuelve ? $f->cantidad_anterior : null,
                         'activo_anterior' => $f->activo_nuevo, 'activo_nuevo' => $f->activo_nuevo !== null ? $f->activo_anterior : null,
                         'origen' => 'reversion', 'motivo' => 'Reversión del lote '.$lote, 'lote' => $nuevoLote, 'usuario_id' => $usuarioId,
                     ];

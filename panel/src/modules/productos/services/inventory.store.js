@@ -605,16 +605,17 @@ const sugerenciasArchivado = () => httpClient.get('/productos/sugerencias/archiv
 const archivarLote = (ids, motivo) => _mutate(
   () => httpClient.post('/productos/archivar-lote', { ids, motivo: motivo || undefined }),
 );
-const guardarPresentaciones = (prodId, presentaciones) => _mutate(() => httpClient.put('/productos/' + prodId + '/presentaciones', { presentaciones }));
-const guardarFormatosCompra = (prodId, formatos) => _mutate(() => httpClient.put('/productos/' + prodId + '/formatos-compra', { formatos }));
-const guardarListasProducto = (prodId, o) => _mutate(() => httpClient.put('/productos/' + prodId + '/listas', o));
+const guardarPresentaciones = (prodId, presentaciones) => _mutate(() => httpClient.put('/productos/' + prodId + '/presentaciones', { items: presentaciones }));
+const guardarFormatosCompra = (prodId, formatos) => _mutate(() => httpClient.put('/productos/' + prodId + '/formatos-compra', { items: formatos }));
+// La API valida los renglones en `items` (ProductosController): con otro nombre responde 422 "Falta los renglones".
+const guardarListasProducto = (prodId, o) => _mutate(() => httpClient.put('/productos/' + prodId + '/listas', { items: o.listas }));
 
 /**
  * El formato de venta de UN PAQUETE fraccionado. Va por su propia ruta: la madre
  * y el paquete se cotizan por separado, y un solo PUT para los dos haría que
  * guardar uno pudiera borrar el otro.
  */
-const guardarListasPresentacion = (presId, o) => _mutate(() => httpClient.put('/productos/presentaciones/' + presId + '/listas', o));
+const guardarListasPresentacion = (presId, o) => _mutate(() => httpClient.put('/productos/presentaciones/' + presId + '/listas', { items: o.listas }));
 
 /* ---------------- Catálogos del producto ---------------- */
 

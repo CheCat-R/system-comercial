@@ -48,16 +48,6 @@ export function PadronPanel() {
       .filter((p) => !soloPendientes || !p.migracionLista);
   }, [proveedores, buscar, soloPendientes]);
 
-  const eliminar = async (p) => {
-     
-    if (!window.confirm(`¿Eliminar a ${p.nombre}? Solo se puede si no tiene historia (facturas, pagos, compromisos).`)) return;
-    try {
-      await provApi.eliminarProveedor(p.id);
-      toast('Proveedor eliminado.', 'ok');
-      recargar();
-    } catch (e) { toast(errorMsg(e), 'err'); }
-  };
-
   const marcarMigracion = async (p, lista) => {
     try {
       await provApi.marcarMigracion(p.id, lista);
@@ -128,8 +118,9 @@ export function PadronPanel() {
             : cargados === 0 ? 'var(--crm-color-text-muted)' : 'var(--crm-color-warning, #b45309)';
           return (
             <tr key={p.id}>
-              <td>
+              <td style={p.activo === false ? { opacity: 0.6 } : undefined}>
                 {p.nombre}
+                {p.activo === false && <> <Pill pill="est-cancelada" label="de baja" /></>}
                 {p.cuit && <div className={s.hint} style={{ margin: 0 }}>{p.cuit}</div>}
               </td>
               <td>{CONDICIONES_COMPRA[p.condicionCompra] ?? '—'}</td>
@@ -163,7 +154,7 @@ export function PadronPanel() {
               <td>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <Btn small onClick={() => openModal('ficha', { proveedorId: p.id })}>Ficha</Btn>
-                  <Btn small onClick={() => eliminar(p)}>×</Btn>
+                  <Btn small onClick={() => openModal('bajaProveedor', { proveedorId: p.id })}>{p.activo === false ? 'Reactivar' : 'Baja'}</Btn>
                 </div>
               </td>
             </tr>

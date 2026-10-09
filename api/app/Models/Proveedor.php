@@ -18,7 +18,7 @@ class Proveedor extends Model
         'nombre', 'cuit', 'condicion_iva', 'direccion', 'telefono', 'email',
         'provee_mercaderia', 'provee_gastos', 'letra_gasto', 'condicion_compra', 'porc_sin_factura',
         'medio_habitual', 'dias_pago', 'modo_cuenta', 'conciliado_hasta', 'conciliado_por', 'conciliado_at',
-        'productos_esperados', 'migracion_lista',
+        'productos_esperados', 'migracion_lista', 'activo', 'baja_en', 'motivo_baja',
     ];
 
     protected function casts(): array
@@ -32,6 +32,8 @@ class Proveedor extends Model
             'provee_mercaderia' => 'boolean',
             'provee_gastos' => 'boolean',
             'migracion_lista' => 'boolean',
+            'activo' => 'boolean',
+            'baja_en' => 'datetime',
             'porc_sin_factura' => 'float',
             'conciliado_hasta' => 'datetime',
             'conciliado_at' => 'datetime',
