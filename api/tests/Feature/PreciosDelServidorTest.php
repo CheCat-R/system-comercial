@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Precios\FilaVenta;
+use App\Precios\OpcionesPrecio;
+use App\Precios\Pricing;
 use App\Ventas\Portero;
 use Database\Seeders\CatalogoBaseSeeder;
 use Illuminate\Support\Carbon;
@@ -212,5 +215,18 @@ class PreciosDelServidorTest extends TestCase
         $this->admin()->putJson('/api/listas/cliente/'.$cli['id'], ['listas' => [$may['id']]])->assertOk();
         // Con la lista ya asignada, el cajero puede reenviarla tal cual (la ficha completa viaja entera).
         $this->cajero()->patchJson('/api/clientes/'.$cli['id'], ['nombre' => 'Nuevo SA', 'listas' => [$may['id']]])->assertOk();
+    }
+    /** El ticket cobra lo que dice la góndola: 10 kg a 1 son .810,00 y no .810,06 por el redondeo del neto. */
+    public function test_el_ticket_coincide_con_la_gondola(): void
+    {
+        // Costo 0/kg, markup 20 %, IVA 21 %, redondeo de góndola  (el default).
+        $pv = Pricing::precioVentaFila(400, FilaVenta::desde(['modo_precio' => 'markup', 'markup' => 20, 'unidades' => 1]), new OpcionesPrecio(21, 1));
+        $this->assertEquals(581.0, $pv->finalUnitario);
+
+        foreach ([1, 3, 10, 25.5] as $kg) {
+            $tot = Portero::calcularTotales([['productoId' => 1, 'cantidad' => $kg, 'precioUnitario' => $pv->netoUnitario, 'iva' => 21]]);
+            $this->assertEqualsWithDelta(Pricing::money($kg * 581), $tot['total'], 0.011, $kg.' kg a 1 de góndola');
+        }
+        $this->assertEquals(5810.0, Portero::calcularTotales([['productoId' => 1, 'cantidad' => 10, 'precioUnitario' => $pv->netoUnitario, 'iva' => 21]])['total']);
     }
 }

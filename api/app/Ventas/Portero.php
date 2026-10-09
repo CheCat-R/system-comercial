@@ -164,7 +164,7 @@ class Portero
         }
         $out = [];
         foreach (DB::table('presupuesto_items')->where('presupuesto_id', $pre->id)->get() as $r) {
-            $out[$r->producto_id.':'.($r->presentacion_id ?? '')] = ['precioLista' => Pricing::money((float) $r->precio_lista), 'listaId' => $r->lista_id ? (int) $r->lista_id : null];
+            $out[$r->producto_id.':'.($r->presentacion_id ?? '')] = ['precioLista' => Pricing::unitario((float) $r->precio_lista), 'listaId' => $r->lista_id ? (int) $r->lista_id : null];
         }
 
         return $out;
@@ -279,7 +279,7 @@ class Portero
             $ivaP = (float) $prodP->iva;
             $cfP = Pricing::costosFormato(($act = Pricing::formatoActivo(($provs->get($prodP->id) ?? collect())->all())) ? CostoEntry::desde((array) $act) : null, $ivaP);
             $costoP = $presP ? Pricing::costoNetoPresentacion($cfP->costoPrecioUnitario, (float) $presP->tam_kg) : $cfP->costoPrecioUnitario;
-            $brutoTicket += $c * Pricing::money(Pricing::precioVentaFila($costoP, FilaVenta::desde((array) $pisoP['fila']), new OpcionesPrecio($ivaP, (float) ($prodP->redondeo ?? $redondeo)))->netoUnitario);
+            $brutoTicket += $c * Pricing::unitario(Pricing::precioVentaFila($costoP, FilaVenta::desde((array) $pisoP['fila']), new OpcionesPrecio($ivaP, (float) ($prodP->redondeo ?? $redondeo)))->netoUnitario);
         }
         $modalidadPorMonto = ((float) ($config['montoMinimoMayorista'] ?? 0) > 0 && ! empty($config['modalidadMontoId']) && $brutoTicket + 1e-9 >= (float) $config['montoMinimoMayorista'])
             ? (int) $config['modalidadMontoId'] : null;
@@ -338,8 +338,8 @@ class Portero
             }
 
             // El precio: el de la fila, salvo que se pise con permiso o venga cotizado.
-            $netoLista = Pricing::money(Pricing::precioVentaFila($costo, FilaVenta::desde((array) $elegida['fila']), new OpcionesPrecio($iva, (float) ($prod->redondeo ?? $redondeo)))->netoUnitario);
-            $pedido = isset($it['precioUnitario']) ? Pricing::money((float) $it['precioUnitario']) : $netoLista;
+            $netoLista = Pricing::unitario(Pricing::precioVentaFila($costo, FilaVenta::desde((array) $elegida['fila']), new OpcionesPrecio($iva, (float) ($prod->redondeo ?? $redondeo)))->netoUnitario);
+            $pedido = isset($it['precioUnitario']) ? Pricing::unitario((float) $it['precioUnitario']) : $netoLista;
             $difiere = abs($pedido - $netoLista) > 0.01;
             $honraCotizado = $congelado && abs($pedido - $congelado['precioLista']) <= 0.01;
             $pisado = $difiere && ! $honraCotizado;
